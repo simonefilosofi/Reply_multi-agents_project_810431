@@ -1,0 +1,35 @@
+# LLM local
+requests
+
+# Multi-agent orchestration
+langgraph>=0.2.0
+langchain-ollama>=0.1.0
+langchain-core>=0.3.0
+
+# Data
+pandas
+numpy
+scipy
+scikit-learn
+
+# String matching (near-duplicates)
+rapidfuzz
+
+# Date parsing
+python-dateutil
+
+# Excel support
+openpyxl
+
+# UI
+streamlit
+plotly
+
+# Utilities
+python-dotenv
+pydantic
+tenacity
+
+# Notebook
+jupyter
+nbformat
