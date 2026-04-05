@@ -30,6 +30,7 @@ class PipelineState:
 
     # --- Layer 2 ---
     prioritized_issues: list = field(default_factory=list)
+    synthesis_summary: str = ""
 
     # --- Layer 3 ---
     remediation_plan: list = field(default_factory=list)
