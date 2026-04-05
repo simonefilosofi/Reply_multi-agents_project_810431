@@ -19,12 +19,14 @@ class PipelineState:
     completeness_report: dict = field(default_factory=dict)
     duplicate_report: dict = field(default_factory=dict)
     anomaly_report: dict = field(default_factory=dict)
+    consistency_report: dict = field(default_factory=dict)
 
     # Compact summaries for SynthesisAgent
     schema_summary: str = ""
     completeness_summary: str = ""
     duplicate_summary: str = ""
     anomaly_summary: str = ""
+    consistency_summary: str = ""
 
     # --- Layer 2 ---
     prioritized_issues: list = field(default_factory=list)
