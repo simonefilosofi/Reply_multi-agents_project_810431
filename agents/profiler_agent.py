@@ -29,6 +29,9 @@ class ProfilerAgent(BaseAgent):
             "categorical_columns, date_columns, sparse_columns, "
             "likely_duplicate_pairs, suggested_key_columns, "
             "column_descriptions. "
+            "domain must be a short descriptive phrase (e.g. 'public sector HR - employee activations', "
+            "'municipal financial expenditure', 'healthcare patient records'). "
+            "language must be one of: italian, english, mixed. "
             "likely_duplicate_pairs is a list of [col_a, col_b] pairs "
             "where the columns appear to contain the same data. "
             "No explanation, no markdown, just JSON."
@@ -40,6 +43,8 @@ class ProfilerAgent(BaseAgent):
 
         try:
             raw = self.call_llm_json(system, user)
+            raw["domain"] = raw.get("domain") or "generic"
+            raw["language"] = (raw.get("language") or "mixed").lower()
             fp = DatasetFingerprint(**raw)
             self.state.dataset_fingerprint = fp.model_dump()
             print(f"[Profiler] LLM fingerprint OK. "
