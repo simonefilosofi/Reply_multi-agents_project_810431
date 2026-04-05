@@ -1,13 +1,13 @@
 # Reply — Multi-Agent Data Quality System
 
-A multi-agent pipeline for automated data quality analysis, built for the Reply/LUISS ML 2025/26 project. The system uses locally running LLMs via [Ollama](https://ollama.com) and is orchestrated with [LangGraph](https://langchain-ai.github.io/langgraph/).
+A multi-agent pipeline for automated data quality analysis, built for the Reply/LUISS ML 2025/26 project. The system uses [Groq](https://console.groq.com) for LLM inference (free API).
 
 ---
 
 ## Requirements
 
 - Python 3.9+
-- [Ollama](https://ollama.com) installed and running locally
+- A free [Groq API key](https://console.groq.com)
 
 ---
 
@@ -20,17 +20,7 @@ git clone <repo-url>
 cd Reply_multi-agents_project_810431
 ```
 
-### 2. Install Ollama and pull a model
-
-Download Ollama from [ollama.com](https://ollama.com) and install it, then pull the model used by the pipeline:
-
-```bash
-ollama pull llama3
-```
-
-Make sure the Ollama server is running (it starts automatically on install, or run `ollama serve`).
-
-### 3. Create and activate the virtual environment
+### 2. Create and activate the virtual environment
 
 ```bash
 python3 -m venv .venv
@@ -38,17 +28,25 @@ source .venv/bin/activate       # macOS / Linux
 # .venv\Scripts\activate        # Windows
 ```
 
-### 4. Install dependencies
+### 3. Install dependencies
 
 ```bash
 pip install -r requirements.txt
+```
+
+### 4. Add your Groq API key
+
+Create a `.env` file in the project root:
+
+```
+GROQ_API_KEY=your_key_here
 ```
 
 ---
 
 ## Datasets
 
-The datasets are located in `Datasets Reply-20260313/project_data_quality/`:
+Located in `Datasets Reply-20260313/project_data_quality/`:
 
 | File | Description |
 |---|---|
@@ -57,7 +55,7 @@ The datasets are located in `Datasets Reply-20260313/project_data_quality/`:
 
 ---
 
-## Project Structure right now
+## Project Structure
 
 ```
 .
@@ -65,21 +63,38 @@ The datasets are located in `Datasets Reply-20260313/project_data_quality/`:
 │   └── project_data_quality/
 │       ├── attivazioniCessazioni.csv
 │       └── spesa.csv
+├── state/
+│   ├── pipeline_state.py       # shared memory passed between all agents
+│   └── fingerprint_schema.py   # Pydantic schema for dataset profiling
+├── agents/
+│   ├── base_agent.py           # base class: Groq client, retry logic
+│   ├── ingestion_agent.py      # Layer 0: loads CSV/JSON/Excel/Parquet
+│   ├── profiler_agent.py       # Layer 0: classifies dataset semantically
+│   ├── schema_agent.py         # Layer 1: checks column type consistency
+│   ├── completeness_agent.py   # Layer 1: checks for missing values
+│   ├── duplicate_agent.py      # Layer 1: detects duplicate rows and columns
+│   └── anomaly_agent.py        # Layer 1: detects outliers and rare values
 ├── guidelines/
-├── .venv/                  # virtual environment (not tracked)
 ├── requirements.txt
 └── README.md
 ```
 
 ---
 
-## Usage
+## Pipeline (work in progress)
 
-> Coming soon as agents are implemented.
+| Layer | Agents | Status |
+|---|---|---|
+| 0 — Intake | IngestionAgent, ProfilerAgent | done |
+| 1 — Analysis | SchemaAgent, CompletenessAgent, DuplicateAgent, AnomalyAgent | done |
+| 2 — Synthesis | SynthesisAgent | coming |
+| 3 — Action | RemediationAgent, AutoFixAgent | coming |
+| 4 — Output | ReportAgent | coming |
 
 ---
 
 ## Notes
 
-- All LLM inference runs **locally** via Ollama — no API keys required.
-- The `.venv/` directory is not tracked by git. Each contributor must create it locally following the steps above.
+- LLM inference runs via Groq (free tier) — no local GPU required.
+- The `.venv/` directory is not tracked by git. Each contributor must create it locally.
+- Never commit your `.env` file.
