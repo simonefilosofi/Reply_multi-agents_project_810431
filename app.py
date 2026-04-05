@@ -11,6 +11,7 @@ from agents.completeness_agent import CompletenessAgent
 from agents.duplicate_agent import DuplicateAgent
 from agents.anomaly_agent import AnomalyAgent
 from agents.consistency_agent import ConsistencyAgent
+from agents.synthesis_agent import SynthesisAgent
 
 load_dotenv()
 
@@ -42,6 +43,9 @@ if uploaded:
             AnomalyAgent(state).run()
             ConsistencyAgent(state).run()
 
+        with st.spinner("Synthesizing results..."):
+            SynthesisAgent(state).run()
+
         os.unlink(tmp_path)
 
         # --- Dataset overview ---
@@ -62,8 +66,27 @@ if uploaded:
         col2.markdown(f"**ID columns:** {', '.join(fp.get('id_columns', [])) or '-'}")
         col2.markdown(f"**Date columns:** {', '.join(fp.get('date_columns', [])) or '-'}")
 
-        # --- Issues ---
-        st.header("Quality Issues Found")
+        # --- Synthesis ---
+        st.header("Executive Summary")
+        st.info(state.synthesis_summary)
+
+        issues = state.prioritized_issues
+        high = sum(1 for i in issues if i["severity"] == "high")
+        medium = sum(1 for i in issues if i["severity"] == "medium")
+        low = sum(1 for i in issues if i["severity"] == "low")
+
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Total Issues", len(issues))
+        col2.metric("High", high)
+        col3.metric("Medium", medium)
+        col4.metric("Low", low)
+
+        st.subheader("Prioritized Issues")
+        if issues:
+            st.dataframe(issues, use_container_width=True)
+
+        # --- Issues by agent ---
+        st.header("Issues by Agent")
 
         reports = {
             "Schema": (state.schema_report, state.schema_summary),
