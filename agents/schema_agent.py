@@ -1,8 +1,7 @@
 # SchemaAgent — Layer 1
 # Validates the structure of the dataset.
 # 1. Naming conventions: flags column names with special characters, mixed casing, or reserved words.
-# 2. Data type validation: checks that columns identified as numerical or date by the profiler
-#    actually contain the expected types (e.g. flags a "date" column where 10%+ values won't parse).
+# 2. Data type validation: checks that columns identified as numerical or date by the profiler actually contain the expected types (e.g. flags a "date" column where 10%+ values won't parse).
 # Detection is pure code; the LLM is called only to write a human-readable summary.
 
 import re

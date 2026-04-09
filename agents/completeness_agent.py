@@ -1,7 +1,6 @@
 # CompletenessAgent — Layer 1
 # Measures how complete the dataset is at three levels:
-# 1. Per-column: flags columns with too many missing or placeholder values
-#    (NaN, empty string, "N/A", "-", "unknown", etc.).
+# 1. Per-column: flags columns with too many missing or placeholder values (NaN, empty string, "N/A", "-", "unknown", etc.).
 # 2. Overall: computes a single completeness rate for the entire dataset.
 # 3. Row-level: flags rows where more than 50% of fields are empty.
 # Detection is pure code; the LLM is called only to write a human-readable summary.

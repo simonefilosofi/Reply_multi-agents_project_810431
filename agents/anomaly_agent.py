@@ -1,8 +1,7 @@
 # AnomalyAgent — Layer 1
 # Detects anomalous values within columns:
 # 1. Numerical outliers: values beyond 3 standard deviations from the column mean.
-# 2. Rare categories: categorical values that appear in less than 1% of rows,
-#    which may indicate typos, legacy codes, or data entry errors.
+# 2. Rare categories: categorical values that appear in less than 1% of rows, which may indicate typos, legacy codes, or data entry errors.
 # Detection is pure code; the LLM is called only to write a human-readable summary.
 
 import pandas as pd

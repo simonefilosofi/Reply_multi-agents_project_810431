@@ -2,8 +2,7 @@
 # Detects three types of duplication:
 # 1. Duplicate rows: fully identical records anywhere in the dataset.
 # 2. Duplicate columns: pairs of columns flagged by the profiler as containing the same data.
-# 3. Near-duplicate keys: values in ID/key columns that become identical after normalizing
-#    whitespace and casing (e.g. " CF001 " vs "cf001").
+# 3. Near-duplicate keys: values in ID/key columns that become identical after normalizing whitespace and casing (e.g. " CF001 " vs "cf001").
 # Detection is pure code; the LLM is called only to write a human-readable summary.
 
 from agents.base_agent import BaseAgent, SMART
