@@ -30,6 +30,24 @@ class DuplicateAgent(BaseAgent):
                     "severity": "medium",
                 })
 
+        # Near-duplicate detection on key columns (whitespace + casing normalization)
+        key_cols = [
+            c for c in fp.get("suggested_key_columns", []) + fp.get("id_columns", [])
+            if c in df.columns
+        ]
+        for col in key_cols:
+            normalized = df[col].dropna().astype(str).str.strip().str.lower().str.replace(r"\s+", "", regex=True)
+            exact_dups = int(df[col].dropna().duplicated().sum())
+            near_dups = int(normalized.duplicated().sum())
+            near_only = near_dups - exact_dups
+            if near_only > 0:
+                issues.append({
+                    "column": col,
+                    "type": "near_duplicate_keys",
+                    "detail": f"{near_only} near-duplicate values after normalizing whitespace and casing",
+                    "severity": "high",
+                })
+
         self.state.duplicate_report = {"issues": issues, "total_issues": len(issues)}
 
         issues_text = "\n".join(
