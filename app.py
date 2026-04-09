@@ -50,10 +50,12 @@ if uploaded:
 
         # --- Dataset overview ---
         st.header("Dataset Overview")
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         col1.metric("Rows", state.ingestion_meta["rows"])
         col2.metric("Columns", state.ingestion_meta["columns"])
         col3.metric("Format", state.source_format.upper())
+        overall_rate = state.completeness_report.get("overall_rate", None)
+        col4.metric("Completeness", f"{overall_rate:.1%}" if overall_rate is not None else "-")
 
         st.dataframe(state.df_raw.head(10), use_container_width=True)
 

@@ -1,6 +1,15 @@
+import re
 import pandas as pd
 from itertools import combinations
 from agents.base_agent import BaseAgent, SMART
+
+DATE_PATTERNS = {
+    "DD/MM/YYYY": r"^\d{2}/\d{2}/\d{4}$",
+    "YYYY-MM-DD": r"^\d{4}-\d{2}-\d{2}$",
+    "DD-MM-YYYY": r"^\d{2}-\d{2}-\d{4}$",
+    "DD.MM.YYYY": r"^\d{2}\.\d{2}\.\d{4}$",
+    "MM/DD/YYYY": r"^\d{2}/\d{2}/\d{4}$",
+}
 
 
 class ConsistencyAgent(BaseAgent):
@@ -14,7 +23,22 @@ class ConsistencyAgent(BaseAgent):
 
         date_cols = [c for c in fp.get("date_columns", []) if c in df.columns]
 
-        # Check ordering between all pairs of date columns
+        # --- Format consistency within each date column ---
+        for col in date_cols:
+            sample = df[col].dropna().astype(str).str.strip()
+            found_formats = [
+                fmt for fmt, pat in DATE_PATTERNS.items()
+                if sample.str.match(pat).any()
+            ]
+            if len(found_formats) > 1:
+                issues.append({
+                    "column": col,
+                    "type": "mixed_date_formats",
+                    "detail": f"Multiple date formats detected: {', '.join(found_formats)}",
+                    "severity": "medium",
+                })
+
+        # --- Date ordering between column pairs ---
         for col_a, col_b in combinations(date_cols, 2):
             parsed_a = pd.to_datetime(df[col_a], errors="coerce", dayfirst=True)
             parsed_b = pd.to_datetime(df[col_b], errors="coerce", dayfirst=True)
