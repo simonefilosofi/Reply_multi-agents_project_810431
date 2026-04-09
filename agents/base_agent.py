@@ -4,9 +4,8 @@ from groq import Groq
 from tenacity import retry, stop_after_attempt, wait_exponential
 from state.pipeline_state import PipelineState
 
-# Free models on Groq (console.groq.com)
-FAST  = "llama-3.1-8b-instant"     # lightweight — use for ProfilerAgent
-SMART = "llama-3.3-70b-versatile"  # reasoning  — use for Synthesis, Remediation, Report
+FAST  = "llama-3.1-8b-instant"     
+SMART = "llama-3.3-70b-versatile"  
 
 
 class BaseAgent:

@@ -1,3 +1,13 @@
+# ConsistencyAgent — Layer 1
+# Validates logical and format coherence across and within columns:
+# 1. Mixed date formats: detects when a single date column uses multiple formats
+#    (e.g. some rows DD/MM/YYYY, others YYYY-MM-DD).
+# 2. Date ordering: flags rows where one date column is later than another
+#    (e.g. an end date earlier than a start date).
+# 3. Conditional completeness: flags rows where a column is filled but a related
+#    column (sharing the same name prefix) is unexpectedly empty.
+# Detection is pure code; the LLM is called only to write a human-readable summary.
+
 import re
 import pandas as pd
 from itertools import combinations
@@ -38,7 +48,7 @@ class ConsistencyAgent(BaseAgent):
                     "severity": "medium",
                 })
 
-        # --- Date ordering between column pairs ---
+        #  Date ordering between column pairs 
         for col_a, col_b in combinations(date_cols, 2):
             parsed_a = pd.to_datetime(df[col_a], errors="coerce", dayfirst=True)
             parsed_b = pd.to_datetime(df[col_b], errors="coerce", dayfirst=True)

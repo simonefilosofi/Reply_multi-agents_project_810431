@@ -1,3 +1,9 @@
+# SynthesisAgent — Layer 2
+# Aggregates all issues from the five Layer 1 agents, sorts them by severity
+# (high → medium → low), and asks the LLM to write a concise executive summary
+# highlighting the most critical problems and their business impact.
+# This is the only agent whose primary output is entirely LLM-generated.
+
 from agents.base_agent import BaseAgent, SMART
 
 SEVERITY_RANK = {"high": 0, "medium": 1, "low": 2}

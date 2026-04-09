@@ -1,3 +1,10 @@
+# ProfilerAgent — Layer 0
+# Sends column statistics (sample values, unique counts, fill rates) to the LLM,
+# which returns a structured "fingerprint" describing the dataset: domain, language,
+# and column classifications (numerical, categorical, date, ID, sparse).
+# This fingerprint is used by all Layer 1 agents to know what each column contains.
+# Falls back to statistical heuristics if the LLM call fails.
+
 import pandas as pd
 from agents.base_agent import BaseAgent, SMART
 from state.fingerprint_schema import DatasetFingerprint

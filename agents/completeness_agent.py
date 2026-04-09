@@ -1,3 +1,11 @@
+# CompletenessAgent — Layer 1
+# Measures how complete the dataset is at three levels:
+# 1. Per-column: flags columns with too many missing or placeholder values
+#    (NaN, empty string, "N/A", "-", "unknown", etc.).
+# 2. Overall: computes a single completeness rate for the entire dataset.
+# 3. Row-level: flags rows where more than 50% of fields are empty.
+# Detection is pure code; the LLM is called only to write a human-readable summary.
+
 import pandas as pd
 from agents.base_agent import BaseAgent, SMART
 
@@ -18,7 +26,6 @@ class CompletenessAgent(BaseAgent):
 
         missing_mask = df.apply(lambda col: col.map(_is_missing))
 
-        # --- Per-column completeness ---
         for col in df.columns:
             total = len(df)
             empty = int(missing_mask[col].sum())
@@ -40,12 +47,12 @@ class CompletenessAgent(BaseAgent):
                 "severity": severity,
             })
 
-        # --- Overall dataset completeness rate ---
+        # Overall dataset completeness rate 
         total_cells = df.size
         missing_cells = int(missing_mask.sum().sum())
         overall_rate = round(1 - missing_cells / total_cells, 4) if total_cells > 0 else 1.0
 
-        # --- Row-level completeness ---
+        #  Row-level completeness
         row_missing_rate = missing_mask.mean(axis=1)
         empty_rows = int((row_missing_rate > 0.5).sum())
         if empty_rows > 0:

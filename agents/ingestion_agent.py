@@ -1,3 +1,8 @@
+# IngestionAgent — Layer 0
+# Reads the raw dataset file (CSV, JSON, XLSX, Parquet) into a pandas DataFrame.
+# Auto-detects CSV delimiters. Stores basic metadata (rows, columns, format) in state.
+# No LLM is used — this is pure I/O.
+
 import csv
 import pandas as pd
 from agents.base_agent import BaseAgent
