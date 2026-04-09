@@ -1,5 +1,8 @@
+import re
 import pandas as pd
 from agents.base_agent import BaseAgent, SMART
+
+RESERVED = {"id", "index", "type", "class", "name", "values", "columns", "shape"}
 
 
 class SchemaAgent(BaseAgent):
@@ -10,6 +13,22 @@ class SchemaAgent(BaseAgent):
         df = self.state.df_raw
         fp = self.state.dataset_fingerprint
         issues = []
+
+        for col in df.columns:
+            problems = []
+            if re.search(r"[^a-zA-Z0-9_]", col):
+                problems.append("contains spaces or special characters")
+            if re.search(r"[a-z]", col) and re.search(r"[A-Z]", col):
+                problems.append("mixed casing (use snake_case or UPPER_CASE)")
+            if col.lower() in RESERVED:
+                problems.append(f"'{col}' is a reserved word")
+            if problems:
+                issues.append({
+                    "column": col,
+                    "type": "naming_convention",
+                    "detail": "; ".join(problems),
+                    "severity": "low",
+                })
 
         for col in fp.get("numerical_columns", []):
             if col not in df.columns:
