@@ -19,6 +19,7 @@ from agents_demo.completeness_agent import CompletenessAgent
 from agents_demo.duplicate_agent import DuplicateAgent
 from agents_demo.anomaly_agent import AnomalyAgent
 from agents_demo.consistency_agent import ConsistencyAgent
+from agents_demo.constraint_agent import ConstraintAgent
 from agents_demo.synthesis_agent import SynthesisAgent
 from agents_demo.remediation_agent import RemediationAgent
 from agents_demo.report_agent import ReportAgent
@@ -68,6 +69,9 @@ def run_pipeline(file_obj):
         )
         ConsistencyAgent(state).run(
             prompt="Check date format consistency, categorical case consistency, date ordering, and conditional completeness."
+        )
+        ConstraintAgent(state).run(
+            prompt="Enforce domain constraints inferred from the dataset profile: cross-column value agreement, format patterns, domain negatives, numeric corruption subtypes, and float precision noise."
         )
 
     with st.spinner(f"[{file_obj.name}] Synthesizing results..."):
@@ -202,6 +206,9 @@ def display_results(state, chart_images, dataset_name):
         "Anomalies": (state.anomaly_report, state.anomaly_summary),
         "Consistency": (
             state.consistency_report, state.consistency_summary,
+        ),
+        "Constraints": (
+            state.constraint_report, state.constraint_summary,
         ),
     }
     for name, (report, summary) in reports.items():

@@ -498,6 +498,171 @@ def detect_rare_categories(df: pd.DataFrame, categorical_cols: list) -> list:
     return issues
 
 
+# ── Constraints ───────────────────────────────────────────────────────────────
+
+def check_column_value_agreement(
+    df: pd.DataFrame, col_a: str, col_b: str
+) -> list:
+    """Flag rows where two columns that should be equal actually disagree."""
+    if col_a not in df.columns or col_b not in df.columns:
+        return []
+    a = df[col_a].astype(str).str.strip()
+    b = df[col_b].astype(str).str.strip()
+    both_filled = (
+        df[col_a].notna() & (a != "") & (a.str.lower() != "nan")
+        & df[col_b].notna() & (b != "") & (b.str.lower() != "nan")
+    )
+    if both_filled.sum() < 5:
+        return []
+    mismatches = int((a[both_filled] != b[both_filled]).sum())
+    if mismatches == 0:
+        return []
+    pct = mismatches / both_filled.sum()
+    severity = "high" if pct > 0.05 else "medium"
+    return [{
+        "column": f"{col_a} / {col_b}",
+        "type": "cross_column_mismatch",
+        "detail": (
+            f"{mismatches} rows ({pct:.0%}) where '{col_a}' and '{col_b}' "
+            f"should agree but differ"
+        ),
+        "severity": severity,
+    }]
+
+
+def check_domain_negatives(df: pd.DataFrame, col: str) -> list:
+    """Flag negative values in a column where negatives are domain-impossible."""
+    if col not in df.columns:
+        return []
+    numeric = pd.to_numeric(df[col], errors="coerce")
+    neg_count = int((numeric < 0).sum())
+    if neg_count == 0:
+        return []
+    return [{
+        "column": col,
+        "type": "domain_negative_values",
+        "detail": (
+            f"{neg_count} negative values in a column where negatives "
+            f"are domain-impossible"
+        ),
+        "severity": "high",
+    }]
+
+
+def check_format_pattern(
+    df: pd.DataFrame, col: str, pattern: str, description: str
+) -> list:
+    """Flag values that do not match the expected regex pattern."""
+    if col not in df.columns:
+        return []
+    nev = non_empty_values(df[col])
+    if len(nev) == 0:
+        return []
+    try:
+        compiled = re.compile(pattern)
+    except re.error:
+        return []
+    violations = nev.astype(str).apply(lambda v: not compiled.match(v))
+    n_violations = int(violations.sum())
+    if n_violations == 0:
+        return []
+    pct = n_violations / len(nev)
+    severity = "high" if pct > 0.20 else ("medium" if pct > 0.05 else "low")
+    return [{
+        "column": col,
+        "type": "format_pattern_violation",
+        "detail": (
+            f"{n_violations} values ({pct:.0%}) do not match expected "
+            f"format: {description}"
+        ),
+        "severity": severity,
+    }]
+
+
+def check_numeric_corruption_types(df: pd.DataFrame, col: str) -> list:
+    """Classify WHY a numeric column has non-numeric values (symbols, comma
+    decimals, ND placeholders)."""
+    if col not in df.columns:
+        return []
+    nev = non_empty_values(df[col])
+    non_numeric_mask = pd.to_numeric(nev, errors="coerce").isna()
+    bad = nev[non_numeric_mask].astype(str)
+    if len(bad) == 0:
+        return []
+
+    issues = []
+
+    currency_count = int(bad.str.contains(r"[€$£¥]", regex=True).sum())
+    if currency_count > 0:
+        issues.append({
+            "column": col,
+            "type": "currency_symbol_in_numeric",
+            "detail": (
+                f"{currency_count} values contain currency symbols "
+                f"(e.g. €) that prevent numeric parsing"
+            ),
+            "severity": "high",
+        })
+
+    comma_decimal_count = int(
+        bad.str.match(r"^\d{1,3}(\.\d{3})*(,\d+)?$").sum()
+    )
+    if comma_decimal_count > 0:
+        issues.append({
+            "column": col,
+            "type": "comma_decimal_format",
+            "detail": (
+                f"{comma_decimal_count} values use comma as decimal "
+                f"separator (Italian locale format)"
+            ),
+            "severity": "high",
+        })
+
+    nd_patterns = {"n.d.", "nd", "n/d", "n.a.", "na", "n/a", "#n/d", "#nd"}
+    nd_count = int(bad.str.lower().str.strip().isin(nd_patterns).sum())
+    if nd_count > 0:
+        issues.append({
+            "column": col,
+            "type": "nd_placeholder_in_numeric",
+            "detail": (
+                f"{nd_count} values use 'N.D.' or similar placeholder "
+                f"instead of a proper NULL"
+            ),
+            "severity": "medium",
+        })
+
+    return issues
+
+
+def check_float_precision(
+    df: pd.DataFrame, numerical_cols: list, max_decimals: int = 2
+) -> list:
+    """Flag numeric columns with excessive decimal digits (floating-point noise)."""
+    issues = []
+    for col in numerical_cols:
+        if col not in df.columns:
+            continue
+        numeric = pd.to_numeric(df[col], errors="coerce").dropna()
+        if len(numeric) == 0:
+            continue
+        noisy = numeric.apply(
+            lambda v: len(str(v).split(".")[-1]) > max_decimals
+            if "." in str(v) else False
+        )
+        n_noisy = int(noisy.sum())
+        if n_noisy > len(numeric) * 0.10:
+            issues.append({
+                "column": col,
+                "type": "float_precision_noise",
+                "detail": (
+                    f"{n_noisy} values have more than {max_decimals} "
+                    f"decimal places — likely floating-point arithmetic noise"
+                ),
+                "severity": "low",
+            })
+    return issues
+
+
 # ── Remediation ────────────────────────────────────────────────────────────────
 
 def fix_mixed_type(df: pd.DataFrame, col: str) -> int:
@@ -706,7 +871,7 @@ def chart_severity_distribution(issues: list, images_dir: str) -> str:
 
 def chart_issues_by_agent(issues: list, images_dir: str) -> str:
     """Grouped bar chart of issues per agent broken down by severity. Returns path."""
-    agents = ["schema", "completeness", "duplicate", "anomaly", "consistency"]
+    agents = ["schema", "completeness", "duplicate", "anomaly", "consistency", "constraint"]
     severities = ["high", "medium", "low"]
     colors = ["#d9534f", "#f0ad4e", "#5bc0de"]
 
