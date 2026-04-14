@@ -179,6 +179,7 @@ class SynthesisAgent(BaseAgent):
         ) or "No cross-agent insights."
 
         user = (
+            f"Task: {self.prompt}\n\n"
             f"Dataset domain: "
             f"{self.state.dataset_fingerprint.get('domain', 'unknown')}\n"
             f"Total issues found: {len(all_issues)}\n"

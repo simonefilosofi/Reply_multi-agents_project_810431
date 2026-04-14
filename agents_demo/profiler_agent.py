@@ -33,6 +33,7 @@ class ProfilerAgent(BaseAgent):
         df = self.state.df_raw
         stats_block = compute_column_stats(df)
         user = (
+            f"Task: {self.prompt}\n\n"
             f"Dataset: {len(df)} rows, {len(df.columns)} columns.\n"
             f"Column statistics:\n{stats_block}"
         )

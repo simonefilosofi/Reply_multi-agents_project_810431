@@ -240,6 +240,7 @@ class RemediationAgent(BaseAgent):
         flagged = sum(1 for f in self.state.fix_log if f["action"] == "flagged_for_review")
 
         user = (
+            f"Task: {self.prompt}\n\n"
             f"Fix actions:\n{fix_summary}\n\n"
             f"Write a concise summary (3-5 sentences) of what was remediated "
             f"and what was flagged for human review."

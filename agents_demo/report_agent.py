@@ -157,6 +157,7 @@ class ReportAgent(BaseAgent):
         after = report["reliability_score_after"]
 
         user = (
+            f"Task: {self.prompt}\n\n"
             f"Dataset: {report['dataset']['source']} "
             f"({report['dataset']['rows']} rows, "
             f"{report['dataset']['columns']} columns, "
