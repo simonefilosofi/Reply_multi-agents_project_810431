@@ -179,6 +179,17 @@ def display_results(state, chart_images, dataset_name):
             use_container_width=True,
         )
 
+    if state.df_cleaned is not None and not state.df_cleaned.empty:
+        st.subheader("Cleaned Dataset Preview")
+        rows_raw = len(state.df_raw)
+        rows_clean = len(state.df_cleaned)
+        cols_raw = len(state.df_raw.columns)
+        cols_clean = len(state.df_cleaned.columns)
+        c1, c2 = st.columns(2)
+        c1.metric("Rows", f"{rows_raw} → {rows_clean}", delta=rows_clean - rows_raw)
+        c2.metric("Columns", f"{cols_raw} → {cols_clean}", delta=cols_clean - cols_raw)
+        st.dataframe(state.df_cleaned.head(10), use_container_width=True)
+
     st.header("Visualizations")
     chart_order = [
         ("issue_severity_distribution.png", "Issue Severity Distribution"),
@@ -246,12 +257,22 @@ def display_results(state, chart_images, dataset_name):
 
     st.header("Export")
     report_json = _serialize_report(state.final_report)
-    st.download_button(
+    col1, col2 = st.columns(2)
+    col1.download_button(
         label="Download Report (JSON)",
         data=report_json,
         file_name=f"data_quality_report_{dataset_name}.json",
         mime="application/json",
     )
+    if state.df_cleaned is not None and not state.df_cleaned.empty:
+        cleaned_csv = state.df_cleaned.to_csv(index=False).encode("utf-8")
+        base_name = dataset_name.rsplit(".", 1)[0]
+        col2.download_button(
+            label="Download Cleaned Dataset (CSV)",
+            data=cleaned_csv,
+            file_name=f"{base_name}_cleaned.csv",
+            mime="text/csv",
+        )
 
 
 def _serialize_report(report):
