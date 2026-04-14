@@ -1,74 +1,33 @@
 """Layer 1 completeness analysis agent. Detects missing values, empty strings,
-and common placeholder patterns across all columns. Reports per-column and
-overall completeness rates and flags sparse columns for potential removal."""
+and common placeholder patterns across all columns."""
 
 from agents_demo.base_agent import BaseAgent, SMART
-from state_demo.helpers import missing_mask
+from tools import compute_completeness
 
 
 class CompletenessAgent(BaseAgent):
     name = "completeness"
     model = SMART
 
+    INSTRUCTION = (
+        "You are a data completeness analyst. You detect missing values, empty "
+        "strings, and placeholder patterns (such as 'N/A', 'null', 'unknown') "
+        "across all columns. You summarize completeness issues in 2-3 sentences, "
+        "focusing on the most impactful missing data and its potential business impact."
+    )
+
     def think(self):
-        self.log("think",
-                 "Checking all columns for missing values, empty strings, "
-                 "and common placeholder patterns")
+        self.log("think", self.prompt)
 
     def act(self):
         df = self.state.df_raw
         fp = self.state.dataset_fingerprint
-        issues = []
-        total_missing_all = 0
-
-        for col in df.columns:
-            total = len(df)
-            col_missing = missing_mask(df[col])
-            missing_count = int(col_missing.sum())
-
-            rate = missing_count / total if total > 0 else 0
-            self.state.completeness_by_column[col] = 1 - rate
-            total_missing_all += missing_count
-
-            if rate > 0.50:
-                severity = "high"
-            elif rate > 0.20:
-                severity = "medium"
-            elif rate > 0.05:
-                severity = "low"
-            else:
-                continue
-
-            issues.append({
-                "column": col,
-                "type": "missing_values",
-                "detail": (f"{rate:.0%} of values are missing, empty, "
-                           f"or placeholder ({missing_count}/{total})"),
-                "severity": severity,
-            })
-
         sparse_cols = set(fp.get("sparse_columns", []))
-        for col in sparse_cols:
-            if col not in df.columns:
-                continue
-            col_completeness = self.state.completeness_by_column.get(
-                col, 1.0,
-            )
-            empty_pct = 1 - col_completeness
-            issues.append({
-                "column": col,
-                "type": "sparse_column",
-                "detail": (f"Column is {empty_pct:.0%} empty "
-                           "\u2014 candidate for removal"),
-                "severity": "medium",
-            })
 
-        total_cells = len(df) * len(df.columns)
-        self.state.overall_completeness = (
-            1 - (total_missing_all / total_cells) if total_cells > 0
-            else 1.0
-        )
+        issues, completeness_by_col, overall = compute_completeness(df, sparse_cols)
 
+        self.state.completeness_by_column = completeness_by_col
+        self.state.overall_completeness = overall
         self.state.completeness_report = {
             "issues": issues,
             "total_issues": len(issues),

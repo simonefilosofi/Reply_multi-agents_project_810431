@@ -12,14 +12,14 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from state_demo.pipeline_state import PipelineState
-from agents.ingestion_agent import IngestionAgent
-from agents.profiler_agent import ProfilerAgent
-from agents.schema_agent import SchemaAgent
-from agents.completeness_agent import CompletenessAgent
-from agents.duplicate_agent import DuplicateAgent
-from agents.anomaly_agent import AnomalyAgent
-from agents.consistency_agent import ConsistencyAgent
-from agents.synthesis_agent import SynthesisAgent
+from agents_demo.ingestion_agent import IngestionAgent
+from agents_demo.profiler_agent import ProfilerAgent
+from agents_demo.schema_agent import SchemaAgent
+from agents_demo.completeness_agent import CompletenessAgent
+from agents_demo.duplicate_agent import DuplicateAgent
+from agents_demo.anomaly_agent import AnomalyAgent
+from agents_demo.consistency_agent import ConsistencyAgent
+from agents_demo.synthesis_agent import SynthesisAgent
 from agents_demo.remediation_agent import RemediationAgent
 from agents_demo.report_agent import ReportAgent
 
@@ -44,26 +44,46 @@ def run_pipeline(file_obj):
     state = PipelineState(source_path=tmp_path)
 
     with st.spinner(f"[{file_obj.name}] Loading dataset..."):
-        IngestionAgent(state).run()
+        IngestionAgent(state).run(
+            prompt=f"Load and ingest the dataset at '{file_obj.name}'."
+        )
 
     with st.spinner(f"[{file_obj.name}] Profiling dataset..."):
-        ProfilerAgent(state).run()
+        ProfilerAgent(state).run(
+            prompt="Classify all columns by semantic type and generate a dataset fingerprint."
+        )
 
     with st.spinner(f"[{file_obj.name}] Running Layer 1 analysis..."):
-        SchemaAgent(state).run()
-        CompletenessAgent(state).run()
-        DuplicateAgent(state).run()
-        AnomalyAgent(state).run()
-        ConsistencyAgent(state).run()
+        SchemaAgent(state).run(
+            prompt="Validate column data types and naming conventions."
+        )
+        CompletenessAgent(state).run(
+            prompt="Detect all missing, empty, and placeholder values across all columns."
+        )
+        DuplicateAgent(state).run(
+            prompt="Identify duplicate rows, redundant column pairs, and key-collision records."
+        )
+        AnomalyAgent(state).run(
+            prompt="Detect statistical outliers in numerical columns and rare categories in categorical columns."
+        )
+        ConsistencyAgent(state).run(
+            prompt="Check date format consistency, categorical case consistency, date ordering, and conditional completeness."
+        )
 
     with st.spinner(f"[{file_obj.name}] Synthesizing results..."):
-        SynthesisAgent(state).run()
+        SynthesisAgent(state).run(
+            prompt="Synthesize all agent findings, identify cross-cutting patterns, and compute the pre-remediation reliability score."
+        )
 
     with st.spinner(f"[{file_obj.name}] Applying remediations..."):
-        RemediationAgent(state).run()
+        RemediationAgent(state).run(
+            prompt="Apply automated fixes for all detected issues and flag issues requiring human review."
+        )
 
     with st.spinner(f"[{file_obj.name}] Generating report..."):
-        ReportAgent(state).run()
+        ReportAgent(state).run(
+            prompt="Compile the final data quality report with visualizations and executive narrative."
+        )
 
     os.unlink(tmp_path)
 

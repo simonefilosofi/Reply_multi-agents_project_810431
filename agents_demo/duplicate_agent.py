@@ -3,73 +3,39 @@ duplicate column pairs flagged by the profiler, and key-collision rows
 that share key column values but differ in other columns."""
 
 from agents_demo.base_agent import BaseAgent, SMART
+from tools import detect_duplicate_columns, detect_duplicate_rows, detect_key_collisions
 
 
 class DuplicateAgent(BaseAgent):
     name = "duplicate"
     model = SMART
 
+    INSTRUCTION = (
+        "You are a duplicate detection specialist. You identify fully duplicate "
+        "rows, redundant column pairs, and key-collision records (rows that share "
+        "key values but differ in other columns). You summarize duplicate issues "
+        "in 2-3 sentences, noting the scale and likely cause."
+    )
+
     def think(self):
-        self.log("think",
-                 "Checking for duplicate rows, duplicate column pairs, "
-                 "and key-collision records")
+        self.log("think", self.prompt)
 
     def act(self):
         df = self.state.df_raw
         fp = self.state.dataset_fingerprint
+
         issues = []
-
-        dup_rows = int(df.duplicated().sum())
-        if dup_rows > 0:
-            issues.append({
-                "column": "_rows_",
-                "type": "duplicate_rows",
-                "detail": (f"{dup_rows} fully duplicate rows "
-                           f"({dup_rows / len(df):.1%} of dataset)"),
-                "severity": (
-                    "high" if dup_rows / len(df) > 0.05 else "medium"
-                ),
-            })
-
-        for pair in fp.get("likely_duplicate_pairs", []):
-            if (len(pair) == 2
-                    and pair[0] in df.columns
-                    and pair[1] in df.columns):
-                issues.append({
-                    "column": f"{pair[0]} / {pair[1]}",
-                    "type": "duplicate_columns",
-                    "detail": (f"Columns '{pair[0]}' and '{pair[1]}' appear "
-                               f"to contain the same data"),
-                    "severity": "medium",
-                })
+        issues += detect_duplicate_rows(df)
+        issues += detect_duplicate_columns(df, fp.get("likely_duplicate_pairs", []))
 
         key_cols = [
-            c for c in fp.get("suggested_key_columns", []) or []
+            c for c in (fp.get("suggested_key_columns") or [])
             if c in df.columns
         ]
-
-        if not key_cols:
-            self.log("act",
-                     "No valid key columns identified "
-                     "-- skipping key-collision check")
-        else:
-            collisions = df.duplicated(subset=key_cols, keep=False)
-            full_dups = df.duplicated(keep=False)
-            key_only = collisions & ~full_dups
-            n_key_only = int(key_only.sum())
-
-            if n_key_only > 0:
-                col_list = ", ".join(key_cols)
-                issues.append({
-                    "column": col_list,
-                    "type": "duplicate_key",
-                    "detail": (
-                        f"{n_key_only} rows share the same key values "
-                        f"in [{col_list}] but differ in other columns "
-                        f"-- possible duplicate records or data entry "
-                        f"errors"),
-                    "severity": "high",
-                })
+        collision_issues, skip_reason = detect_key_collisions(df, key_cols)
+        if skip_reason:
+            self.log("act", skip_reason)
+        issues += collision_issues
 
         self.state.duplicate_report = {
             "issues": issues,
@@ -77,13 +43,12 @@ class DuplicateAgent(BaseAgent):
         }
 
     def observe(self):
-        report = self.state.duplicate_report
-        issues = report["issues"]
+        issues = self.state.duplicate_report["issues"]
         row_dups = sum(1 for i in issues if i["type"] == "duplicate_rows")
         col_dups = sum(1 for i in issues if i["type"] == "duplicate_columns")
         key_dups = sum(1 for i in issues if i["type"] == "duplicate_key")
         self.log("observe",
-                 f"Found {report['total_issues']} duplicate issues: "
+                 f"Found {len(issues)} duplicate issues: "
                  f"{row_dups} row, {col_dups} column, {key_dups} key-collision")
 
     def reply(self):
