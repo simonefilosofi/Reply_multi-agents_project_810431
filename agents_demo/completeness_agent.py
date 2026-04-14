@@ -2,7 +2,7 @@
 and common placeholder patterns across all columns."""
 
 from agents_demo.base_agent import BaseAgent, SMART
-from tools import compute_completeness
+from tools import compute_completeness, check_placeholder_values
 
 
 class CompletenessAgent(BaseAgent):
@@ -25,6 +25,9 @@ class CompletenessAgent(BaseAgent):
         sparse_cols = set(fp.get("sparse_columns", []))
 
         issues, completeness_by_col, overall = compute_completeness(df, sparse_cols)
+
+        placeholder_issues = check_placeholder_values(df)
+        issues.extend(placeholder_issues)
 
         self.state.completeness_by_column = completeness_by_col
         self.state.overall_completeness = overall

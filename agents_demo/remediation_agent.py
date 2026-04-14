@@ -5,6 +5,7 @@ reasoning for ambiguous remediation decisions."""
 from collections import defaultdict
 
 from agents_demo.base_agent import BaseAgent, SMART
+from state_demo.constants import PLACEHOLDERS
 from state_demo.helpers import missing_mask
 from tools import (
     cap_outliers,
@@ -42,7 +43,7 @@ class RemediationAgent(BaseAgent):
             "duplicate_rows", "outliers", "mixed_type", "naming_convention",
             "format_inconsistency", "case_inconsistency", "missing_values",
             "invalid_dates", "float_precision_noise", "fractional_integers",
-            "format_pattern_violation",
+            "format_pattern_violation", "placeholder_values",
         }
         auto_count = sum(1 for i in issues if i["type"] in auto_types)
         flag_count = len(issues) - auto_count
@@ -58,6 +59,20 @@ class RemediationAgent(BaseAgent):
         issues_by_type: dict = defaultdict(list)
         for issue in self.state.prioritized_issues:
             issues_by_type[issue["type"]].append(issue)
+
+        for issue in issues_by_type.get("placeholder_values", []):
+            col = issue["column"]
+            if col not in df.columns:
+                continue
+            placeholder_mask = (
+                df[col].astype(str).str.strip().str.lower().isin(PLACEHOLDERS)
+            )
+            count = int(placeholder_mask.sum())
+            if count > 0:
+                df.loc[placeholder_mask, col] = None
+                self._log_fix(issue, "auto_fixed",
+                              f"Replaced {count} placeholder cells with NULL",
+                              count)
 
         for issue in issues_by_type.get("fractional_integers", []):
             col = issue["column"]

@@ -84,7 +84,7 @@ class ConstraintAgent(BaseAgent):
             )
 
         fractional_issues = check_fractional_integers(
-            df, fp.get("numerical_columns", [])
+            df, list(df.columns)
         )
         issues.extend(fractional_issues)
         if fractional_issues:

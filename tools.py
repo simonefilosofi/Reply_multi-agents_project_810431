@@ -694,8 +694,37 @@ def check_float_precision(
     return issues
 
 
+def check_placeholder_values(df: pd.DataFrame) -> list:
+    """Detect individual cells containing known placeholder strings in any column,
+    regardless of overall missing rate.
+
+    Unlike compute_completeness (which has a >5% threshold), this function reports
+    columns with even a single placeholder cell, enabling surgical remediation.
+    """
+    issues = []
+    for col in df.columns:
+        s = df[col].astype(str).str.strip().str.lower()
+        placeholder_mask = s.isin(PLACEHOLDERS)
+        count = int(placeholder_mask.sum())
+        if count == 0:
+            continue
+        pct = count / len(df)
+        severity = "high" if pct > 0.20 else ("medium" if pct > 0.05 else "low")
+        issues.append({
+            "column": col,
+            "type": "placeholder_values",
+            "detail": (
+                f"{count} cells contain known placeholder strings "
+                f"(e.g. '-', '//', '?', 'n.d.') that should be NULL"
+            ),
+            "severity": severity,
+            "rows_affected": count,
+        })
+    return issues
+
+
 def check_fractional_integers(
-    df: pd.DataFrame, numerical_cols: list, threshold: float = 0.95
+    df: pd.DataFrame, numerical_cols: list, threshold: float = 0.80
 ) -> list:
     """Detect numerical columns where almost all values are whole numbers but
     a minority have non-trivial fractional parts — a sign of data corruption.
