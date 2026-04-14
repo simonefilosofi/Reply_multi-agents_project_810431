@@ -11,10 +11,13 @@ from tools import (
     fill_missing_categorical,
     fill_missing_numerical,
     fix_column_naming,
+    fix_fractional_integers,
     fix_invalid_dates,
     fix_mixed_type,
     normalize_case,
+    null_pattern_violations,
     remove_duplicate_rows,
+    round_float_precision,
     standardize_date_format,
 )
 
@@ -38,7 +41,8 @@ class RemediationAgent(BaseAgent):
         auto_types = {
             "duplicate_rows", "outliers", "mixed_type", "naming_convention",
             "format_inconsistency", "case_inconsistency", "missing_values",
-            "invalid_dates",
+            "invalid_dates", "float_precision_noise", "fractional_integers",
+            "format_pattern_violation",
         }
         auto_count = sum(1 for i in issues if i["type"] in auto_types)
         flag_count = len(issues) - auto_count
@@ -54,6 +58,14 @@ class RemediationAgent(BaseAgent):
         issues_by_type: dict = defaultdict(list)
         for issue in self.state.prioritized_issues:
             issues_by_type[issue["type"]].append(issue)
+
+        for issue in issues_by_type.get("fractional_integers", []):
+            col = issue["column"]
+            nulled = fix_fractional_integers(df, col)
+            self._log_fix(issue, "auto_fixed",
+                          f"Nulled {nulled} values with non-trivial fractional "
+                          f"parts in integer column",
+                          nulled)
 
         for issue in issues_by_type.get("mixed_type", []):
             col = issue["column"]
@@ -82,13 +94,40 @@ class RemediationAgent(BaseAgent):
         for issue in issues_by_type.get("missing_values", []):
             self._fix_missing_values(df, issue, fp)
 
+        id_cols = set(fp.get("id_columns", []))
         for issue in issues_by_type.get("outliers", []):
             col = issue["column"]
-            lower, upper, count = cap_outliers(df, col, self.state.df_raw[col])
-            if count > 0:
+            if col in id_cols:
+                self._log_fix(issue, "flagged_for_review",
+                              f"Outlier in ID/key column -- "
+                              f"capping would corrupt semantics, requires manual review",
+                              0)
+            else:
+                lower, upper, count = cap_outliers(df, col, self.state.df_raw[col])
+                if count > 0:
+                    self._log_fix(issue, "auto_fixed",
+                                  f"Capped {count} outliers to [{lower:.2f}, {upper:.2f}] (3-sigma)",
+                                  count)
+
+        for issue in issues_by_type.get("float_precision_noise", []):
+            col = issue["column"]
+            changed = round_float_precision(df, col, decimals=2)
+            self._log_fix(issue, "auto_fixed",
+                          f"Rounded {changed} values to 2 decimal places "
+                          f"to remove floating-point noise",
+                          changed)
+
+        for issue in issues_by_type.get("format_pattern_violation", []):
+            col = issue.get("column", "")
+            pattern = issue.get("pattern", "")
+            if pattern:
+                nulled = null_pattern_violations(df, col, pattern)
                 self._log_fix(issue, "auto_fixed",
-                              f"Capped {count} outliers to [{lower:.2f}, {upper:.2f}] (3-sigma)",
-                              count)
+                              f"Nulled {nulled} values violating expected "
+                              f"format pattern",
+                              nulled)
+            else:
+                self._flag_issue(issue)
 
         for issue in issues_by_type.get("format_inconsistency", []):
             col = issue.get("column", "")
@@ -114,6 +153,9 @@ class RemediationAgent(BaseAgent):
         for flag_type in (
             "sparse_column", "duplicate_columns", "duplicate_key",
             "date_order", "rare_categories", "conditional_completeness",
+            "cross_column_mismatch", "domain_negative_values",
+            "currency_symbol_in_numeric", "comma_decimal_format",
+            "nd_placeholder_in_numeric",
         ):
             for issue in issues_by_type.get(flag_type, []):
                 self._flag_issue(issue)
@@ -197,6 +239,12 @@ class RemediationAgent(BaseAgent):
             "date_order": "Cannot auto-fix date ordering without domain knowledge",
             "rare_categories": "Suggest grouping into 'Other' -- requires domain approval",
             "conditional_completeness": "Related column has gaps -- requires domain knowledge",
+            "cross_column_mismatch": "Column value disagreement -- requires domain knowledge to resolve",
+            "domain_negative_values": "Negative values in non-negative column -- requires manual review",
+            "currency_symbol_in_numeric": "Currency symbols in numeric column -- requires locale-aware parsing",
+            "comma_decimal_format": "Italian locale decimal format detected -- requires explicit conversion",
+            "nd_placeholder_in_numeric": "N.D. placeholders in numeric column -- should be proper NULLs",
+            "format_pattern_violation": "Values violating format pattern but no pattern stored -- flagged for review",
         }
         desc = descriptions.get(issue["type"], "Flagged for human review")
         self._log_fix(issue, "flagged_for_review", desc, 0)

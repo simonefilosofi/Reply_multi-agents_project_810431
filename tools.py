@@ -196,6 +196,8 @@ def check_naming_conventions(df: pd.DataFrame) -> list:
             violations.append("not snake_case (contains uppercase)")
         if col.strip().lower() in RESERVED_WORDS:
             violations.append(f"'{col.strip().lower()}' is a reserved word")
+        if col and col[0].isdigit():
+            violations.append("starts with a digit (invalid identifier)")
         if violations:
             issues.append({
                 "column": col,
@@ -410,10 +412,18 @@ def detect_duplicate_rows(df: pd.DataFrame) -> list:
 
 
 def detect_duplicate_columns(df: pd.DataFrame, likely_pairs: list) -> list:
-    """Flag column pairs identified by the profiler as likely containing the same data."""
+    """Flag column pairs containing identical data.
+
+    Checks profiler-suggested pairs first, then runs a deterministic
+    value-equality scan across all column combinations.
+    """
     issues = []
+    already_flagged: set = set()
+
     for pair in likely_pairs:
         if len(pair) == 2 and pair[0] in df.columns and pair[1] in df.columns:
+            key = tuple(sorted(pair))
+            already_flagged.add(key)
             issues.append({
                 "column": f"{pair[0]} / {pair[1]}",
                 "type": "duplicate_columns",
@@ -423,6 +433,27 @@ def detect_duplicate_columns(df: pd.DataFrame, likely_pairs: list) -> list:
                 ),
                 "severity": "medium",
             })
+
+    cols = list(df.columns)
+    for col_a, col_b in combinations(cols, 2):
+        key = tuple(sorted([col_a, col_b]))
+        if key in already_flagged:
+            continue
+        try:
+            if df[col_a].astype(str).equals(df[col_b].astype(str)):
+                already_flagged.add(key)
+                issues.append({
+                    "column": f"{col_a} / {col_b}",
+                    "type": "duplicate_columns",
+                    "detail": (
+                        f"Columns '{col_a}' and '{col_b}' are identical "
+                        f"(deterministic value-equality check)"
+                    ),
+                    "severity": "medium",
+                })
+        except Exception:
+            continue
+
     return issues
 
 
@@ -663,7 +694,103 @@ def check_float_precision(
     return issues
 
 
+def check_fractional_integers(
+    df: pd.DataFrame, numerical_cols: list, threshold: float = 0.95
+) -> list:
+    """Detect numerical columns where almost all values are whole numbers but
+    a minority have non-trivial fractional parts — a sign of data corruption.
+
+    Returns issues of type 'fractional_integers' for affected columns.
+    """
+    issues = []
+    for col in numerical_cols:
+        if col not in df.columns:
+            continue
+        numeric = pd.to_numeric(df[col], errors="coerce").dropna()
+        if len(numeric) < 5:
+            continue
+        whole = (numeric % 1 == 0).sum()
+        whole_frac = whole / len(numeric)
+        if whole_frac < threshold:
+            continue
+        fractional_mask = (numeric % 1 != 0) & ((numeric % 1).abs() > 1e-9)
+        n_fractional = int(fractional_mask.sum())
+        if n_fractional == 0:
+            continue
+        pct = n_fractional / len(numeric)
+        issues.append({
+            "column": col,
+            "type": "fractional_integers",
+            "detail": (
+                f"{n_fractional} values ({pct:.1%}) have non-zero fractional "
+                f"parts in a column where {whole_frac:.0%} of values are "
+                f"whole numbers — likely corrupted entries"
+            ),
+            "severity": "high" if pct > 0.02 else "medium",
+        })
+    return issues
+
+
 # ── Remediation ────────────────────────────────────────────────────────────────
+
+def fix_fractional_integers(df: pd.DataFrame, col: str) -> int:
+    """Set values with non-trivial fractional parts to NaN in-place for a
+    column that should contain only whole numbers.
+
+    Returns the number of values nulled.
+    """
+    if col not in df.columns:
+        return 0
+    numeric = pd.to_numeric(df[col], errors="coerce")
+    fractional_mask = (numeric % 1 != 0) & ((numeric % 1).abs() > 1e-9)
+    count = int(fractional_mask.sum())
+    if count > 0:
+        df.loc[fractional_mask, col] = np.nan
+    return count
+
+
+def round_float_precision(df: pd.DataFrame, col: str, decimals: int = 2) -> int:
+    """Round a numerical column to *decimals* places in-place to remove
+    floating-point arithmetic noise.
+
+    Returns the number of values changed.
+    """
+    if col not in df.columns:
+        return 0
+    numeric = pd.to_numeric(df[col], errors="coerce")
+    rounded = numeric.round(decimals)
+    changed = int((numeric != rounded).sum())
+    if changed > 0:
+        df[col] = rounded
+    return changed
+
+
+def null_pattern_violations(df: pd.DataFrame, col: str, pattern: str) -> int:
+    """Set values that do not match *pattern* to NaN in-place.
+
+    Returns the number of values nulled.
+    """
+    if col not in df.columns:
+        return 0
+    nev_mask = ~missing_mask(df[col])
+    if nev_mask.sum() == 0:
+        return 0
+    try:
+        compiled = re.compile(pattern)
+    except re.error:
+        return 0
+    violates = df[col].astype(str).apply(
+        lambda v: bool(nev_mask[df[col].astype(str) == v].any())
+        and not compiled.match(str(v))
+    )
+    violates = nev_mask & df[col].astype(str).apply(
+        lambda v: not compiled.match(str(v))
+    )
+    count = int(violates.sum())
+    if count > 0:
+        df.loc[violates, col] = np.nan
+    return count
+
 
 def fix_mixed_type(df: pd.DataFrame, col: str) -> int:
     """Coerce column to numeric in-place. Returns number of values that became NaN."""
@@ -834,6 +961,8 @@ def fix_column_naming(df: pd.DataFrame, col: str) -> tuple[str, str]:
     new_name = re.sub(r"[^a-z0-9]+", "_", col.lower().strip()).strip("_")
     if not new_name:
         new_name = f"col_{list(df.columns).index(col)}"
+    if new_name and new_name[0].isdigit():
+        new_name = f"col_{new_name}"
     if new_name != col and new_name in df.columns:
         suffix = 2
         while f"{new_name}_{suffix}" in df.columns:

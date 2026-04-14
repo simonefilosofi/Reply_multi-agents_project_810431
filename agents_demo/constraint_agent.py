@@ -8,6 +8,7 @@ from tools import (
     check_domain_negatives,
     check_float_precision,
     check_format_pattern,
+    check_fractional_integers,
     check_numeric_corruption_types,
 )
 
@@ -80,6 +81,18 @@ class ConstraintAgent(BaseAgent):
                 "act",
                 f"Float precision noise detected in "
                 f"{len(precision_issues)} column(s)",
+            )
+
+        fractional_issues = check_fractional_integers(
+            df, fp.get("numerical_columns", [])
+        )
+        issues.extend(fractional_issues)
+        if fractional_issues:
+            self.log(
+                "act",
+                f"Fractional-integer corruption detected in "
+                f"{len(fractional_issues)} column(s): "
+                + ", ".join(i["column"] for i in fractional_issues),
             )
 
         self.state.constraint_report = {
