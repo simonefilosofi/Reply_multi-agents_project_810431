@@ -11,7 +11,7 @@ import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 
-from state.pipeline_state import PipelineState
+from state_demo.pipeline_state import PipelineState
 from agents.ingestion_agent import IngestionAgent
 from agents.profiler_agent import ProfilerAgent
 from agents.schema_agent import SchemaAgent
@@ -20,8 +20,8 @@ from agents.duplicate_agent import DuplicateAgent
 from agents.anomaly_agent import AnomalyAgent
 from agents.consistency_agent import ConsistencyAgent
 from agents.synthesis_agent import SynthesisAgent
-from agents.remediation_agent import RemediationAgent
-from agents.report_agent import ReportAgent
+from agents_demo.remediation_agent import RemediationAgent
+from agents_demo.report_agent import ReportAgent
 
 load_dotenv()
 

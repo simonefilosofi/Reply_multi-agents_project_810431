@@ -6,9 +6,9 @@ from itertools import combinations
 
 import pandas as pd
 
-from agents.base_agent import BaseAgent, SMART
-from state.constants import DATE_PATTERNS
-from state.helpers import non_empty_values
+from agents_demo.base_agent import BaseAgent, SMART
+from state_demo.constants import DATE_PATTERNS
+from state_demo.helpers import non_empty_values
 
 
 class ConsistencyAgent(BaseAgent):

@@ -10,8 +10,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from agents.base_agent import BaseAgent, SMART
-from state.scoring import compute_reliability_score
+from agents_demo.base_agent import BaseAgent, SMART
+from state_demo.scoring import compute_reliability_score
 
 IMAGES_DIR = "images"
 

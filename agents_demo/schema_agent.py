@@ -6,8 +6,8 @@ import re
 
 import pandas as pd
 
-from agents.base_agent import BaseAgent, SMART
-from state.helpers import non_empty_values
+from agents_demo.base_agent import BaseAgent, SMART
+from state_demo.helpers import non_empty_values
 
 RESERVED_WORDS = {
     "class", "def", "return", "import", "from", "lambda", "global",

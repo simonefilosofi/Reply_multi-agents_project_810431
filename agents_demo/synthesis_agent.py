@@ -5,9 +5,9 @@ evidence, computes the pre-remediation reliability score, and generates
 an executive summary of data quality findings."""
 
 
-from agents.base_agent import BaseAgent, SMART
-from state.constants import SEVERITY_RANK
-from state.scoring import compute_reliability_score
+from agents_demo.base_agent import BaseAgent, SMART
+from state_demo.constants import SEVERITY_RANK
+from state_demo.scoring import compute_reliability_score
 
 
 class SynthesisAgent(BaseAgent):

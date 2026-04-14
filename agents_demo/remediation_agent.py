@@ -8,9 +8,9 @@ from collections import defaultdict
 
 import pandas as pd
 
-from agents.base_agent import BaseAgent, SMART
-from state.constants import DATE_FORMAT_MAP, DATE_PATTERNS, PLACEHOLDERS
-from state.helpers import missing_mask as compute_missing_mask
+from agents_demo.base_agent import BaseAgent, SMART
+from state_demo.constants import DATE_FORMAT_MAP, DATE_PATTERNS, PLACEHOLDERS
+from state_demo.helpers import missing_mask as compute_missing_mask
 
 
 class RemediationAgent(BaseAgent):

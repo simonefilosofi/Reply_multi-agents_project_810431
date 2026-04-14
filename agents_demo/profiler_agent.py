@@ -3,9 +3,9 @@ statistical fallback to generate a DatasetFingerprint for downstream agents."""
 
 import pandas as pd
 
-from agents.base_agent import BaseAgent, SMART
+from agents_demo.base_agent import BaseAgent, SMART
 from state.fingerprint_schema import DatasetFingerprint
-from state.helpers import non_empty_values
+from state_demo.helpers import non_empty_values
 
 
 class ProfilerAgent(BaseAgent):

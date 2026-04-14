@@ -8,7 +8,7 @@ from datetime import datetime
 from groq import Groq
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from state.pipeline_state import PipelineState
+from state_demo.pipeline_state import PipelineState
 
 FAST = "llama-3.1-8b-instant"
 SMART = "llama-3.3-70b-versatile"

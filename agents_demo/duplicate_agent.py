@@ -2,7 +2,7 @@
 duplicate column pairs flagged by the profiler, and key-collision rows
 that share key column values but differ in other columns."""
 
-from agents.base_agent import BaseAgent, SMART
+from agents_demo.base_agent import BaseAgent, SMART
 
 
 class DuplicateAgent(BaseAgent):

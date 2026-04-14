@@ -3,7 +3,7 @@ columns using the 3-sigma rule and rare categories in categorical columns."""
 
 import pandas as pd
 
-from agents.base_agent import BaseAgent, SMART
+from agents_demo.base_agent import BaseAgent, SMART
 
 
 class AnomalyAgent(BaseAgent):

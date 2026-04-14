@@ -2,8 +2,8 @@
 and common placeholder patterns across all columns. Reports per-column and
 overall completeness rates and flags sparse columns for potential removal."""
 
-from agents.base_agent import BaseAgent, SMART
-from state.helpers import missing_mask
+from agents_demo.base_agent import BaseAgent, SMART
+from state_demo.helpers import missing_mask
 
 
 class CompletenessAgent(BaseAgent):

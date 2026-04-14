@@ -6,7 +6,7 @@ import json
 
 import pandas as pd
 
-from agents.base_agent import BaseAgent
+from agents_demo.base_agent import BaseAgent
 
 
 class IngestionAgent(BaseAgent):
