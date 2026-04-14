@@ -79,6 +79,22 @@ def compute_column_stats(df: pd.DataFrame) -> str:
     return "\n".join(lines)
 
 
+def _looks_like_yyyymm(int_series: pd.Series) -> bool:
+    """Return True if the majority of integer values look like YYYYMM period codes."""
+    years = int_series // 100
+    months = int_series % 100
+    valid = (
+        (int_series >= 190001) & (int_series <= 209912)
+        & (months >= 1) & (months <= 12)
+    )
+    return valid.mean() > 0.90
+
+
+def _looks_like_yyyymmdd(int_series: pd.Series) -> bool:
+    """Return True if the majority of integer values look like YYYYMMDD date codes."""
+    return ((int_series >= 19000101) & (int_series <= 20991231)).mean() > 0.90
+
+
 def statistical_fingerprint(df: pd.DataFrame) -> dict:
     """Fallback fingerprint built from statistical heuristics (no LLM)."""
     numerical, categorical, date_cols, id_cols, sparse = [], [], [], [], []
@@ -95,6 +111,27 @@ def statistical_fingerprint(df: pd.DataFrame) -> dict:
 
         num_frac = pd.to_numeric(nev, errors="coerce").notna().mean()
         if num_frac > 0.80:
+            numeric_vals = pd.to_numeric(nev, errors="coerce").dropna()
+            all_whole = bool((numeric_vals % 1 == 0).all())
+
+            if all_whole and len(numeric_vals) > 0:
+                int_vals = numeric_vals.astype(np.int64)
+
+                # YYYYMM period codes → date column
+                if _looks_like_yyyymm(int_vals):
+                    date_cols.append(col)
+                    continue
+
+                # YYYYMMDD date codes → date column
+                if _looks_like_yyyymmdd(int_vals):
+                    date_cols.append(col)
+                    continue
+
+                # Low-cardinality integer → categorical (codes, IDs, enumerations)
+                if int_vals.nunique() / max(len(int_vals), 1) < 0.10:
+                    categorical.append(col)
+                    continue
+
             numerical.append(col)
         else:
             date_detected = False
