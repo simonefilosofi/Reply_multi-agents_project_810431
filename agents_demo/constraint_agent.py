@@ -9,8 +9,10 @@ from tools import (
     check_float_precision,
     check_format_pattern,
     check_fractional_integers,
+    check_month_column,
     check_numeric_corruption_types,
     check_period_formats,
+    check_year_column,
 )
 
 _CONSTRAINT_HANDLERS = {
@@ -106,6 +108,27 @@ class ConstraintAgent(BaseAgent):
                 f"Period format inconsistency detected in "
                 f"{len(period_issues)} column(s): "
                 + ", ".join(i["column"] for i in period_issues),
+            )
+
+        all_cols = list(df.columns)
+        month_issues = check_month_column(df, all_cols)
+        issues.extend(month_issues)
+        if month_issues:
+            self.log(
+                "act",
+                f"Special month codes found in "
+                f"{len(month_issues)} column(s): "
+                + ", ".join(i["column"] for i in month_issues),
+            )
+
+        year_issues = check_year_column(df, all_cols)
+        issues.extend(year_issues)
+        if year_issues:
+            self.log(
+                "act",
+                f"Invalid/ambiguous year values in "
+                f"{len(year_issues)} column(s): "
+                + ", ".join(i["column"] for i in year_issues),
             )
 
         self.state.constraint_report = {

@@ -742,6 +742,20 @@ _MONTH_ABBR: dict[str, int] = {
     "set": 9, "ott": 10, "dic": 12,
 }
 
+_MONTH_FULL_NAMES: dict[str, int] = {
+    # Italian
+    "gennaio": 1, "febbraio": 2, "marzo": 3, "aprile": 4,
+    "maggio": 5, "giugno": 6, "luglio": 7, "agosto": 8,
+    "settembre": 9, "ottobre": 10, "novembre": 11, "dicembre": 12,
+    # English
+    "january": 1, "february": 2, "march": 3, "april": 4,
+    "may": 5, "june": 6, "july": 7, "august": 8,
+    "september": 9, "october": 10, "november": 11, "december": 12,
+}
+
+# Combined lookup: abbreviations + full names
+_ALL_MONTH_NAMES: dict[str, int] = {**_MONTH_ABBR, **_MONTH_FULL_NAMES}
+
 # Ordered list of (format_label, compiled_regex) used for period detection
 _PERIOD_PATTERNS: list[tuple[str, re.Pattern]] = [
     ("YYYYMM",   re.compile(r"^\d{6}(?:\.0+)?$")),
@@ -923,6 +937,304 @@ def check_placeholder_values(df: pd.DataFrame) -> list:
             "rows_affected": count,
         })
     return issues
+
+
+# Special month codes that represent unknowns or annual aggregates, not real months
+_SPECIAL_MONTH_CODES = frozenset({-1, 0, 13, 99})
+
+
+def _is_month_column(df: pd.DataFrame, col: str) -> bool:
+    """Return True when col looks like a standalone month column.
+
+    A column qualifies when ≥ 80 % of its non-null values can be resolved to a
+    month number (integers 1-12 + special codes, or recognisable text names).
+    """
+    if col not in df.columns:
+        return False
+    raw = df[col].dropna()
+    if len(raw) < 5:
+        return False
+    resolved = 0
+    for v in raw.astype(str).str.strip():
+        lower = v.lower()
+        if lower in _ALL_MONTH_NAMES:
+            resolved += 1
+            continue
+        try:
+            n = float(v)
+            if n % 1 == 0 and int(n) in (set(range(-1, 14)) | {99}):
+                resolved += 1
+        except (ValueError, TypeError):
+            pass
+    return resolved / len(raw) >= 0.80
+
+
+def check_month_column(df: pd.DataFrame, cols: list) -> list:
+    """Detect standalone month columns and flag two classes of problems:
+
+    * ``'special_month_code'`` — integer codes -1, 0, 13, 99 (unknowns / annual
+      aggregates) that should become NULL or a dedicated category.
+    * ``'month_format_inconsistency'`` — text month names (e.g. ``'Settembre'``,
+      ``'September'``) mixed with or instead of the canonical integer form.
+
+    A column is identified as a month column by ``_is_month_column``.
+    """
+    issues = []
+    for col in cols:
+        if not _is_month_column(df, col):
+            continue
+
+        raw = df[col].dropna().astype(str).str.strip()
+
+        # --- text month names ---
+        text_months = [v for v in raw if v.lower() in _ALL_MONTH_NAMES
+                       and not v.lstrip("-").replace(".", "").isdigit()]
+        n_text = len(text_months)
+        if n_text > 0:
+            pct = n_text / len(raw)
+            issues.append({
+                "column": col,
+                "type": "month_format_inconsistency",
+                "detail": (
+                    f"{n_text} values ({pct:.1%}) are text month names "
+                    f"(e.g. '{text_months[0]}') — should be integers 1-12"
+                ),
+                "severity": "medium" if pct > 0.05 else "low",
+            })
+
+        # --- special integer codes ---
+        numeric = pd.to_numeric(df[col], errors="coerce").dropna()
+        int_vals = numeric[numeric % 1 == 0].astype(int)
+        special_mask = int_vals.isin(_SPECIAL_MONTH_CODES)
+        n_special = int(special_mask.sum())
+        if n_special > 0:
+            special_vals = sorted(int_vals[special_mask].unique().tolist())
+            pct = n_special / len(raw)
+            issues.append({
+                "column": col,
+                "type": "special_month_code",
+                "detail": (
+                    f"{n_special} values ({pct:.1%}) are special month codes "
+                    f"{special_vals} — likely unknowns or annual aggregates; "
+                    f"should be NULL or a dedicated category"
+                ),
+                "severity": "medium" if pct > 0.05 else "low",
+            })
+    return issues
+
+
+def check_year_column(df: pd.DataFrame, cols: list) -> list:
+    """Detect columns that behave like standalone 4-digit year columns and flag:
+
+    * ``'year_format_inconsistency'`` — dirty strings like ``'2024.'`` that can
+      be cleaned deterministically.
+    * ``'ambiguous_year_format'`` — 2-digit year values whose century can be
+      inferred from the dominant year in the column.
+    * ``'invalid_year_value'`` — values outside [1900, 2099] that need manual
+      review.
+
+    A column is identified as a year column when ≥ 80 % of values parse to valid
+    4-digit years after stripping trailing non-digit noise.
+    """
+    issues = []
+    for col in cols:
+        if col not in df.columns:
+            continue
+        raw = df[col].dropna().astype(str).str.strip()
+        if len(raw) < 5:
+            continue
+
+        # Strip trailing non-digit characters for detection only
+        cleaned = raw.str.replace(r"[^\d]$", "", regex=True)
+        numeric = pd.to_numeric(cleaned, errors="coerce").dropna()
+        if len(numeric) == 0:
+            continue
+        int_vals = numeric[numeric % 1 == 0].astype(int)
+        in_range = ((int_vals >= 1900) & (int_vals <= 2099)).sum()
+        if in_range / len(int_vals) < 0.80:
+            continue  # not a year column
+
+        # Dirty strings: original didn't parse cleanly but cleaned did
+        original_numeric = pd.to_numeric(raw, errors="coerce")
+        n_dirty = int(original_numeric.isna().sum()) - int(
+            pd.to_numeric(df[col].dropna().astype(str).str.strip(), errors="coerce").isna().sum()
+        )
+        # Simpler: count values that have trailing non-digits
+        dirty_mask = raw.str.match(r"^\d{4}[^\d]+$")
+        n_dirty = int(dirty_mask.sum())
+        if n_dirty > 0:
+            pct = n_dirty / len(raw)
+            issues.append({
+                "column": col,
+                "type": "year_format_inconsistency",
+                "detail": (
+                    f"{n_dirty} values ({pct:.1%}) have trailing non-digit "
+                    f"characters (e.g. '2024.') — can be cleaned automatically"
+                ),
+                "severity": "low",
+            })
+
+        # 2-digit years (auto-fixable via century inference)
+        two_digit_mask = (int_vals >= 0) & (int_vals <= 99)
+        n_two = int(two_digit_mask.sum())
+        if n_two > 0:
+            pct = n_two / len(int_vals)
+            issues.append({
+                "column": col,
+                "type": "ambiguous_year_format",
+                "detail": (
+                    f"{n_two} values ({pct:.1%}) appear to be 2-digit years "
+                    f"— century will be inferred from the dominant year in the column"
+                ),
+                "severity": "medium",
+            })
+
+        # Truly out-of-range (not 2-digit, not dirty trailing)
+        out_of_range = int(
+            ((int_vals < 1900) | (int_vals > 2099)).sum()
+        ) - n_two
+        if out_of_range > 0:
+            pct = out_of_range / len(int_vals)
+            issues.append({
+                "column": col,
+                "type": "invalid_year_value",
+                "detail": (
+                    f"{out_of_range} values ({pct:.1%}) fall outside the valid "
+                    f"year range [1900-2099]"
+                ),
+                "severity": "medium",
+            })
+    return issues
+
+
+def fix_month_column(df: pd.DataFrame, col: str) -> int:
+    """Normalise a standalone month column to integers 1-12 in-place.
+
+    * Text month names (``'Settembre'``, ``'September'``, abbreviations) are
+      converted to their integer equivalent.
+    * Valid integers 1-12 are left as-is (cast to int).
+    * Special codes (-1, 0, 13, 99) are set to NULL.
+    * Anything else unrecognisable is set to NULL.
+
+    Returns the number of cells changed (converted + nulled).
+    """
+    if col not in df.columns:
+        return 0
+    changed = 0
+    for idx, raw in df[col].items():
+        if pd.isna(raw) or str(raw).strip() == "":
+            continue
+        v = str(raw).strip()
+        lower = v.lower()
+
+        # Text month name
+        if lower in _ALL_MONTH_NAMES:
+            new_val = _ALL_MONTH_NAMES[lower]
+            if str(raw) != str(new_val):
+                df.at[idx, col] = new_val
+                changed += 1
+            continue
+
+        # Numeric
+        try:
+            n = float(v)
+        except (ValueError, TypeError):
+            df.at[idx, col] = pd.NA
+            changed += 1
+            continue
+
+        if n % 1 != 0:
+            df.at[idx, col] = pd.NA
+            changed += 1
+            continue
+
+        int_n = int(n)
+        if int_n in _SPECIAL_MONTH_CODES:
+            df.at[idx, col] = pd.NA
+            changed += 1
+        elif 1 <= int_n <= 12:
+            if str(raw) != str(int_n):
+                df.at[idx, col] = int_n
+                changed += 1
+        else:
+            df.at[idx, col] = pd.NA
+            changed += 1
+
+    return changed
+
+
+def fix_year_column(df: pd.DataFrame, col: str) -> int:
+    """Normalise a standalone year column to 4-digit integers in-place.
+
+    * Trailing non-digit noise is stripped (``'2024.'`` → ``2024``).
+    * 2-digit years are expanded using the century of the most frequent
+      valid 4-digit year already in the column (e.g. ``'23'`` → ``2023``
+      when the dominant year is ``2023``).
+    * Values that cannot be resolved to a valid year are set to NULL.
+
+    Returns the number of cells changed.
+    """
+    if col not in df.columns:
+        return 0
+
+    # Infer the century prefix from the dominant 4-digit year
+    four_digit = pd.to_numeric(
+        df[col].dropna().astype(str).str.strip()
+               .str.replace(r"[^\d]$", "", regex=True),
+        errors="coerce"
+    ).dropna()
+    four_digit = four_digit[(four_digit >= 1900) & (four_digit <= 2099)]
+    century_prefix = int(four_digit.mode().iloc[0]) // 100 * 100 if len(four_digit) > 0 else 2000
+
+    changed = 0
+    for idx, raw in df[col].items():
+        if pd.isna(raw) or str(raw).strip() == "":
+            continue
+        v = str(raw).strip()
+
+        # Strip trailing non-digit characters
+        v_clean = re.sub(r"[^\d]+$", "", v)
+        if not v_clean:
+            df.at[idx, col] = pd.NA
+            changed += 1
+            continue
+
+        try:
+            n = int(v_clean)
+        except ValueError:
+            df.at[idx, col] = pd.NA
+            changed += 1
+            continue
+
+        # Expand 2-digit year
+        if 0 <= n <= 99:
+            n = century_prefix + n
+
+        if 1900 <= n <= 2099:
+            if str(raw) != str(n):
+                df.at[idx, col] = n
+                changed += 1
+        else:
+            df.at[idx, col] = pd.NA
+            changed += 1
+
+    return changed
+
+
+def fix_special_month_codes(df: pd.DataFrame, col: str) -> int:
+    """Null out special month codes (-1, 0, 13, 99) in a standalone month column.
+
+    These codes typically encode unknowns or annual aggregates and should not be
+    treated as valid calendar months.  Returns the number of cells nulled.
+    """
+    if col not in df.columns:
+        return 0
+    numeric = pd.to_numeric(df[col], errors="coerce")
+    mask = numeric.isin(_SPECIAL_MONTH_CODES)
+    count = int(mask.sum())
+    if count > 0:
+        df.loc[mask, col] = pd.NA
+    return count
 
 
 def check_fractional_integers(

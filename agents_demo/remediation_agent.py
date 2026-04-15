@@ -15,6 +15,9 @@ from tools import (
     fix_fractional_integers,
     fix_invalid_dates,
     fix_mixed_type,
+    fix_month_column,
+    fix_special_month_codes,
+    fix_year_column,
     normalize_case,
     normalize_period_column,
     null_pattern_violations,
@@ -45,7 +48,9 @@ class RemediationAgent(BaseAgent):
             "format_inconsistency", "case_inconsistency", "missing_values",
             "invalid_dates", "float_precision_noise", "fractional_integers",
             "format_pattern_violation", "placeholder_values",
-            "period_format_inconsistency",
+            "period_format_inconsistency", "special_month_code",
+            "month_format_inconsistency", "ambiguous_year_format",
+            "year_format_inconsistency",
         }
         auto_count = sum(1 for i in issues if i["type"] in auto_types)
         flag_count = len(issues) - auto_count
@@ -69,6 +74,39 @@ class RemediationAgent(BaseAgent):
                           f"Normalised {normalised} period values to canonical "
                           f"YYYYMM format; {nulled} unparseable values set to NULL",
                           normalised + nulled)
+
+        # Merge month_format_inconsistency + special_month_code into one fix pass
+        # (fix_month_column handles text names, specials, and out-of-range in one go)
+        month_cols_fixed = set()
+        for issue in (
+            issues_by_type.get("month_format_inconsistency", [])
+            + issues_by_type.get("special_month_code", [])
+        ):
+            col = issue["column"]
+            if col in month_cols_fixed:
+                continue
+            month_cols_fixed.add(col)
+            changed = fix_month_column(df, col)
+            self._log_fix(issue, "auto_fixed",
+                          f"Normalised {changed} month values to integers 1-12 "
+                          f"(converted text names, nulled special codes)",
+                          changed)
+
+        # Year column normalisation: trailing noise + 2-digit century expansion
+        year_cols_fixed = set()
+        for issue in (
+            issues_by_type.get("year_format_inconsistency", [])
+            + issues_by_type.get("ambiguous_year_format", [])
+        ):
+            col = issue["column"]
+            if col in year_cols_fixed:
+                continue
+            year_cols_fixed.add(col)
+            changed = fix_year_column(df, col)
+            self._log_fix(issue, "auto_fixed",
+                          f"Normalised {changed} year values to 4-digit integers "
+                          f"(stripped trailing noise, expanded 2-digit years)",
+                          changed)
 
         for issue in issues_by_type.get("placeholder_values", []):
             col = issue["column"]
@@ -181,6 +219,7 @@ class RemediationAgent(BaseAgent):
             "cross_column_mismatch", "domain_negative_values",
             "currency_symbol_in_numeric", "comma_decimal_format",
             "nd_placeholder_in_numeric",
+            "ambiguous_year_format", "invalid_year_value",
         ):
             for issue in issues_by_type.get(flag_type, []):
                 self._flag_issue(issue)
@@ -270,6 +309,9 @@ class RemediationAgent(BaseAgent):
             "comma_decimal_format": "Italian locale decimal format detected -- requires explicit conversion",
             "nd_placeholder_in_numeric": "N.D. placeholders in numeric column -- should be proper NULLs",
             "format_pattern_violation": "Values violating format pattern but no pattern stored -- flagged for review",
+            "ambiguous_year_format": "2-digit year values -- century expanded automatically from dominant year in column",
+            "invalid_year_value": "Year values outside [1900-2099] -- requires domain review before correction",
+            "year_format_inconsistency": "Dirty year strings -- cleaned automatically (trailing non-digit noise stripped)",
         }
         desc = descriptions.get(issue["type"], "Flagged for human review")
         self._log_fix(issue, "flagged_for_review", desc, 0)
