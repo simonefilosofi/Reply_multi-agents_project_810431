@@ -10,6 +10,7 @@ from tools import (
     check_format_pattern,
     check_fractional_integers,
     check_numeric_corruption_types,
+    check_period_formats,
 )
 
 _CONSTRAINT_HANDLERS = {
@@ -93,6 +94,18 @@ class ConstraintAgent(BaseAgent):
                 f"Fractional-integer corruption detected in "
                 f"{len(fractional_issues)} column(s): "
                 + ", ".join(i["column"] for i in fractional_issues),
+            )
+
+        period_issues = check_period_formats(
+            df, fp.get("categorical_columns", [])
+        )
+        issues.extend(period_issues)
+        if period_issues:
+            self.log(
+                "act",
+                f"Period format inconsistency detected in "
+                f"{len(period_issues)} column(s): "
+                + ", ".join(i["column"] for i in period_issues),
             )
 
         self.state.constraint_report = {

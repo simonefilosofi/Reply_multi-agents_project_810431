@@ -16,6 +16,7 @@ from tools import (
     fix_invalid_dates,
     fix_mixed_type,
     normalize_case,
+    normalize_period_column,
     null_pattern_violations,
     remove_duplicate_rows,
     round_float_precision,
@@ -44,6 +45,7 @@ class RemediationAgent(BaseAgent):
             "format_inconsistency", "case_inconsistency", "missing_values",
             "invalid_dates", "float_precision_noise", "fractional_integers",
             "format_pattern_violation", "placeholder_values",
+            "period_format_inconsistency",
         }
         auto_count = sum(1 for i in issues if i["type"] in auto_types)
         flag_count = len(issues) - auto_count
@@ -59,6 +61,14 @@ class RemediationAgent(BaseAgent):
         issues_by_type: dict = defaultdict(list)
         for issue in self.state.prioritized_issues:
             issues_by_type[issue["type"]].append(issue)
+
+        for issue in issues_by_type.get("period_format_inconsistency", []):
+            col = issue["column"]
+            normalised, nulled = normalize_period_column(df, col)
+            self._log_fix(issue, "auto_fixed",
+                          f"Normalised {normalised} period values to canonical "
+                          f"YYYYMM format; {nulled} unparseable values set to NULL",
+                          normalised + nulled)
 
         for issue in issues_by_type.get("placeholder_values", []):
             col = issue["column"]

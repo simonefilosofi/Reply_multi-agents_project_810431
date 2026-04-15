@@ -117,12 +117,14 @@ def statistical_fingerprint(df: pd.DataFrame) -> dict:
             if all_whole and len(numeric_vals) > 0:
                 int_vals = numeric_vals.astype(np.int64)
 
-                # YYYYMM period codes → date column
+                # YYYYMM period codes → categorical (NOT date_cols: pd.to_datetime
+                # cannot parse YYYYMM strings without an explicit format, and
+                # fix_invalid_dates would null every value)
                 if _looks_like_yyyymm(int_vals):
-                    date_cols.append(col)
+                    categorical.append(col)
                     continue
 
-                # YYYYMMDD date codes → date column
+                # YYYYMMDD date codes → date column (pd.to_datetime handles these)
                 if _looks_like_yyyymmdd(int_vals):
                     date_cols.append(col)
                     continue
@@ -731,6 +733,169 @@ def check_float_precision(
     return issues
 
 
+_MONTH_ABBR: dict[str, int] = {
+    # English
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+    # Italian
+    "gen": 1, "mag": 5, "giu": 6, "lug": 7, "ago": 8,
+    "set": 9, "ott": 10, "dic": 12,
+}
+
+# Ordered list of (format_label, compiled_regex) used for period detection
+_PERIOD_PATTERNS: list[tuple[str, re.Pattern]] = [
+    ("YYYYMM",   re.compile(r"^\d{6}(?:\.0+)?$")),
+    ("YYYY-MM",  re.compile(r"^\d{4}-\d{2}$")),
+    ("MON-YYYY", re.compile(r"^[A-Za-z]{3}-\d{4}$")),
+    ("MM/YYYY",  re.compile(r"^\d{1,2}/\d{4}$")),
+    ("TEXT_YYYY",re.compile(r"^[A-Za-z].*\s\d{4}$")),
+]
+
+
+def _parse_period_value(v: str):
+    """Convert any recognised period format to canonical MM-YYYY string.
+
+    Supported inputs
+    ----------------
+    1. YYYYMM          — ``202402``, ``202402.0``
+    2. YYYY-MM         — ``2024-06``
+    3. MON-YYYY        — ``APR-2024``, ``apr-2024``
+    4. MM/YYYY         — ``05/2024``, ``5/2024``
+    5. Text + year     — ``Rata 2024``  (month unknown → returns None)
+
+    Returns the canonical MM-YYYY string (e.g. ``"06-2024"``) or ``None`` if the
+    value cannot be mapped to a valid year-month pair.
+    """
+    v = v.strip()
+
+    # 1. YYYYMM (with optional float .0 suffix)
+    m = re.match(r"^(\d{6})(?:\.0+)?$", v)
+    if m:
+        code = m.group(1)
+        year, month = int(code[:4]), int(code[4:])
+        if 1900 <= year <= 2099 and 1 <= month <= 12:
+            return f"{month:02d}-{year}"
+        return None
+
+    # 2. YYYY-MM
+    m = re.match(r"^(\d{4})-(\d{2})$", v)
+    if m:
+        year, month = int(m.group(1)), int(m.group(2))
+        if 1900 <= year <= 2099 and 1 <= month <= 12:
+            return f"{month:02d}-{year}"
+        return None
+
+    # 3. MON-YYYY  (e.g. APR-2024)
+    m = re.match(r"^([A-Za-z]{3})-(\d{4})$", v)
+    if m:
+        abbr = m.group(1).lower()
+        year = int(m.group(2))
+        month = _MONTH_ABBR.get(abbr)
+        if month and 1900 <= year <= 2099:
+            return f"{month:02d}-{year}"
+        return None
+
+    # 4. MM/YYYY
+    m = re.match(r"^(\d{1,2})/(\d{4})$", v)
+    if m:
+        month, year = int(m.group(1)), int(m.group(2))
+        if 1900 <= year <= 2099 and 1 <= month <= 12:
+            return f"{month:02d}-{year}"
+        return None
+
+    # 5. Free text with year only (e.g. "Rata 2024") — month unknowable
+    if re.match(r"^[A-Za-z].*\s\d{4}$", v):
+        return None
+
+    return None
+
+
+def check_period_formats(df: pd.DataFrame, categorical_cols: list) -> list:
+    """Detect categorical columns that are period codes with inconsistent or
+    non-canonical formats across rows.
+
+    A column is considered a *period column* if ≥ 80 % of its non-null values
+    match at least one of the recognised period patterns.  An issue is raised
+    when more than one distinct format is found, or when any value cannot be
+    normalised to YYYYMM.
+
+    Returns issues of type ``'period_format_inconsistency'``.
+    """
+    issues = []
+    for col in categorical_cols:
+        if col not in df.columns:
+            continue
+        nev = non_empty_values(df[col]).astype(str).str.strip()
+        if len(nev) < 5:
+            continue
+
+        # Count how many values match each period pattern
+        format_hits: dict[str, int] = {label: 0 for label, _ in _PERIOD_PATTERNS}
+        total_matched = 0
+        for val in nev:
+            for label, pat in _PERIOD_PATTERNS:
+                if pat.match(val):
+                    format_hits[label] += 1
+                    total_matched += 1
+                    break
+
+        period_coverage = total_matched / len(nev)
+        if period_coverage < 0.80:
+            continue  # not a period column
+
+        active_formats = [lbl for lbl, cnt in format_hits.items() if cnt > 0]
+        n_formats = len(active_formats)
+        unparseable = int(
+            nev.apply(lambda v: _parse_period_value(v) is None).sum()
+        )
+        pct_unparseable = unparseable / len(nev)
+
+        if n_formats > 1 or unparseable > 0:
+            severity = "high" if pct_unparseable > 0.05 else "medium"
+            issues.append({
+                "column": col,
+                "type": "period_format_inconsistency",
+                "detail": (
+                    f"{n_formats} period format(s) detected "
+                    f"({', '.join(active_formats)}); "
+                    f"{unparseable} value(s) ({pct_unparseable:.1%}) "
+                    f"cannot be normalised to YYYYMM"
+                ),
+                "severity": severity,
+            })
+
+    return issues
+
+
+def normalize_period_column(df: pd.DataFrame, col: str) -> tuple[int, int]:
+    """Normalise all period values in *col* to canonical YYYYMM strings in-place.
+
+    Values that cannot be parsed (unknown format, invalid month/year) are set
+    to ``pd.NA``.
+
+    Returns ``(n_normalised, n_nulled)``.
+    """
+    if col not in df.columns:
+        return 0, 0
+
+    original = df[col].copy()
+
+    def _convert(v):
+        if pd.isna(v) or str(v).strip() == "":
+            return v
+        result = _parse_period_value(str(v).strip())
+        return result if result is not None else pd.NA
+
+    df[col] = original.apply(_convert)
+
+    n_nulled = int((df[col].isna() & original.notna() &
+                    (original.astype(str).str.strip() != "")).sum())
+    n_normalised = int(
+        (df[col].notna() & (df[col].astype(str) != original.astype(str))).sum()
+    )
+    return n_normalised, n_nulled
+
+
 def check_placeholder_values(df: pd.DataFrame) -> list:
     """Detect individual cells containing known placeholder strings in any column,
     regardless of overall missing rate.
@@ -870,10 +1035,34 @@ def fix_mixed_type(df: pd.DataFrame, col: str) -> int:
 def fix_invalid_dates(df: pd.DataFrame, col: str) -> tuple[str, int]:
     """Re-parse a date column choosing the best dayfirst setting in-place.
 
+    Detects YYYYMM period-code columns and handles them without converting to
+    datetime (pd.to_datetime cannot parse YYYYMM without an explicit format and
+    would null every value). For YYYYMM columns, invalid entries are nulled and
+    the valid integer codes are preserved as-is.
+
     Returns (method_used, valid_count).
     """
     if col not in df.columns:
         return "", 0
+
+    # Detect YYYYMM period codes: strip optional .0 suffix and check pattern
+    clean = df[col].astype(str).str.strip().str.replace(r"\.0+$", "", regex=True)
+    yyyymm_frac = clean.apply(
+        lambda v: bool(re.match(r"^\d{6}$", v))
+        and 1 <= int(v[4:]) <= 12
+        and int(v[:4]) >= 1900
+        if re.match(r"^\d{6}$", v) else False
+    ).mean()
+    if yyyymm_frac > 0.80:
+        valid_mask = clean.apply(
+            lambda v: bool(re.match(r"^\d{6}$", v))
+            and 1 <= int(v[4:]) <= 12
+            and int(v[:4]) >= 1900
+            if re.match(r"^\d{6}$", v) else False
+        )
+        df[col] = clean.where(valid_mask, other=pd.NA)
+        return "YYYYMM_validated", int(valid_mask.sum())
+
     parsed_df = pd.to_datetime(df[col], errors="coerce", dayfirst=True)
     parsed_nd = pd.to_datetime(df[col], errors="coerce", dayfirst=False)
     if parsed_df.notna().sum() >= parsed_nd.notna().sum():
