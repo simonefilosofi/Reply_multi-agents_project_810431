@@ -1,8 +1,9 @@
 """Pydantic schema defining the DatasetFingerprint model used by the
 ProfilerAgent to classify columns by semantic type."""
 
-from pydantic import BaseModel
-from typing import Dict, List, Literal
+from typing import Any, Dict, List, Literal
+
+from pydantic import BaseModel, Field
 
 
 class DatasetFingerprint(BaseModel):
@@ -16,3 +17,4 @@ class DatasetFingerprint(BaseModel):
     likely_duplicate_pairs: List[List[str]]
     suggested_key_columns: List[str]
     column_descriptions: Dict[str, str]
+    column_constraints: List[Dict[str, Any]] = Field(default_factory=list)

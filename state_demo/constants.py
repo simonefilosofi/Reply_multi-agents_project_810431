@@ -3,10 +3,11 @@
 import re
 
 PLACEHOLDERS = {
-    "n/a", "na", "n.a.", "n.d.", "nd", "null", "none", "-",
+    "n/a", "na", "n.a.", "n.d.", "nd", "n/d", "null", "none", "-",
     "--", ".", "..", "...", "unknown", "missing", "tbd",
     "not available", "not applicable", "sconosciuto",
     "non disponibile", "non applicabile",
+    "//", "///", "?", "??", "???", "#", "#n/d", "#nd", "#n/a",
 }
 
 DATE_PATTERNS = [

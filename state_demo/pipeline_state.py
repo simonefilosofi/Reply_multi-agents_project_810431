@@ -27,12 +27,14 @@ class PipelineState:
     duplicate_report: dict = field(default_factory=dict)
     anomaly_report: dict = field(default_factory=dict)
     consistency_report: dict = field(default_factory=dict)
+    constraint_report: dict = field(default_factory=dict)
 
     schema_summary: str = ""
     completeness_summary: str = ""
     duplicate_summary: str = ""
     anomaly_summary: str = ""
     consistency_summary: str = ""
+    constraint_summary: str = ""
 
     prioritized_issues: list = field(default_factory=list)
     synthesis_summary: str = ""
