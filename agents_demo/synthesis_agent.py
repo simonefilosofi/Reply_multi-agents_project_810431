@@ -175,7 +175,7 @@ class SynthesisAgent(BaseAgent):
             nev = non_empty_values(df[col])
             if len(nev) == 0:
                 continue
-            sample = list(nev.sample(min(15, len(nev)), random_state=42).astype(str))
+            sample = list(nev.sample(min(200, len(nev)), random_state=42).astype(str))
             existing = [
                 f"[{i['severity']}] {i['type']}: {i['detail']}"
                 for i in col_to_issues.get(col, [])
