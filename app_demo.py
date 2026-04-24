@@ -154,18 +154,29 @@ def display_results(state, chart_images, dataset_name):
     st.header("Remediation Results")
     fix_log = state.fix_log
     auto_fixed = [f for f in fix_log if f["action"] == "auto_fixed"]
+    auto_fixed_llm = [f for f in fix_log if f["action"] == "auto_fixed_by_llm"]
     flagged = [f for f in fix_log if f["action"] == "flagged_for_review"]
 
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total Actions", len(fix_log))
     col2.metric("Auto-Fixed", len(auto_fixed))
-    col3.metric("Flagged for Review", len(flagged))
+    col3.metric("Fixed by LLM", len(auto_fixed_llm))
+    col4.metric("Flagged for Review", len(flagged))
 
     if auto_fixed:
         st.subheader("Auto-Fixed Issues")
         st.dataframe(
             pd.DataFrame(auto_fixed)[
                 ["issue_type", "column", "description", "rows_affected"]
+            ],
+            use_container_width=True,
+        )
+
+    if auto_fixed_llm:
+        st.subheader("Fixed by LLM Code Generation")
+        st.dataframe(
+            pd.DataFrame(auto_fixed_llm)[
+                ["issue_type", "column", "description", "rows_affected", "attempts"]
             ],
             use_container_width=True,
         )
@@ -178,6 +189,26 @@ def display_results(state, chart_images, dataset_name):
             ],
             use_container_width=True,
         )
+
+    human_review = state.human_review_items
+    if human_review:
+        st.subheader(f"Requires Human Review ({len(human_review)} item(s))")
+        st.warning(
+            "The following issues could not be fixed automatically after "
+            f"{len(human_review)} attempt(s) and require manual intervention."
+        )
+        for item in human_review:
+            with st.expander(
+                f"[{item['issue']['severity'].upper()}] "
+                f"{item['column']} — {item['issue']['type']}"
+            ):
+                st.markdown(f"**Issue:** {item['issue'].get('detail', '-')}")
+                st.markdown(f"**Reason:** {item['reason']}")
+                st.markdown(f"**Attempts:** {item['attempts']}")
+                if item["last_error"]:
+                    st.markdown(f"**Last error:** `{item['last_error']}`")
+                if item["last_generated_code"]:
+                    st.code(item["last_generated_code"], language="python")
 
     if state.df_cleaned is not None and not state.df_cleaned.empty:
         st.subheader("Cleaned Dataset Preview")

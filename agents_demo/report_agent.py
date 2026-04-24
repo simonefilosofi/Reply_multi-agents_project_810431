@@ -80,7 +80,10 @@ class ReportAgent(BaseAgent):
                 self.log("act", f"Chart saved: {path}")
 
         issues = self.state.prioritized_issues
-        auto_fixed = sum(1 for f in self.state.fix_log if f["action"] == "auto_fixed")
+        auto_fixed = sum(
+            1 for f in self.state.fix_log
+            if f["action"] in ("auto_fixed", "auto_fixed_by_llm")
+        )
         flagged = sum(1 for f in self.state.fix_log if f["action"] == "flagged_for_review")
         recommendations = [
             {

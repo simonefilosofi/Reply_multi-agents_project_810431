@@ -494,7 +494,10 @@ class RemediationAgent(BaseAgent):
             1 for f in self.state.fix_log
             if f["issue_type"] == "naming_convention" and f["action"] == "auto_fixed"
         )
-        auto_fixed = sum(1 for f in self.state.fix_log if f["action"] == "auto_fixed")
+        auto_fixed = sum(
+            1 for f in self.state.fix_log
+            if f["action"] in ("auto_fixed", "auto_fixed_by_llm")
+        )
         flagged = sum(1 for f in self.state.fix_log if f["action"] == "flagged_for_review")
         self.log("observe",
                  f"Remediation complete: {auto_fixed} auto-fixed, "
@@ -508,7 +511,10 @@ class RemediationAgent(BaseAgent):
             f"- [{f['action']}] {f['column']}: {f['description']}"
             for f in self.state.fix_log
         ) or "No fixes applied."
-        auto_fixed = sum(1 for f in self.state.fix_log if f["action"] == "auto_fixed")
+        auto_fixed = sum(
+            1 for f in self.state.fix_log
+            if f["action"] in ("auto_fixed", "auto_fixed_by_llm")
+        )
         flagged = sum(1 for f in self.state.fix_log if f["action"] == "flagged_for_review")
 
         user = (
