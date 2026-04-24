@@ -6,6 +6,7 @@ from collections import defaultdict
 from itertools import combinations
 
 from agents_demo.base_agent import BaseAgent, SMART
+from agents_demo.code_validator_agent import CodeValidatorAgent
 from state_demo.constants import PLACEHOLDERS
 from state_demo.helpers import missing_mask
 from tools import (
@@ -235,6 +236,18 @@ class RemediationAgent(BaseAgent):
 
         self._recompute_additive_derivatives(df, self.state.df_raw)
         self.state.df_cleaned = df
+
+        # Route gap issues (no deterministic handler) to CodeValidatorAgent
+        gap_issues = [
+            issue for issue in self.state.prioritized_issues
+            if issue.get("source") == "synthesis_gap_detection"
+        ]
+        if gap_issues:
+            self.log("act",
+                     f"Routing {len(gap_issues)} gap issue(s) to "
+                     f"CodeValidatorAgent")
+            validator = CodeValidatorAgent(self.state)
+            validator.run(gap_issues)
 
     # Keywords that identify "derived" columns (results of arithmetic between
     # other columns).  Only columns whose names contain one of these tokens are

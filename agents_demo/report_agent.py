@@ -129,6 +129,7 @@ class ReportAgent(BaseAgent):
             },
             "recommendations": recommendations,
             "visualizations": viz_paths,
+            "human_review_items": self.state.human_review_items,
         }
 
     def observe(self):

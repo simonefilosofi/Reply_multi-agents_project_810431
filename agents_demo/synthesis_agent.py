@@ -199,7 +199,9 @@ class SynthesisAgent(BaseAgent):
             "Do not repeat or rephrase existing findings. "
             "If nothing is missing for a column, omit it. "
             'Return JSON: {"gap_issues": [{"column": "...", "type": "...", '
-            '"detail": "...", "severity": "high|medium|low"}]}'
+            '"detail": "...", "severity": "high|medium|low", '
+            '"filter": "pandas boolean expression to select affected rows, '
+            'e.g. df[col] == -999 or df[col].str.contains(\'pattern\', na=False)"}]}'
         )
 
         try:
