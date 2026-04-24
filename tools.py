@@ -1726,6 +1726,50 @@ def chart_completeness_heatmap(
     return path
 
 
+# ── Code validation ────────────────────────────────────────────────────────────
+
+import ast as _ast
+
+_ALLOWED_IMPORTS = {"pandas", "numpy", "re", "math"}
+_FORBIDDEN_CALLS = {"exec", "eval", "open", "compile", "__import__"}
+_FORBIDDEN_ATTRS = {"remove", "rmdir", "system", "popen", "unlink", "rmtree",
+                    "call", "run", "Popen"}
+
+
+def validate_generated_code(code: str) -> tuple[bool, str]:
+    """AST-level validation for LLM-generated fix functions.
+
+    Checks for forbidden imports and dangerous calls before the code
+    is passed to the subprocess sandbox.  Returns (is_valid, reason).
+    """
+    try:
+        tree = _ast.parse(code)
+    except SyntaxError as e:
+        return False, f"Syntax error: {e}"
+
+    for node in _ast.walk(tree):
+        if isinstance(node, _ast.Import):
+            for alias in node.names:
+                root = alias.name.split(".")[0]
+                if root not in _ALLOWED_IMPORTS:
+                    return False, f"Forbidden import: {alias.name}"
+
+        if isinstance(node, _ast.ImportFrom):
+            root = (node.module or "").split(".")[0]
+            if root not in _ALLOWED_IMPORTS:
+                return False, f"Forbidden import: {node.module}"
+
+        if isinstance(node, _ast.Call):
+            if isinstance(node.func, _ast.Name):
+                if node.func.id in _FORBIDDEN_CALLS:
+                    return False, f"Forbidden call: {node.func.id}"
+            if isinstance(node.func, _ast.Attribute):
+                if node.func.attr in _FORBIDDEN_ATTRS:
+                    return False, f"Forbidden attribute call: .{node.func.attr}"
+
+    return True, "OK"
+
+
 def chart_reliability_comparison(
     before_dims: dict,
     after_dims: dict,
