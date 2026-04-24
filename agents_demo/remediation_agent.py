@@ -23,6 +23,7 @@ from tools import (
     normalize_case,
     normalize_period_column,
     null_pattern_violations,
+    pick_duplicate_column_to_drop,
     remove_duplicate_rows,
     round_float_precision,
     standardize_date_format,
@@ -215,8 +216,36 @@ class RemediationAgent(BaseAgent):
                           f"Normalized {changed} values to most frequent casing variant",
                           changed)
 
+        # Drop duplicate columns BEFORE renaming so the original names
+        # detected by DuplicateAgent still exist in df.
+        dropped_cols: set = set()
+        for issue in issues_by_type.get("duplicate_columns", []):
+            raw = issue.get("column", "")
+            parts = [c.strip() for c in raw.split("/")]
+            if len(parts) != 2:
+                self._flag_issue(issue)
+                continue
+            col_a, col_b = parts
+            # skip if either column was already dropped by a previous iteration
+            if col_a not in df.columns or col_b not in df.columns:
+                continue
+            to_drop = pick_duplicate_column_to_drop(col_a, col_b)
+            to_keep = col_b if to_drop == col_a else col_a
+            if to_drop in dropped_cols:
+                continue
+            df.drop(columns=[to_drop], inplace=True)
+            dropped_cols.add(to_drop)
+            self._log_fix(
+                issue, "auto_fixed",
+                f"Dropped duplicate column '{to_drop}' (kept '{to_keep}')",
+                0,
+            )
+
         for issue in issues_by_type.get("naming_convention", []):
             col = issue["column"]
+            if col not in df.columns:
+                # column was already dropped as a duplicate — skip rename
+                continue
             old, new = fix_column_naming(df, col)
             if new != old:
                 self._log_fix(issue, "auto_fixed",
@@ -224,7 +253,7 @@ class RemediationAgent(BaseAgent):
                               old=old, new=new)
 
         for flag_type in (
-            "sparse_column", "duplicate_columns", "duplicate_key",
+            "sparse_column", "duplicate_key",
             "date_order", "rare_categories", "conditional_completeness",
             "cross_column_mismatch", "domain_negative_values",
             "currency_symbol_in_numeric", "comma_decimal_format",

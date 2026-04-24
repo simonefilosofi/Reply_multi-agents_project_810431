@@ -470,15 +470,25 @@ def detect_duplicate_rows(df: pd.DataFrame) -> list:
     return issues
 
 
-def detect_duplicate_columns(df: pd.DataFrame, likely_pairs: list) -> list:
-    """Flag column pairs containing identical data.
+def _normalize_col_name(col: str) -> str:
+    """Normalize a column name to snake_case for semantic comparison."""
+    return re.sub(r"[^a-z0-9]+", "_", col.lower().strip()).strip("_")
 
-    Checks profiler-suggested pairs first, then runs a deterministic
-    value-equality scan across all column combinations.
+
+def detect_duplicate_columns(df: pd.DataFrame, likely_pairs: list) -> list:
+    """Flag column pairs that are semantically or structurally duplicate.
+
+    Three detection passes:
+    1. Profiler-suggested pairs.
+    2. Name-normalization: columns that reduce to the same snake_case name
+       (e.g. 'Provincia Sede' and 'provincia_sede') are semantic duplicates
+       regardless of whether their values are identical.
+    3. Value-equality: columns with byte-for-byte identical string content.
     """
     issues = []
     already_flagged: set = set()
 
+    # Pass 1 — profiler suggestions
     for pair in likely_pairs:
         if len(pair) == 2 and pair[0] in df.columns and pair[1] in df.columns:
             key = tuple(sorted(pair))
@@ -488,11 +498,84 @@ def detect_duplicate_columns(df: pd.DataFrame, likely_pairs: list) -> list:
                 "type": "duplicate_columns",
                 "detail": (
                     f"Columns '{pair[0]}' and '{pair[1]}' appear to contain "
-                    f"the same data"
+                    f"the same data (profiler suggestion)"
                 ),
                 "severity": "medium",
             })
 
+    # Pass 2 — name-normalization: same snake_case → semantic duplicate
+    norm_to_cols: dict = {}
+    for col in df.columns:
+        norm = _normalize_col_name(col)
+        norm_to_cols.setdefault(norm, []).append(col)
+
+    for norm, cols_with_same_norm in norm_to_cols.items():
+        if len(cols_with_same_norm) < 2:
+            continue
+        for col_a, col_b in combinations(cols_with_same_norm, 2):
+            key = tuple(sorted([col_a, col_b]))
+            if key in already_flagged:
+                continue
+            already_flagged.add(key)
+            issues.append({
+                "column": f"{col_a} / {col_b}",
+                "type": "duplicate_columns",
+                "detail": (
+                    f"Columns '{col_a}' and '{col_b}' refer to the same field "
+                    f"(both normalise to '{norm}')"
+                ),
+                "severity": "high",
+            })
+
+    # Pass 3 — fuzzy name matching: very similar normalised names (typos, spaces)
+    from difflib import SequenceMatcher
+    norm_list = [(col, _normalize_col_name(col)) for col in df.columns]
+    for i, (col_a, norm_a) in enumerate(norm_list):
+        for col_b, norm_b in norm_list[i + 1:]:
+            key = tuple(sorted([col_a, col_b]))
+            if key in already_flagged:
+                continue
+            ratio = SequenceMatcher(None, norm_a, norm_b).ratio()
+            if ratio >= 0.85:
+                already_flagged.add(key)
+                issues.append({
+                    "column": f"{col_a} / {col_b}",
+                    "type": "duplicate_columns",
+                    "detail": (
+                        f"Columns '{col_a}' and '{col_b}' have very similar "
+                        f"names (similarity {ratio:.0%}) — likely the same field"
+                    ),
+                    "severity": "high",
+                })
+
+    # Pass 4 — digit-stripped substring: '3descrizione' ⊂ 'descrizione_ente'
+    for i, (col_a, norm_a) in enumerate(norm_list):
+        stripped_a = norm_a.lstrip("0123456789").strip("_")
+        for col_b, norm_b in norm_list[i + 1:]:
+            key = tuple(sorted([col_a, col_b]))
+            if key in already_flagged or not stripped_a:
+                continue
+            stripped_b = norm_b.lstrip("0123456789").strip("_")
+            if not stripped_b:
+                continue
+            # flag if one stripped name is a meaningful substring of the other
+            longer, shorter = (
+                (norm_a, stripped_b) if len(norm_a) >= len(norm_b)
+                else (norm_b, stripped_a)
+            )
+            if len(shorter) >= 5 and shorter in longer:
+                already_flagged.add(key)
+                issues.append({
+                    "column": f"{col_a} / {col_b}",
+                    "type": "duplicate_columns",
+                    "detail": (
+                        f"Columns '{col_a}' and '{col_b}' refer to the same "
+                        f"field ('{shorter}' is contained in '{longer}')"
+                    ),
+                    "severity": "high",
+                })
+
+    # Pass 6 — value-equality scan across all remaining pairs
     cols = list(df.columns)
     for col_a, col_b in combinations(cols, 2):
         key = tuple(sorted([col_a, col_b]))
@@ -506,7 +589,7 @@ def detect_duplicate_columns(df: pd.DataFrame, likely_pairs: list) -> list:
                     "type": "duplicate_columns",
                     "detail": (
                         f"Columns '{col_a}' and '{col_b}' are identical "
-                        f"(deterministic value-equality check)"
+                        f"(value-equality check)"
                     ),
                     "severity": "medium",
                 })
@@ -1724,6 +1807,43 @@ def chart_completeness_heatmap(
     fig.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return path
+
+
+# ── Duplicate column removal ───────────────────────────────────────────────────
+
+def pick_duplicate_column_to_drop(col_a: str, col_b: str) -> str:
+    """Choose which of two duplicate columns to drop.
+
+    Drops the column with the worst naming quality; keeps the best-named one.
+    Quality is scored by penalising (in decreasing priority):
+    1. Uppercase letters  — not snake_case
+    2. Special characters — not alphanumeric/underscore
+    3. Leading digits     — invalid Python identifier
+    4. Digit suffix (_2, _3 …) — renamed copy
+    5. Spaces in name
+    6. Longer name        — tiebreaker: shorter is usually the original
+    7. Alphabetically later — deterministic final tiebreaker
+    """
+    import re as _re
+
+    def _badness(col: str) -> tuple:
+        has_upper    = bool(_re.search(r"[A-Z]", col))
+        has_special  = bool(_re.search(r"[^a-zA-Z0-9_ ]", col))
+        has_digit_prefix = bool(_re.match(r"^\d", col))
+        has_digit_suffix = bool(_re.search(r"_\d+$", col))
+        has_space    = " " in col
+        return (
+            has_upper,
+            has_special,
+            has_digit_prefix,
+            has_digit_suffix,
+            has_space,
+            len(col),
+            col,
+        )
+
+    # drop the one with higher badness score
+    return col_a if _badness(col_a) >= _badness(col_b) else col_b
 
 
 # ── Code validation ────────────────────────────────────────────────────────────

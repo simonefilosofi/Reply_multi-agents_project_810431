@@ -9,6 +9,8 @@ import subprocess
 import sys
 import tempfile
 
+from typing import Optional, Union
+
 import numpy as np
 import pandas as pd
 
@@ -28,7 +30,7 @@ def eval_filter_expression(
     filter_expr: str,
     df: pd.DataFrame,
     col: str,
-) -> tuple[pd.Series | None, str]:
+) -> tuple[Optional[pd.Series], str]:
     """Evaluate a filter expression string against df[col].
 
     Returns (mask, error). mask is a boolean Series on success; error is a
@@ -109,8 +111,8 @@ def run_in_sandbox(
     col: str,
     code: str,
     runner_path: str,
-    sandbox_uid: int | None = None,
-) -> tuple[bool, pd.DataFrame | str]:
+    sandbox_uid: Optional[int] = None,
+) -> tuple[bool, Union[pd.DataFrame, str]]:
     """Run LLM-generated fix code in an isolated subprocess.
 
     Serialises df to a temp CSV, writes code to a temp .py file, invokes
@@ -162,7 +164,7 @@ def run_in_sandbox(
                     pass
 
 
-def resolve_sandbox_uid() -> int | None:
+def resolve_sandbox_uid() -> Optional[int]:
     """Return the UID of sandbox_user, or None if not configured."""
     try:
         import pwd
