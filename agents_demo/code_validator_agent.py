@@ -7,24 +7,34 @@ it to the DataFrame through a self-healing retry loop (max 3 attempts).
 
 If after MAX_RETRIES the fix still fails, the issue is appended to
 state.human_review_items for manual inspection.
+
+All stateless utilities (sandbox, safety guards, prompt builders) live in
+tools_code_validator.py; this file contains only agent coordination logic.
 """
 
 import os
-import subprocess
-import sys
-import tempfile
 
 import pandas as pd
 
 from agents_demo.base_agent import BaseAgent, SMART
-from state_demo.helpers import non_empty_values
 from tools import validate_generated_code
+from tools_code_validator import (
+    FILTER_COVERAGE_LIMIT,
+    SANDBOX_TIMEOUT,
+    build_filter_prompt,
+    build_fix_prompt,
+    build_llm_review_prompt,
+    build_test_subsample,
+    check_filter_coverage,
+    eval_filter_expression,
+    extract_code_from_llm_response,
+    resolve_sandbox_uid,
+    run_in_sandbox,
+    safety_guard_quantitative,
+    safety_guard_type_consistency,
+)
 
 MAX_RETRIES = 3
-CHANGE_THRESHOLD = 0.20       # safety guard: max fraction of column changed
-TYPE_DRIFT_THRESHOLD = 0.10   # safety guard: max numeric-rate shift allowed
-FILTER_COVERAGE_LIMIT = 0.50  # reject filters that select >50% of rows
-SANDBOX_TIMEOUT = 10          # seconds
 
 
 class CodeValidatorAgent(BaseAgent):
@@ -65,7 +75,8 @@ class CodeValidatorAgent(BaseAgent):
         for issue in self._gap_issues:
             col = issue.get("column")
             if not col or col not in df.columns:
-                self.log("act", f"Skipping gap issue — column '{col}' not in DataFrame")
+                self.log("act",
+                         f"Skipping gap issue — column '{col}' not in DataFrame")
                 continue
             self.log("act",
                      f"Processing gap issue on '{col}': {issue.get('type')}")
@@ -97,6 +108,15 @@ class CodeValidatorAgent(BaseAgent):
             self._add_human_review(issue, "", skip_reason, 0, skip_reason)
             return
 
+        runner_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "sandbox_runner.py",
+        )
+        sandbox_uid = resolve_sandbox_uid()
+        if sandbox_uid is None:
+            self.log("act",
+                     "sandbox_user not found — running sandbox as current user")
+
         last_code = ""
         last_error = ""
 
@@ -104,8 +124,9 @@ class CodeValidatorAgent(BaseAgent):
             self.log("act", f"'{col}' — attempt {attempt}/{MAX_RETRIES}")
 
             # Step 2 — generate (or regenerate) fix function
-            last_code = self._generate_fix(issue, target_rows,
-                                           last_code, last_error)
+            last_code = self._call_fix_generation(
+                issue, target_rows, last_code, last_error
+            )
             if not last_code:
                 last_error = "LLM returned empty code"
                 continue
@@ -117,22 +138,12 @@ class CodeValidatorAgent(BaseAgent):
                 self.log("act", last_error)
                 continue
 
-            # Step 4 — build mixed subsample (target rows + random normal rows)
-            normal_pool = df[~df.index.isin(target_rows.index)]
-            normal_rows = (
-                normal_pool.sample(min(50, len(normal_pool)), random_state=42)
-                if len(normal_pool) > 0
-                else normal_pool
-            )
-            test_sample = (
-                pd.concat([target_rows, normal_rows])
-                .drop_duplicates()
-                .reset_index(drop=True)
-            )
+            # Step 4 — build mixed subsample (target + random normal rows)
+            test_sample = build_test_subsample(df, target_rows)
 
-            # Step 5 — run in subprocess sandbox
-            success, result_or_error = self._run_in_sandbox(
-                test_sample, col, last_code
+            # Step 5 — run fix in subprocess sandbox
+            success, result_or_error = run_in_sandbox(
+                test_sample, col, last_code, runner_path, sandbox_uid
             )
             if not success:
                 last_error = result_or_error
@@ -141,7 +152,7 @@ class CodeValidatorAgent(BaseAgent):
                 continue
 
             # Step 6 — safety guards on subsample result
-            passed, guard_reason = self._safety_guards(
+            passed, guard_reason = self._run_safety_guards(
                 test_sample[col], result_or_error[col], issue
             )
             if not passed:
@@ -149,16 +160,14 @@ class CodeValidatorAgent(BaseAgent):
                 self.log("act", last_error)
                 continue
 
-            # Step 7 — all checks passed: apply to full DataFrame
+            # Step 7 — apply to full DataFrame
             original_col = df[col].copy()
-            success_full, result_full_or_error = self._run_in_sandbox(
-                df, col, last_code
+            success_full, result_full_or_error = run_in_sandbox(
+                df, col, last_code, runner_path, sandbox_uid
             )
             if success_full:
                 fixed_col = result_full_or_error[col].values
-                rows_affected = int(
-                    (fixed_col != original_col.values).sum()
-                )
+                rows_affected = int((fixed_col != original_col.values).sum())
                 df[col] = fixed_col
                 self.log("act",
                          f"Fix applied to '{col}' on attempt {attempt} "
@@ -176,7 +185,6 @@ class CodeValidatorAgent(BaseAgent):
             else:
                 last_error = result_full_or_error
 
-        # Exhausted retries
         self._add_human_review(
             issue, last_code, last_error, MAX_RETRIES, "max_retries_exceeded"
         )
@@ -186,13 +194,6 @@ class CodeValidatorAgent(BaseAgent):
     def _validate_filter(
         self, df: pd.DataFrame, col: str, issue: dict
     ) -> tuple[pd.DataFrame, str]:
-        """Try up to MAX_RETRIES times to produce a valid filter expression.
-
-        On each failure the reason (eval error, 0 rows, too broad) is passed
-        back to the LLM so it can refine the expression.
-        """
-        import numpy as np
-
         filter_expr = issue.get("filter", "").strip()
         last_feedback = ""
 
@@ -200,262 +201,98 @@ class CodeValidatorAgent(BaseAgent):
             self.log("act",
                      f"Filter attempt {attempt}/{MAX_RETRIES} for '{col}'")
 
-            # (Re)generate filter if missing or previous attempt failed
             if not filter_expr:
-                filter_expr = self._generate_filter(
-                    df, col, issue, feedback=last_feedback
+                filter_expr = self._call_filter_generation(
+                    df, col, issue, last_feedback
                 )
             if not filter_expr:
                 last_feedback = "LLM returned an empty filter expression"
                 filter_expr = ""
                 continue
 
-            # Evaluate the expression
-            try:
-                mask = eval(  # noqa: S307
-                    filter_expr,
-                    {"df": df, "col": col, "pd": pd, "np": np},
-                )
-                if not isinstance(mask, pd.Series):
-                    mask = pd.Series(mask, index=df.index)
-                mask = mask.fillna(False).astype(bool)
-                target = df[mask]
-            except Exception as e:
+            mask, eval_error = eval_filter_expression(filter_expr, df, col)
+            if eval_error:
                 last_feedback = (
-                    f"The expression raised a Python error: {e}. "
+                    f"The expression raised a Python error: {eval_error}. "
                     f"Rewrite it so it evaluates without exceptions."
                 )
-                self.log("act", f"Filter eval error: {e}")
+                self.log("act", f"Filter eval error: {eval_error}")
                 filter_expr = ""
                 continue
 
-            # Check: 0 rows found
-            if len(target) == 0:
-                last_feedback = (
-                    f"The expression '{filter_expr}' is syntactically valid "
-                    f"but matched 0 rows. "
-                    f"Either the condition is too strict or the values look "
-                    f"different from what you expected. "
-                    f"Sample of actual values in the column: "
-                    f"{list(non_empty_values(df[col]).head(10).astype(str))}. "
-                    f"Write a broader or corrected expression."
-                )
-                self.log("act", f"Filter found 0 rows — retrying")
-                filter_expr = ""
-                continue
-
-            # Check: filter too broad
-            coverage = len(target) / len(df)
-            if coverage > FILTER_COVERAGE_LIMIT:
-                last_feedback = (
-                    f"The expression '{filter_expr}' matched {coverage:.0%} of "
-                    f"all rows — too broad. "
-                    f"It must select only the rows that contain the specific "
-                    f"problem, not the majority of the dataset. "
-                    f"Make the condition more precise."
-                )
+            target = df[mask]
+            coverage_feedback = check_filter_coverage(target, df, filter_expr)
+            if coverage_feedback:
+                last_feedback = coverage_feedback
                 self.log("act",
-                         f"Filter too broad ({coverage:.0%}) — retrying")
+                         f"Filter rejected ({len(target)} rows / "
+                         f"{len(target)/len(df):.0%}) — retrying")
                 filter_expr = ""
                 continue
 
-            # Valid filter found
             self.log("act",
                      f"Filter valid — {len(target)} target rows "
-                     f"({coverage:.1%} of dataset)")
+                     f"({len(target)/len(df):.1%} of dataset)")
             return target, ""
 
-        # All attempts exhausted
         return (
             pd.DataFrame(),
             f"filter_failed_after_{MAX_RETRIES}_attempts: {last_feedback}",
         )
 
-    def _generate_filter(
+    # ── LLM call wrappers ─────────────────────────────────────────────────────
+
+    def _call_filter_generation(
         self,
         df: pd.DataFrame,
         col: str,
         issue: dict,
-        feedback: str = "",
+        feedback: str,
     ) -> str:
-        sample = list(non_empty_values(df[col]).head(20).astype(str))
-        feedback_line = (
-            f"\nPrevious attempt feedback: {feedback}" if feedback else ""
-        )
-        user = (
-            f"Column: '{col}'\n"
-            f"Issue: {issue['detail']}\n"
-            f"Sample values: {sample}{feedback_line}\n\n"
-            "Write a single Python boolean expression using df[col] that "
-            "selects exactly the rows containing this issue. "
-            "The expression must evaluate to a pandas boolean Series. "
-            "Use only pandas/numpy operations on df[col]. "
-            "Examples:\n"
-            "  df[col] == '-999'\n"
-            "  df[col].str.contains(r'[€$£]', regex=True, na=False)\n"
-            "  pd.to_numeric(df[col], errors='coerce').lt(0)\n"
-            'Return JSON: {"filter": "...", "explanation": "..."}'
-        )
+        prompt = build_filter_prompt(col, issue, df, feedback)
         try:
-            result = self.call_llm_json(user, max_tokens=256)
+            result = self.call_llm_json(prompt, max_tokens=256)
             return result.get("filter", "").strip()
         except Exception as e:
             self.log("act", f"Filter generation failed: {e}")
             return ""
 
-    # ── Code generation ───────────────────────────────────────────────────────
-
-    def _generate_fix(
+    def _call_fix_generation(
         self,
         issue: dict,
         target_rows: pd.DataFrame,
         previous_code: str,
         previous_error: str,
     ) -> str:
-        col = issue["column"]
-        target_sample = list(target_rows[col].head(20).astype(str))
-
-        if previous_error:
-            prompt = (
-                f"The following Python function produced an error:\n\n"
-                f"{previous_code}\n\n"
-                f"Error: {previous_error}\n"
-                f"Sample of problematic values: {target_sample}\n\n"
-                f"Rewrite the function to fix this error. "
-                f"Keep the same fix logic — only add handling for the error case. "
-                f"Return only the corrected function code, no explanation."
-            )
-        else:
-            prompt = (
-                f"Column: '{col}'\n"
-                f"Issue: {issue['detail']}\n"
-                f"Sample values to fix: {target_sample}\n\n"
-                f"Write a Python function named 'fix(df, col)' that corrects "
-                f"this issue in df[col] in-place. "
-                f"Use only pandas and numpy. "
-                f"Return only the function code, no explanation."
-            )
-
+        prompt = build_fix_prompt(issue, target_rows, previous_code, previous_error)
         try:
-            raw = self.call_llm(prompt, max_tokens=512).strip()
-            if "```python" in raw:
-                raw = raw.split("```python")[1].split("```")[0]
-            elif "```" in raw:
-                raw = raw.split("```")[1].split("```")[0]
-            return raw.strip()
+            raw = self.call_llm(prompt, max_tokens=512)
+            return extract_code_from_llm_response(raw)
         except Exception as e:
             self.log("act", f"Code generation failed: {e}")
             return ""
 
-    # ── Subprocess sandbox ────────────────────────────────────────────────────
-
-    def _run_in_sandbox(
-        self, df: pd.DataFrame, col: str, code: str
-    ) -> tuple[bool, pd.DataFrame | str]:
-        # Resolve sandbox_runner.py path relative to this file's project root
-        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        runner_path = os.path.join(project_root, "sandbox_runner.py")
-
-        # Try to get sandbox_user uid; fall back to current user in dev
-        sandbox_uid = None
-        try:
-            import pwd
-            sandbox_uid = pwd.getpwnam("sandbox_user").pw_uid
-        except (KeyError, ImportError):
-            self.log("act",
-                     "sandbox_user not found — running sandbox as current user")
-
-        inp_path = func_path = out_path = None
-        try:
-            with tempfile.NamedTemporaryFile(
-                suffix=".csv", delete=False
-            ) as inp:
-                inp_path = inp.name
-            with tempfile.NamedTemporaryFile(
-                suffix=".py", delete=False
-            ) as func:
-                func_path = func.name
-            with tempfile.NamedTemporaryFile(
-                suffix=".csv", delete=False
-            ) as out:
-                out_path = out.name
-
-            df.to_csv(inp_path, index=False)
-            with open(func_path, "w") as f:
-                f.write(code)
-
-            run_kwargs: dict = dict(
-                args=[sys.executable, runner_path,
-                      inp_path, func_path, out_path, col],
-                timeout=SANDBOX_TIMEOUT,
-                capture_output=True,
-            )
-            if sandbox_uid is not None:
-                run_kwargs["user"] = sandbox_uid
-
-            proc = subprocess.run(**run_kwargs)
-
-            if proc.returncode != 0:
-                return False, proc.stderr.decode().strip()
-
-            fixed_df = pd.read_csv(out_path, dtype=str)
-            return True, fixed_df
-
-        except subprocess.TimeoutExpired:
-            return False, f"Subprocess timed out after {SANDBOX_TIMEOUT}s"
-        except Exception as e:
-            return False, str(e)
-        finally:
-            for path in [inp_path, func_path, out_path]:
-                if path:
-                    try:
-                        os.remove(path)
-                    except OSError:
-                        pass
-
-    # ── Safety guards ─────────────────────────────────────────────────────────
-
-    def _safety_guards(
+    def _run_safety_guards(
         self,
         original: pd.Series,
         fixed: pd.Series,
         issue: dict,
     ) -> tuple[bool, str]:
-        # Guard 1 — quantitative: too many values changed
-        pct_changed = (fixed != original).mean()
-        if pct_changed > CHANGE_THRESHOLD:
-            return False, (
-                f"Too many values changed: {pct_changed:.0%} > "
-                f"{CHANGE_THRESHOLD:.0%} threshold"
-            )
+        passed, reason = safety_guard_quantitative(original, fixed)
+        if not passed:
+            return False, reason
 
-        # Guard 2 — type consistency: numeric rate must not shift significantly
-        orig_num_rate = pd.to_numeric(original, errors="coerce").notna().mean()
-        fixed_num_rate = pd.to_numeric(fixed,    errors="coerce").notna().mean()
-        if abs(orig_num_rate - fixed_num_rate) > TYPE_DRIFT_THRESHOLD:
-            return False, (
-                f"Numeric type distribution shifted: "
-                f"{orig_num_rate:.2f} → {fixed_num_rate:.2f} "
-                f"(delta {abs(orig_num_rate - fixed_num_rate):.2f} > "
-                f"{TYPE_DRIFT_THRESHOLD})"
-            )
+        passed, reason = safety_guard_type_consistency(original, fixed)
+        if not passed:
+            return False, reason
 
-        # Guard 3 — LLM review of before/after sample
-        orig_sample = list(original.dropna().head(10).astype(str))
-        fixed_sample = list(fixed.dropna().head(10).astype(str))
-        user = (
-            f"Issue being fixed: {issue['detail']}\n"
-            f"Original values (sample): {orig_sample}\n"
-            f"Fixed values (sample):    {fixed_sample}\n\n"
-            "Does the fix correctly address the issue without introducing "
-            "new problems? "
-            'Return JSON: {"approved": true/false, "reason": "..."}'
-        )
+        prompt = build_llm_review_prompt(issue, original, fixed)
         try:
-            result = self.call_llm_json(user, max_tokens=256)
+            result = self.call_llm_json(prompt, max_tokens=256)
             if not result.get("approved", False):
                 return False, (
-                    f"LLM review rejected: {result.get('reason', 'no reason given')}"
+                    f"LLM review rejected: "
+                    f"{result.get('reason', 'no reason given')}"
                 )
         except Exception as e:
             self.log("act", f"LLM safety review failed, proceeding: {e}")
@@ -472,10 +309,8 @@ class CodeValidatorAgent(BaseAgent):
         attempts: int,
         reason: str,
     ):
-        self.log(
-            "act",
-            f"'{issue['column']}' flagged for human review — {reason}",
-        )
+        self.log("act",
+                 f"'{issue['column']}' flagged for human review — {reason}")
         self.state.human_review_items.append({
             "column": issue["column"],
             "issue": issue,
