@@ -43,6 +43,8 @@ class PipelineState:
     fix_log: list = field(default_factory=list)
     df_cleaned: Optional[pd.DataFrame] = None
 
+    human_review_items: list = field(default_factory=list)
+
     reliability_score_before: float = 0.0
     reliability_score_after: float = 0.0
     final_report: dict = field(default_factory=dict)
