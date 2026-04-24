@@ -8,6 +8,7 @@ PLACEHOLDERS = {
     "not available", "not applicable", "sconosciuto",
     "non disponibile", "non applicabile",
     "//", "///", "?", "??", "???", "#", "#n/d", "#nd", "#n/a",
+    "error",
 }
 
 DATE_PATTERNS = [

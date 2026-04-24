@@ -3,6 +3,7 @@ identified by Layer 1 agents, logs all actions to the fix log, and uses LLM
 reasoning for ambiguous remediation decisions."""
 
 from collections import defaultdict
+from itertools import combinations
 
 from agents_demo.base_agent import BaseAgent, SMART
 from state_demo.constants import PLACEHOLDERS
@@ -183,7 +184,15 @@ class RemediationAgent(BaseAgent):
         for issue in issues_by_type.get("format_pattern_violation", []):
             col = issue.get("column", "")
             pattern = issue.get("pattern", "")
-            if pattern:
+            # Never auto-null values in ID or key columns based on a pattern —
+            # an incorrect LLM-inferred regex would destroy the primary key.
+            if col in id_cols or col in fp.get("suggested_key_columns", []):
+                self._log_fix(issue, "flagged_for_review",
+                              f"Format pattern violation in ID/key column "
+                              f"'{col}' — auto-nulling suppressed to preserve "
+                              f"primary key integrity",
+                              0)
+            elif pattern:
                 nulled = null_pattern_violations(df, col, pattern)
                 self._log_fix(issue, "auto_fixed",
                               f"Nulled {nulled} values violating expected "
@@ -224,7 +233,116 @@ class RemediationAgent(BaseAgent):
             for issue in issues_by_type.get(flag_type, []):
                 self._flag_issue(issue)
 
+        self._recompute_additive_derivatives(df, self.state.df_raw)
         self.state.df_cleaned = df
+
+    # Keywords that identify "derived" columns (results of arithmetic between
+    # other columns).  Only columns whose names contain one of these tokens are
+    # candidates for automatic recomputation.  This prevents the algorithm from
+    # "correcting" a base measurement (e.g. cost, revenue) using a derived
+    # quantity (e.g. profit), which would propagate capping errors incorrectly.
+    _DERIVED_KEYWORDS = frozenset({
+        "profit", "margin", "net", "total", "balance",
+        "diff", "delta", "change", "result", "gain", "loss",
+        "surplus", "deficit", "yield", "return",
+    })
+
+    @classmethod
+    def _looks_derived(cls, col_name: str) -> bool:
+        lower = col_name.lower()
+        return any(kw in lower for kw in cls._DERIVED_KEYWORDS)
+
+    def _recompute_additive_derivatives(self, df_clean, df_raw):
+        """Detect and recompute columns derived by subtraction after capping.
+
+        After outlier capping modifies a base column (e.g. revenue), any
+        derived column (e.g. profit = revenue − cost) becomes arithmetically
+        inconsistent.  This step:
+
+        1. Identifies which numerical columns were capped.
+        2. For each *derived-looking* column (name contains keywords like
+           "profit", "margin", "net", etc.) that was NOT itself capped, checks
+           whether it satisfies col_c ≈ col_a − col_b in the original data
+           where col_a is capped and col_b is a base (non-capped) column.
+        3. Recomputes col_c = capped_col_a − original_col_b.
+
+        Only derived-named columns are recomputed to avoid accidentally
+        overwriting base measurements using arithmetic from derived ones.
+        """
+        import pandas as pd
+
+        # Which columns were touched by outlier capping?
+        capped_cols = {
+            f["column"] for f in self.state.fix_log
+            if f["issue_type"] == "outliers" and f["action"] == "auto_fixed"
+        }
+        if not capped_cols:
+            return
+
+        # Collect numerical columns present in both frames
+        num_cols = [
+            col for col in df_clean.columns
+            if col in df_raw.columns
+            and pd.to_numeric(df_raw[col], errors="coerce").notna().mean() > 0.80
+        ]
+        if len(num_cols) < 3:
+            return
+
+        recomputed: set = set()
+        min_rows = max(10, int(len(df_clean) * 0.50))
+
+        for col_c in num_cols:
+            # Only recompute derived-looking columns
+            if not self._looks_derived(col_c):
+                continue
+            if col_c in capped_cols or col_c in recomputed:
+                continue
+            c_raw = pd.to_numeric(df_raw[col_c], errors="coerce")
+
+            # col_a must be capped; col_b must NOT be capped (to stay stable)
+            for col_a in capped_cols:
+                if col_a not in num_cols or col_a == col_c:
+                    continue
+                a_raw = pd.to_numeric(df_raw[col_a], errors="coerce")
+
+                for col_b in num_cols:
+                    if col_b in capped_cols or col_b == col_a or col_b == col_c:
+                        continue
+                    b_raw = pd.to_numeric(df_raw[col_b], errors="coerce")
+                    both_valid = c_raw.notna() & a_raw.notna() & b_raw.notna()
+                    if both_valid.sum() < min_rows:
+                        continue
+
+                    diff = a_raw[both_valid] - b_raw[both_valid]
+                    c_sub = c_raw[both_valid]
+                    denom = c_sub.abs().clip(lower=1e-9)
+                    rel_err = (c_sub - diff).abs() / denom
+
+                    # Relationship confirmed: avg relative error < 1% and
+                    # 95%+ of rows agree within 5%.
+                    if rel_err.mean() < 0.01 and (rel_err < 0.05).mean() > 0.95:
+                        a_clean = pd.to_numeric(df_clean[col_a], errors="coerce")
+                        b_clean = pd.to_numeric(df_clean[col_b], errors="coerce")
+                        recomputed_vals = a_clean - b_clean
+                        n_updated = int(recomputed_vals.notna().sum())
+                        df_clean[col_c] = recomputed_vals
+                        recomputed.add(col_c)
+                        self._log_fix(
+                            {"type": "derived_column_recomputation", "column": col_c},
+                            "auto_fixed",
+                            f"Recomputed '{col_c}' = '{col_a}' − '{col_b}' "
+                            f"after outlier capping to restore arithmetic "
+                            f"consistency ({n_updated} rows updated)",
+                            n_updated,
+                        )
+                        self.log(
+                            "act",
+                            f"Recomputed derived column '{col_c}' = "
+                            f"'{col_a}' − '{col_b}'",
+                        )
+                        break
+                if col_c in recomputed:
+                    break
 
     def _fix_missing_values(self, df, issue, fp):
         col = issue["column"]
@@ -238,8 +356,34 @@ class RemediationAgent(BaseAgent):
         num_cols = set(fp.get("numerical_columns", []))
         date_cols = set(fp.get("date_columns", []))
         cat_cols = set(fp.get("categorical_columns", []))
+        severity = issue.get("severity", "low")
+
+        # Guard: never auto-impute binary flag columns (≤ 2 distinct valid
+        # values such as 0/1 or True/False).  Imputing a flag changes the
+        # event rate and introduces false signal.
+        valid_vals = df.loc[~is_missing, col].dropna()
+        if valid_vals.astype(str).str.strip().nunique() <= 2:
+            self._log_fix(
+                issue, "flagged_for_review",
+                f"Binary flag column with {rows_affected} missing values "
+                f"— auto-imputation suppressed to preserve flag distribution; "
+                f"requires domain review",
+                rows_affected,
+            )
+            return
 
         if col in num_cols:
+            # Guard: median imputation on medium/high missingness biases
+            # summary statistics; flag instead of auto-fill.
+            if severity in ("high", "medium"):
+                self._log_fix(
+                    issue, "flagged_for_review",
+                    f"Numerical column with {rows_affected} missing values "
+                    f"(severity={severity}): median imputation suppressed to "
+                    f"prevent statistical bias — requires domain review",
+                    rows_affected,
+                )
+                return
             success, detail = fill_missing_numerical(df, col, is_missing)
             action = "auto_fixed" if success else "flagged_for_review"
             self._log_fix(issue, action, detail, rows_affected)

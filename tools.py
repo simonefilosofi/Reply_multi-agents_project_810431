@@ -32,6 +32,26 @@ RESERVED_WORDS = {
 }
 
 
+def _has_column(df: pd.DataFrame, col: str) -> bool:
+    """Return True when *col* exists in the dataframe."""
+    return col in df.columns
+
+
+def _coerce_numeric(series: pd.Series, dropna: bool = False) -> pd.Series:
+    """Convert a series to numeric using coercion, optionally dropping NaNs."""
+    numeric = pd.to_numeric(series, errors="coerce")
+    return numeric.dropna() if dropna else numeric
+
+
+def _severity_from_rate(rate: float, high: float = 0.20, medium: float = 0.05) -> str:
+    """Map an error rate to a severity label using strict threshold comparisons."""
+    if rate > high:
+        return "high"
+    if rate > medium:
+        return "medium"
+    return "low"
+
+
 # ── Ingestion ──────────────────────────────────────────────────────────────────
 
 def load_dataset(path: str) -> tuple[pd.DataFrame, str]:
@@ -109,9 +129,9 @@ def statistical_fingerprint(df: pd.DataFrame) -> dict:
             sparse.append(col)
             continue
 
-        num_frac = pd.to_numeric(nev, errors="coerce").notna().mean()
+        num_frac = _coerce_numeric(nev).notna().mean()
         if num_frac > 0.80:
-            numeric_vals = pd.to_numeric(nev, errors="coerce").dropna()
+            numeric_vals = _coerce_numeric(nev, dropna=True)
             all_whole = bool((numeric_vals % 1 == 0).all())
 
             if all_whole and len(numeric_vals) > 0:
@@ -185,15 +205,15 @@ def check_type_issues(
     issues = []
 
     for col in numerical_cols:
-        if col not in df.columns:
+        if not _has_column(df, col):
             continue
         nev = non_empty_values(df[col])
         if len(nev) == 0:
             continue
-        non_numeric = int(pd.to_numeric(nev, errors="coerce").isna().sum())
+        non_numeric = int(_coerce_numeric(nev).isna().sum())
         if non_numeric > 0:
             pct = non_numeric / len(nev)
-            severity = "high" if pct > 0.20 else ("medium" if pct > 0.05 else "low")
+            severity = _severity_from_rate(pct)
             issues.append({
                 "column": col,
                 "type": "mixed_type",
@@ -205,7 +225,7 @@ def check_type_issues(
             })
 
     for col in date_cols:
-        if col not in df.columns:
+        if not _has_column(df, col):
             continue
         nev = non_empty_values(df[col])
         bad_frac = pd.to_datetime(nev, errors="coerce", dayfirst=True).isna().mean()
@@ -528,23 +548,36 @@ def detect_key_collisions(
 # ── Anomalies ──────────────────────────────────────────────────────────────────
 
 def detect_outliers(df: pd.DataFrame, numerical_cols: list) -> list:
-    """Detect values beyond 3 standard deviations in numerical columns."""
+    """Detect extreme values in numerical columns using the IQR fence rule.
+
+    Uses 3 × IQR (Tukey outer fence) rather than 3-sigma so that detection
+    is robust to skewed distributions and is not inflated by the very outliers
+    it is trying to find.  The 3-sigma rule assumes normality; for right-skewed
+    quantities (revenue, hours, prices) it routinely flags perfectly normal
+    high-end values.
+    """
     issues = []
     for col in numerical_cols:
-        if col not in df.columns:
+        if not _has_column(df, col):
             continue
-        numeric = pd.to_numeric(df[col], errors="coerce").dropna()
+        numeric = _coerce_numeric(df[col], dropna=True)
         if len(numeric) < 10:
             continue
-        mean, std = numeric.mean(), numeric.std()
-        if std == 0:
+        q1, q3 = numeric.quantile(0.25), numeric.quantile(0.75)
+        iqr = q3 - q1
+        if iqr == 0:
             continue
-        outliers = int(((numeric - mean).abs() > 3 * std).sum())
+        lower = q1 - 3.0 * iqr
+        upper = q3 + 3.0 * iqr
+        outliers = int(((numeric < lower) | (numeric > upper)).sum())
         if outliers > 0:
             issues.append({
                 "column": col,
                 "type": "outliers",
-                "detail": f"{outliers} values beyond 3 standard deviations",
+                "detail": (
+                    f"{outliers} values outside the 3×IQR outer fence "
+                    f"[{lower:.2f}, {upper:.2f}]"
+                ),
                 "severity": "medium",
             })
     return issues
@@ -602,9 +635,9 @@ def check_column_value_agreement(
 
 def check_domain_negatives(df: pd.DataFrame, col: str) -> list:
     """Flag negative values in a column where negatives are domain-impossible."""
-    if col not in df.columns:
+    if not _has_column(df, col):
         return []
-    numeric = pd.to_numeric(df[col], errors="coerce")
+    numeric = _coerce_numeric(df[col])
     neg_count = int((numeric < 0).sum())
     if neg_count == 0:
         return []
@@ -623,7 +656,7 @@ def check_format_pattern(
     df: pd.DataFrame, col: str, pattern: str, description: str
 ) -> list:
     """Flag values that do not match the expected regex pattern."""
-    if col not in df.columns:
+    if not _has_column(df, col):
         return []
     nev = non_empty_values(df[col])
     if len(nev) == 0:
@@ -637,7 +670,7 @@ def check_format_pattern(
     if n_violations == 0:
         return []
     pct = n_violations / len(nev)
-    severity = "high" if pct > 0.20 else ("medium" if pct > 0.05 else "low")
+    severity = _severity_from_rate(pct)
     return [{
         "column": col,
         "type": "format_pattern_violation",
@@ -652,10 +685,10 @@ def check_format_pattern(
 def check_numeric_corruption_types(df: pd.DataFrame, col: str) -> list:
     """Classify WHY a numeric column has non-numeric values (symbols, comma
     decimals, ND placeholders)."""
-    if col not in df.columns:
+    if not _has_column(df, col):
         return []
     nev = non_empty_values(df[col])
-    non_numeric_mask = pd.to_numeric(nev, errors="coerce").isna()
+    non_numeric_mask = _coerce_numeric(nev).isna()
     bad = nev[non_numeric_mask].astype(str)
     if len(bad) == 0:
         return []
@@ -710,9 +743,9 @@ def check_float_precision(
     """Flag numeric columns with excessive decimal digits (floating-point noise)."""
     issues = []
     for col in numerical_cols:
-        if col not in df.columns:
+        if not _has_column(df, col):
             continue
-        numeric = pd.to_numeric(df[col], errors="coerce").dropna()
+        numeric = _coerce_numeric(df[col], dropna=True)
         if len(numeric) == 0:
             continue
         noisy = numeric.apply(
@@ -925,7 +958,7 @@ def check_placeholder_values(df: pd.DataFrame) -> list:
         if count == 0:
             continue
         pct = count / len(df)
-        severity = "high" if pct > 0.20 else ("medium" if pct > 0.05 else "low")
+        severity = _severity_from_rate(pct)
         issues.append({
             "column": col,
             "type": "placeholder_values",
@@ -1003,7 +1036,7 @@ def check_month_column(df: pd.DataFrame, cols: list) -> list:
             })
 
         # --- special integer codes ---
-        numeric = pd.to_numeric(df[col], errors="coerce").dropna()
+        numeric = _coerce_numeric(df[col], dropna=True)
         int_vals = numeric[numeric % 1 == 0].astype(int)
         special_mask = int_vals.isin(_SPECIAL_MONTH_CODES)
         n_special = int(special_mask.sum())
@@ -1038,7 +1071,7 @@ def check_year_column(df: pd.DataFrame, cols: list) -> list:
     """
     issues = []
     for col in cols:
-        if col not in df.columns:
+        if not _has_column(df, col):
             continue
         raw = df[col].dropna().astype(str).str.strip()
         if len(raw) < 5:
@@ -1046,7 +1079,7 @@ def check_year_column(df: pd.DataFrame, cols: list) -> list:
 
         # Strip trailing non-digit characters for detection only
         cleaned = raw.str.replace(r"[^\d]$", "", regex=True)
-        numeric = pd.to_numeric(cleaned, errors="coerce").dropna()
+        numeric = _coerce_numeric(cleaned, dropna=True)
         if len(numeric) == 0:
             continue
         int_vals = numeric[numeric % 1 == 0].astype(int)
@@ -1054,12 +1087,7 @@ def check_year_column(df: pd.DataFrame, cols: list) -> list:
         if in_range / len(int_vals) < 0.80:
             continue  # not a year column
 
-        # Dirty strings: original didn't parse cleanly but cleaned did
-        original_numeric = pd.to_numeric(raw, errors="coerce")
-        n_dirty = int(original_numeric.isna().sum()) - int(
-            pd.to_numeric(df[col].dropna().astype(str).str.strip(), errors="coerce").isna().sum()
-        )
-        # Simpler: count values that have trailing non-digits
+        # Count values that have trailing non-digit noise (e.g. "2024.")
         dirty_mask = raw.str.match(r"^\d{4}[^\d]+$")
         n_dirty = int(dirty_mask.sum())
         if n_dirty > 0:
@@ -1227,9 +1255,9 @@ def fix_special_month_codes(df: pd.DataFrame, col: str) -> int:
     These codes typically encode unknowns or annual aggregates and should not be
     treated as valid calendar months.  Returns the number of cells nulled.
     """
-    if col not in df.columns:
+    if not _has_column(df, col):
         return 0
-    numeric = pd.to_numeric(df[col], errors="coerce")
+    numeric = _coerce_numeric(df[col])
     mask = numeric.isin(_SPECIAL_MONTH_CODES)
     count = int(mask.sum())
     if count > 0:
@@ -1247,9 +1275,9 @@ def check_fractional_integers(
     """
     issues = []
     for col in numerical_cols:
-        if col not in df.columns:
+        if not _has_column(df, col):
             continue
-        numeric = pd.to_numeric(df[col], errors="coerce").dropna()
+        numeric = _coerce_numeric(df[col], dropna=True)
         if len(numeric) < 5:
             continue
         whole = (numeric % 1 == 0).sum()
@@ -1282,9 +1310,9 @@ def fix_fractional_integers(df: pd.DataFrame, col: str) -> int:
 
     Returns the number of values nulled.
     """
-    if col not in df.columns:
+    if not _has_column(df, col):
         return 0
-    numeric = pd.to_numeric(df[col], errors="coerce")
+    numeric = _coerce_numeric(df[col])
     fractional_mask = (numeric % 1 != 0) & ((numeric % 1).abs() > 1e-9)
     count = int(fractional_mask.sum())
     if count > 0:
@@ -1298,9 +1326,9 @@ def round_float_precision(df: pd.DataFrame, col: str, decimals: int = 2) -> int:
 
     Returns the number of values changed.
     """
-    if col not in df.columns:
+    if not _has_column(df, col):
         return 0
-    numeric = pd.to_numeric(df[col], errors="coerce")
+    numeric = _coerce_numeric(df[col])
     rounded = numeric.round(decimals)
     changed = int((numeric != rounded).sum())
     if changed > 0:
@@ -1311,25 +1339,30 @@ def round_float_precision(df: pd.DataFrame, col: str, decimals: int = 2) -> int:
 def null_pattern_violations(df: pd.DataFrame, col: str, pattern: str) -> int:
     """Set values that do not match *pattern* to NaN in-place.
 
+    Safety guard: if more than 30% of non-empty values would be nulled the
+    pattern is likely wrong (e.g. an LLM-inferred regex that excludes a valid
+    value class such as "0" in a binary flag).  In that case no changes are
+    made and 0 is returned so the issue is treated as flagged-for-review.
+
     Returns the number of values nulled.
     """
     if col not in df.columns:
         return 0
     nev_mask = ~missing_mask(df[col])
-    if nev_mask.sum() == 0:
+    nev_count = int(nev_mask.sum())
+    if nev_count == 0:
         return 0
     try:
         compiled = re.compile(pattern)
     except re.error:
         return 0
-    violates = df[col].astype(str).apply(
-        lambda v: bool(nev_mask[df[col].astype(str) == v].any())
-        and not compiled.match(str(v))
-    )
     violates = nev_mask & df[col].astype(str).apply(
         lambda v: not compiled.match(str(v))
     )
     count = int(violates.sum())
+    # Safety guard: refuse to null more than 30% of non-empty values
+    if nev_count > 0 and count / nev_count > 0.30:
+        return 0
     if count > 0:
         df.loc[violates, col] = np.nan
     return count
@@ -1337,10 +1370,10 @@ def null_pattern_violations(df: pd.DataFrame, col: str, pattern: str) -> int:
 
 def fix_mixed_type(df: pd.DataFrame, col: str) -> int:
     """Coerce column to numeric in-place. Returns number of values that became NaN."""
-    if col not in df.columns:
+    if not _has_column(df, col):
         return 0
     before_na = int(df[col].isna().sum())
-    df[col] = pd.to_numeric(df[col], errors="coerce")
+    df[col] = _coerce_numeric(df[col])
     return int(df[col].isna().sum()) - before_na
 
 
@@ -1400,9 +1433,9 @@ def fill_missing_numerical(
 
     Returns (success, detail_message).
     """
-    if col not in df.columns:
+    if not _has_column(df, col):
         return False, "Column not found"
-    numeric = pd.to_numeric(df[col], errors="coerce")
+    numeric = _coerce_numeric(df[col])
     median_val = numeric.median()
     if pd.notna(median_val):
         df[col] = numeric.fillna(median_val)
@@ -1418,16 +1451,19 @@ def fill_missing_categorical(
 ) -> tuple[bool, str]:
     """Fill missing values in a categorical column with the mode in-place.
 
-    High-severity columns (>50% missing) are flagged rather than filled.
+    Only auto-imputes for low severity (< 20% missing).  Medium and high
+    severity columns are flagged rather than filled: mode imputation on large
+    missing fractions distorts the distribution and masks real data problems.
     Returns (success, detail_message).
     """
     if col not in df.columns:
         return False, "Column not found"
     rows_affected = int(is_missing.sum())
-    if severity == "high":
+    if severity in ("high", "medium"):
         return False, (
-            f"Categorical column with {rows_affected} missing values (>50%) "
-            f"-- recommended for removal or domain review"
+            f"Categorical column with {rows_affected} missing values "
+            f"(severity={severity}): mode imputation suppressed to prevent "
+            f"distribution distortion — flagged for domain review"
         )
     clean = df[col][
         ~df[col].astype(str).str.strip().str.lower().isin(PLACEHOLDERS)
@@ -1447,21 +1483,27 @@ def fill_missing_categorical(
 def cap_outliers(
     df: pd.DataFrame, col: str, raw_series: pd.Series
 ) -> tuple[float, float, int]:
-    """Clip outliers in col to the 3-sigma range derived from raw_series in-place.
+    """Clip outliers in col to the 3×IQR outer fence derived from raw_series.
+
+    Uses the interquartile range (Tukey outer fence = Q1 − 3×IQR, Q3 + 3×IQR)
+    instead of mean ± 3σ.  IQR-based bounds are resistant to the influence of
+    the very outliers being capped, which makes them appropriate for skewed
+    distributions such as revenue, hours, or prices.
 
     Returns (lower, upper, count_capped). Returns (0, 0, 0) if not applicable.
     """
-    if col not in df.columns:
+    if not _has_column(df, col):
         return 0.0, 0.0, 0
-    raw_valid = pd.to_numeric(raw_series, errors="coerce").dropna()
-    if len(raw_valid) < 2:
+    raw_valid = _coerce_numeric(raw_series, dropna=True)
+    if len(raw_valid) < 4:
         return 0.0, 0.0, 0
-    mean, std = raw_valid.mean(), raw_valid.std()
-    if std == 0:
+    q1, q3 = raw_valid.quantile(0.25), raw_valid.quantile(0.75)
+    iqr = q3 - q1
+    if iqr == 0:
         return 0.0, 0.0, 0
-    lower, upper = mean - 3 * std, mean + 3 * std
-    numeric = pd.to_numeric(df[col], errors="coerce")
-    count = int(((numeric - mean).abs() > 3 * std).sum())
+    lower, upper = q1 - 3.0 * iqr, q3 + 3.0 * iqr
+    numeric = _coerce_numeric(df[col])
+    count = int(((numeric < lower) | (numeric > upper)).sum())
     if count > 0:
         df[col] = numeric.clip(lower=lower, upper=upper)
     return lower, upper, count
@@ -1498,22 +1540,77 @@ def standardize_date_format(df: pd.DataFrame, col: str) -> tuple[str, str]:
 
 
 def normalize_case(df: pd.DataFrame, col: str) -> int:
-    """Normalize string values to the most frequent casing variant in-place.
+    """Normalize case variants and single-character typos in a categorical column.
+
+    Two-pass strategy:
+    1. Case normalization — map every value to the most-frequent casing of its
+       lowercase form (e.g. 'seo', 'SEO', 'Seo' → 'SEO').
+    2. Typo correction — for rare values (< 1% of non-empty rows) that are not
+       already covered by step 1, find the closest frequent canonical via
+       SequenceMatcher and apply the correction when the similarity ratio is
+       above 0.85.  This fixes single-character insertions/deletions such as
+       'Contennt' → 'Content' or 'Desgn' → 'Design' without touching
+       legitimately distinct rare categories.
 
     Returns number of values changed.
     """
+    from difflib import SequenceMatcher
+
     if col not in df.columns:
         return 0
+
     original = df[col].copy()
     non_empty_mask = df[col].notna() & (df[col].astype(str).str.strip() != "")
     stripped = df[col].astype(str).str.strip()
     value_counts = stripped[non_empty_mask].value_counts()
-    lower_to_best: dict[str, str] = {}
+    total = int(value_counts.sum())
+    if total == 0:
+        return 0
+
+    # Step 1: build the canonical (most-frequent) casing for each lowercase form
+    lower_to_canonical: dict[str, str] = {}
     for val in value_counts.index:
         key = val.lower()
-        if key not in lower_to_best:
-            lower_to_best[key] = val
-    normalized = stripped.str.lower().map(lower_to_best)
+        if key not in lower_to_canonical:
+            lower_to_canonical[key] = val  # first = most frequent
+
+    # Frequent canonical lowercase forms (>= 1% of rows) — reference for fuzzy
+    frequent_lowers = [
+        val.lower()
+        for val, cnt in value_counts.items()
+        if cnt / total >= 0.01
+    ]
+
+    # Build the replacement map
+    replacement: dict[str, str] = {}
+
+    for raw_val, cnt in value_counts.items():
+        lower_val = raw_val.lower()
+
+        # Case normalization
+        canonical = lower_to_canonical.get(lower_val)
+        if canonical and canonical != raw_val:
+            replacement[raw_val] = canonical
+            continue
+
+        # Typo correction for rare values not resolved by case normalization
+        if cnt / total < 0.01 and raw_val not in replacement:
+            best_match: str | None = None
+            best_ratio = 0.84  # similarity threshold
+            for fl in frequent_lowers:
+                ratio = SequenceMatcher(None, lower_val, fl).ratio()
+                if ratio > best_ratio:
+                    best_ratio = ratio
+                    best_match = fl
+            if best_match:
+                replacement[raw_val] = lower_to_canonical[best_match]
+
+    if not replacement:
+        # Still apply strip-only normalisation so trailing spaces are removed
+        df.loc[non_empty_mask, col] = stripped[non_empty_mask]
+        return int((df[col] != original).sum())
+
+    normalized = stripped.map(lambda v: replacement.get(v, v))
     df.loc[non_empty_mask, col] = normalized[non_empty_mask]
     return int((df[col] != original).sum())
 
