@@ -3,6 +3,7 @@ duplicate column pairs flagged by the profiler, and key-collision rows
 that share key column values but differ in other columns."""
 
 from agents_demo.base_agent import BaseAgent, SMART
+from state_demo.constants import DUPLICATE_ISSUE_TYPES
 from tools import detect_duplicate_columns, detect_duplicate_rows, detect_key_collisions
 
 
@@ -37,6 +38,7 @@ class DuplicateAgent(BaseAgent):
             self.log("act", skip_reason)
         issues += collision_issues
 
+        issues = self.llm_enrich_issues(issues, df, DUPLICATE_ISSUE_TYPES)
         self.state.duplicate_report = {
             "issues": issues,
             "total_issues": len(issues),

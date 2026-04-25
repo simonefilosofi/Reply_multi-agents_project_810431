@@ -3,6 +3,7 @@ profiler (cross-column equality, format patterns, domain negatives) and runs
 deterministic corruption-type and float-precision checks on numeric columns."""
 
 from agents_demo.base_agent import BaseAgent, SMART
+from state_demo.constants import CONSTRAINT_ISSUE_TYPES
 from tools import (
     check_column_value_agreement,
     check_domain_negatives,
@@ -131,6 +132,7 @@ class ConstraintAgent(BaseAgent):
                 + ", ".join(i["column"] for i in year_issues),
             )
 
+        issues = self.llm_enrich_issues(issues, df, CONSTRAINT_ISSUE_TYPES)
         self.state.constraint_report = {
             "issues": issues,
             "total_issues": len(issues),

@@ -2,6 +2,7 @@
 columns using the 3-sigma rule and rare categories in categorical columns."""
 
 from agents_demo.base_agent import BaseAgent, SMART
+from state_demo.constants import ANOMALY_ISSUE_TYPES
 from tools import detect_outliers, detect_rare_categories
 
 
@@ -27,6 +28,7 @@ class AnomalyAgent(BaseAgent):
         issues += detect_outliers(df, fp.get("numerical_columns", []))
         issues += detect_rare_categories(df, fp.get("categorical_columns", []))
 
+        issues = self.llm_enrich_issues(issues, df, ANOMALY_ISSUE_TYPES)
         self.state.anomaly_report = {
             "issues": issues,
             "total_issues": len(issues),

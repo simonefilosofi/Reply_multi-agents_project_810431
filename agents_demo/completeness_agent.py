@@ -2,6 +2,7 @@
 and common placeholder patterns across all columns."""
 
 from agents_demo.base_agent import BaseAgent, SMART
+from state_demo.constants import COMPLETENESS_ISSUE_TYPES
 from tools import compute_completeness, check_placeholder_values
 
 
@@ -29,6 +30,7 @@ class CompletenessAgent(BaseAgent):
         placeholder_issues = check_placeholder_values(df)
         issues.extend(placeholder_issues)
 
+        issues = self.llm_enrich_issues(issues, df, COMPLETENESS_ISSUE_TYPES)
         self.state.completeness_by_column = completeness_by_col
         self.state.overall_completeness = overall
         self.state.completeness_report = {

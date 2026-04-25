@@ -3,6 +3,7 @@ categorical case consistency, date column ordering, and conditional
 completeness between related column pairs."""
 
 from agents_demo.base_agent import BaseAgent, SMART
+from state_demo.constants import CONSISTENCY_ISSUE_TYPES
 from tools import (
     check_case_consistency,
     check_conditional_completeness,
@@ -38,6 +39,7 @@ class ConsistencyAgent(BaseAgent):
         issues += check_case_consistency(df, cat_cols)
         issues += check_conditional_completeness(df, fp)
 
+        issues = self.llm_enrich_issues(issues, df, CONSISTENCY_ISSUE_TYPES)
         self.state.consistency_report = {
             "issues": issues,
             "total_issues": len(issues),
