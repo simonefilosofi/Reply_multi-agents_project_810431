@@ -74,6 +74,16 @@ class ProfilerAgent(BaseAgent):
             data = self.call_llm_json(user)
             data["domain"] = data.get("domain") or "generic"
             data["language"] = (data.get("language") or "mixed").lower()
+            # Normalize column_descriptions: LLM sometimes returns a list
+            # of {col: desc} objects instead of a flat dict.
+            cd = data.get("column_descriptions", {})
+            if isinstance(cd, list):
+                merged: dict = {}
+                for item in cd:
+                    if isinstance(item, dict):
+                        for k, v in item.items():
+                            merged[str(k)] = str(v)
+                data["column_descriptions"] = merged
             fp = DatasetFingerprint(**data)
             self.state.dataset_fingerprint = fp.model_dump()
             self.log("act",
