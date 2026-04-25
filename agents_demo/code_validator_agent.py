@@ -19,7 +19,6 @@ import pandas as pd
 from agents_demo.base_agent import BaseAgent, SMART
 from tools import validate_generated_code
 from tools_code_validator import (
-    FILTER_COVERAGE_LIMIT,
     SANDBOX_TIMEOUT,
     build_filter_prompt,
     build_fix_prompt,
@@ -221,7 +220,7 @@ class CodeValidatorAgent(BaseAgent):
                 continue
 
             target = df[mask]
-            coverage_feedback = check_filter_coverage(target, df, filter_expr)
+            coverage_feedback = check_filter_coverage(target, df, filter_expr, col)
             if coverage_feedback:
                 last_feedback = coverage_feedback
                 self.log("act",
@@ -251,7 +250,8 @@ class CodeValidatorAgent(BaseAgent):
     ) -> str:
         prompt = build_filter_prompt(col, issue, df, feedback)
         try:
-            result = self.call_llm_json(prompt, max_tokens=256)
+            result = self.call_llm_json(prompt, max_tokens=256,
+                                        required_keys=["filter"])
             return result.get("filter", "").strip()
         except Exception as e:
             self.log("act", f"Filter generation failed: {e}")
@@ -278,7 +278,7 @@ class CodeValidatorAgent(BaseAgent):
         fixed: pd.Series,
         issue: dict,
     ) -> tuple[bool, str]:
-        passed, reason = safety_guard_quantitative(original, fixed)
+        passed, reason = safety_guard_quantitative(original, fixed, issue.get("type", ""))
         if not passed:
             return False, reason
 
@@ -288,7 +288,8 @@ class CodeValidatorAgent(BaseAgent):
 
         prompt = build_llm_review_prompt(issue, original, fixed)
         try:
-            result = self.call_llm_json(prompt, max_tokens=256)
+            result = self.call_llm_json(prompt, max_tokens=256,
+                                        required_keys=["approved"])
             if not result.get("approved", False):
                 return False, (
                     f"LLM review rejected: "

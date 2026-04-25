@@ -20,7 +20,6 @@ from state_demo.helpers import non_empty_values
 
 CHANGE_THRESHOLD = 0.20
 TYPE_DRIFT_THRESHOLD = 0.10
-FILTER_COVERAGE_LIMIT = 0.50
 SANDBOX_TIMEOUT = 10
 
 
@@ -41,7 +40,11 @@ def eval_filter_expression(
             filter_expr,
             {"df": df, "col": col, "pd": pd, "np": np},
         )
-        if not isinstance(mask, pd.Series):
+        if isinstance(mask, pd.Series):
+            # Reindex to df.index so that a mask derived from a subset
+            # (e.g. after .dropna()) still aligns with the full DataFrame.
+            mask = mask.reindex(df.index, fill_value=False)
+        else:
             mask = pd.Series(mask, index=df.index)
         return mask.fillna(False).astype(bool), ""
     except Exception as e:
@@ -52,28 +55,21 @@ def check_filter_coverage(
     target: pd.DataFrame,
     df: pd.DataFrame,
     filter_expr: str,
+    col: Optional[str] = None,
 ) -> str:
     """Return a non-empty feedback string if the filter is invalid, else ''.
 
-    Checks two failure modes:
-    - 0 rows selected (false positive / expression too strict)
-    - >FILTER_COVERAGE_LIMIT rows selected (expression too broad)
+    Only fails on 0 rows selected (expression too strict or values already fixed).
     """
     if len(target) == 0:
-        sample = list(non_empty_values(df[df.columns[0]]).head(10).astype(str))
+        sample_col = col if col and col in df.columns else df.columns[0]
+        sample = list(non_empty_values(df[sample_col]).head(10).astype(str))
         return (
             f"The expression '{filter_expr}' matched 0 rows. "
             f"Either the condition is too strict or the values look different "
             f"from what you expected. "
             f"Sample of actual column values: {sample}. "
             f"Write a broader or corrected expression."
-        )
-    coverage = len(target) / len(df)
-    if coverage > FILTER_COVERAGE_LIMIT:
-        return (
-            f"The expression '{filter_expr}' matched {coverage:.0%} of all rows "
-            f"— too broad. Select only the rows containing the specific problem, "
-            f"not the majority of the dataset. Make the condition more precise."
         )
     return ""
 
@@ -178,13 +174,20 @@ def resolve_sandbox_uid() -> Optional[int]:
 def safety_guard_quantitative(
     original: pd.Series,
     fixed: pd.Series,
+    issue_type: str = "",
 ) -> tuple[bool, str]:
-    """Fail if more than CHANGE_THRESHOLD of values were changed."""
-    pct_changed = (fixed != original).mean()
-    if pct_changed > CHANGE_THRESHOLD:
+    """Fail if more than CHANGE_THRESHOLD of values were changed.
+
+    Normalisation issues (case, format) are expected to touch many rows,
+    so a relaxed threshold of 1.0 (no limit) is used for those types.
+    """
+    normalisation_types = {"case_inconsistency", "format_issue", "format_inconsistency"}
+    threshold = 1.0 if issue_type in normalisation_types else CHANGE_THRESHOLD
+    pct_changed = (fixed.values != original.values).mean()
+    if pct_changed > threshold:
         return False, (
             f"Too many values changed: {pct_changed:.0%} > "
-            f"{CHANGE_THRESHOLD:.0%} threshold"
+            f"{threshold:.0%} threshold"
         )
     return True, ""
 
@@ -215,21 +218,29 @@ def build_filter_prompt(
     feedback: str = "",
 ) -> str:
     """Build the LLM prompt for generating a filter expression."""
+    dtype = str(df[col].dtype)
     sample = list(non_empty_values(df[col]).head(20).astype(str))
     feedback_line = (
         f"\nPrevious attempt feedback: {feedback}" if feedback else ""
     )
+    dtype_hint = (
+        "IMPORTANT: df[col] is NOT object/string dtype — use "
+        f".astype(str) before any .str accessor (dtype={dtype}).\n"
+        if dtype not in ("object", "string")
+        else ""
+    )
     return (
-        f"Column: '{col}'\n"
+        f"Column: '{col}' (dtype: {dtype})\n"
         f"Issue: {issue['detail']}\n"
         f"Sample values: {sample}{feedback_line}\n\n"
+        f"{dtype_hint}"
         "Write a single Python boolean expression using df[col] that "
         "selects exactly the rows containing this issue. "
         "The expression must evaluate to a pandas boolean Series. "
         "Use only pandas/numpy operations on df[col].\n"
         "Examples:\n"
         "  df[col] == '-999'\n"
-        "  df[col].str.contains(r'[€$£]', regex=True, na=False)\n"
+        "  df[col].astype(str).str.contains(r'[€$£]', regex=True, na=False)\n"
         "  pd.to_numeric(df[col], errors='coerce').lt(0)\n"
         'Return JSON: {"filter": "...", "explanation": "..."}'
     )
@@ -243,22 +254,32 @@ def build_fix_prompt(
 ) -> str:
     """Build the LLM prompt for generating (or rewriting) a fix function."""
     col = issue["column"]
+    dtype = str(target_rows[col].dtype)
     target_sample = list(target_rows[col].head(20).astype(str))
+    dtype_hint = (
+        f"IMPORTANT: df[col] has dtype={dtype} (not object). "
+        "Always call df[col].astype(str) before using .str methods.\n\n"
+        if dtype not in ("object", "string")
+        else ""
+    )
 
     if previous_error:
         return (
             f"The following Python function produced an error:\n\n"
             f"{previous_code}\n\n"
             f"Error: {previous_error}\n"
+            f"Column dtype: {dtype}\n"
             f"Sample of problematic values: {target_sample}\n\n"
+            f"{dtype_hint}"
             f"Rewrite the function to fix this error. "
             f"Keep the same fix logic — only add handling for the error case. "
             f"Return only the corrected function code, no explanation."
         )
     return (
-        f"Column: '{col}'\n"
+        f"Column: '{col}' (dtype: {dtype})\n"
         f"Issue: {issue['detail']}\n"
         f"Sample values to fix: {target_sample}\n\n"
+        f"{dtype_hint}"
         f"Write a Python function named 'fix(df, col)' that corrects "
         f"this issue in df[col] in-place. "
         f"Use only pandas and numpy. "
