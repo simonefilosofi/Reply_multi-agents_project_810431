@@ -29,13 +29,23 @@ class DuplicateAgent(BaseAgent):
         issues += detect_duplicate_rows(df)
         issues += detect_duplicate_columns(df, fp.get("likely_duplicate_pairs", []))
 
-        key_cols = [
-            c for c in (fp.get("suggested_key_columns") or [])
-            if c in df.columns
-        ]
+        # Check id_columns first — violations there are primary key errors.
+        # Then check suggested_key_columns for business-key collisions.
+        # Use dict.fromkeys to deduplicate while preserving order.
+        key_cols = list(dict.fromkeys(
+            [c for c in fp.get("id_columns", []) if c in df.columns]
+            + [c for c in (fp.get("suggested_key_columns") or []) if c in df.columns]
+        ))
         collision_issues, skip_reason = detect_key_collisions(df, key_cols)
         if skip_reason:
             self.log("act", skip_reason)
+        # Upgrade severity for id_columns violations
+        id_col_set = set(fp.get("id_columns", []))
+        for issue in collision_issues:
+            issue_cols = {c.strip() for c in issue["column"].split(",")}
+            if issue_cols & id_col_set:
+                issue["severity"] = "high"
+                issue["detail"] = "PRIMARY KEY VIOLATION: " + issue["detail"]
         issues += collision_issues
 
         issues = self.llm_enrich_issues(issues, df, DUPLICATE_ISSUE_TYPES)

@@ -5,11 +5,15 @@ reasoning for ambiguous remediation decisions."""
 from collections import defaultdict
 from itertools import combinations
 
+import pandas as pd
+
 from agents_demo.base_agent import BaseAgent, SMART
 from agents_demo.code_validator_agent import CodeValidatorAgent
 from state_demo.constants import GAP_DETECTION_ISSUE_TYPES, ISSUE_TYPES, PLACEHOLDERS, SEVERITY_RANK
 from state_demo.helpers import missing_mask, non_empty_values
 from tools import (
+    apply_lookup_imputation,
+    build_column_lookup,
     cap_outliers,
     fill_missing_categorical,
     fill_missing_numerical,
@@ -63,6 +67,8 @@ class RemediationAgent(BaseAgent):
     def act(self):
         df = self.state.df_raw.copy()
         fp = self.state.dataset_fingerprint
+        id_cols = set(fp.get("id_columns", []))
+        cat_cols = set(fp.get("categorical_columns", []))
 
         issues_by_type: dict = defaultdict(list)
         for issue in self.state.prioritized_issues:
@@ -159,20 +165,54 @@ class RemediationAgent(BaseAgent):
         for issue in issues_by_type.get("missing_values", []):
             self._fix_missing_values(df, issue, fp)
 
-        id_cols = set(fp.get("id_columns", []))
         for issue in issues_by_type.get("outliers", []):
             col = issue["column"]
             if col in id_cols:
                 self._log_fix(issue, "flagged_for_review",
-                              f"Outlier in ID/key column -- "
+                              f"Outlier in ID/key column — "
                               f"capping would corrupt semantics, requires manual review",
                               0)
-            else:
-                lower, upper, count = cap_outliers(df, col, self.state.df_raw[col])
-                if count > 0:
-                    self._log_fix(issue, "auto_fixed",
-                                  f"Capped {count} outliers to [{lower:.2f}, {upper:.2f}] (3-sigma)",
-                                  count)
+                continue
+
+            # Guard: never cap columns the profiler classified as categorical —
+            # they contain codes or enums, not continuous quantities.
+            if col in cat_cols:
+                self._log_fix(issue, "flagged_for_review",
+                              f"Column classified as categorical (codes/enums) — "
+                              f"outlier capping suppressed to preserve category integrity",
+                              0)
+                continue
+
+            # Guard: don't cap power-law / highly-skewed distributions.
+            # Financial amounts, counts, and similar data follow power-law
+            # distributions where the top decile represents real, valid entities
+            # (large ministries, high-spending departments).  Capping them with
+            # a fixed fence destroys the data and biases every downstream metric.
+            raw_numeric = pd.to_numeric(self.state.df_raw[col], errors="coerce").dropna()
+            if len(raw_numeric) > 3:
+                skewness = float(raw_numeric.skew())
+                q1, q3 = raw_numeric.quantile(0.25), raw_numeric.quantile(0.75)
+                iqr = q3 - q1
+                cap_rate = (
+                    ((raw_numeric < q1 - 3 * iqr) | (raw_numeric > q3 + 3 * iqr)).mean()
+                    if iqr > 0 else 0.0
+                )
+                if abs(skewness) > 2.0 or cap_rate > 0.05:
+                    self._log_fix(
+                        issue, "flagged_for_review",
+                        f"Skewed distribution (skewness={skewness:.2f}, "
+                        f"{cap_rate:.1%} of values beyond 3×IQR fence) — "
+                        f"capping suppressed to preserve power-law structure; "
+                        f"use log-transform or domain-specific bounds instead",
+                        0,
+                    )
+                    continue
+
+            lower, upper, count = cap_outliers(df, col, self.state.df_raw[col])
+            if count > 0:
+                self._log_fix(issue, "auto_fixed",
+                              f"Capped {count} outliers to [{lower:.2f}, {upper:.2f}] (3×IQR fence)",
+                              count)
 
         for issue in issues_by_type.get("float_precision_noise", []):
             col = issue["column"]
@@ -251,8 +291,55 @@ class RemediationAgent(BaseAgent):
                               f"Renamed '{old}' -> '{new}'", 0,
                               old=old, new=new)
 
+        # Duplicate-key on id_columns: rows with the same primary key value
+        # are a data integrity violation — drop subsequent duplicates (keep first).
+        # Non-id-column key collisions are flagged for domain review.
+        for issue in issues_by_type.get("duplicate_key", []):
+            key_cols = [c.strip() for c in issue["column"].split(",") if c.strip() in df.columns]
+            if not key_cols:
+                continue
+            id_key_cols = [c for c in key_cols if c in id_cols]
+            if id_key_cols:
+                before = len(df)
+                df.drop_duplicates(subset=key_cols, keep="first", inplace=True)
+                df.reset_index(drop=True, inplace=True)
+                removed = before - len(df)
+                self._log_fix(
+                    issue, "auto_fixed",
+                    f"Removed {removed} rows with duplicate primary key "
+                    f"[{issue['column']}] (kept first occurrence per key)",
+                    removed,
+                )
+            else:
+                self._flag_issue(issue)
+
+        # Lookup-based imputation: fill missing values using cross-column mappings
+        # learned from clean (non-null, non-placeholder) rows.
+        # Runs AFTER placeholder replacement so that former-placeholder cells
+        # (now NULL) are eligible for imputation from their paired columns.
+        lookup_filled_total = 0
+        for issue in issues_by_type.get("lookup_imputability", []):
+            tgt = issue.get("column", "")
+            src = issue.get("mapping_source", "")
+            if not tgt or not src or tgt not in df.columns or src not in df.columns:
+                continue
+            lookup = build_column_lookup(df, src, tgt)
+            if not lookup:
+                continue
+            filled = apply_lookup_imputation(df, src, tgt, lookup)
+            if filled > 0:
+                lookup_filled_total += filled
+                self._log_fix(
+                    issue, "auto_fixed",
+                    f"Imputed {filled} missing '{tgt}' values from '{src}' "
+                    f"via learned mapping ({len(lookup)} unique mappings)",
+                    filled,
+                )
+            else:
+                self.log("act", f"Lookup imputation for '{tgt}' ← '{src}': 0 rows filled")
+
         for flag_type in (
-            "sparse_column", "duplicate_key",
+            "sparse_column",
             "date_order", "rare_categories", "conditional_completeness",
             "cross_column_mismatch", "domain_negative_values",
             "currency_symbol_in_numeric", "comma_decimal_format",
