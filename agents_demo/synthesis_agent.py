@@ -6,7 +6,6 @@ an executive summary of data quality findings."""
 
 from agents_demo.base_agent import BaseAgent, SMART
 from state_demo.constants import SEVERITY_RANK
-from state_demo.helpers import non_empty_values
 from state_demo.scoring import compute_reliability_score
 
 
@@ -54,7 +53,6 @@ class SynthesisAgent(BaseAgent):
         self._column_convergence_analysis(column_issues)
         self._conflict_detection()
         self._severity_recalibration(column_issues)
-        self._gap_detection()
 
     def _column_convergence_analysis(self, column_issues: dict):
         multi_agent_cols = {
@@ -147,85 +145,6 @@ class SynthesisAgent(BaseAgent):
         self.state.prioritized_issues.sort(
             key=lambda x: SEVERITY_RANK.get(x.get("severity", "low"), 2)
         )
-
-    def _gap_detection(self):
-        """Ask the LLM to reason over raw column samples and flag issues that
-        the deterministic tools missed."""
-        df = self.state.df_raw
-        col_to_issues: dict = {}
-        for issue in self.state.prioritized_issues:
-            col = issue.get("column", "")
-            col_to_issues.setdefault(col, []).append(issue)
-
-        # Focus on columns already flagged (high/medium) plus any with no findings
-        focus: list = []
-        for col in df.columns:
-            if col in col_to_issues:
-                if any(i["severity"] in ("high", "medium")
-                       for i in col_to_issues[col]):
-                    focus.append(col)
-            else:
-                focus.append(col)
-        focus = focus[:15]  # cap to control token cost
-
-        sections = []
-        for col in focus:
-            if col not in df.columns:
-                continue
-            nev = non_empty_values(df[col])
-            if len(nev) == 0:
-                continue
-            sample = list(nev.sample(min(200, len(nev)), random_state=42).astype(str))
-            existing = [
-                f"[{i['severity']}] {i['type']}: {i['detail']}"
-                for i in col_to_issues.get(col, [])
-            ]
-            sections.append(
-                f"Column: '{col}'\n"
-                f"Sample values: {sample}\n"
-                f"Issues already found: {existing if existing else ['none']}"
-            )
-
-        if not sections:
-            return
-
-        user = (
-            f"Dataset domain: "
-            f"{self.state.dataset_fingerprint.get('domain', 'unknown')}\n\n"
-            + "\n\n".join(sections)
-            + "\n\nFor each column, examine the sample values carefully. "
-            "Report ONLY data quality issues that are clearly visible in the "
-            "sample but NOT already covered by the existing findings. "
-            "Do not repeat or rephrase existing findings. "
-            "If nothing is missing for a column, omit it. "
-            'Return JSON: {"gap_issues": [{"column": "...", "type": "...", '
-            '"detail": "...", "severity": "high|medium|low", '
-            '"filter": "pandas boolean expression to select affected rows, '
-            'e.g. df[col] == -999 or df[col].str.contains(\'pattern\', na=False)"}]}'
-        )
-
-        try:
-            result = self.call_llm_json(user, max_tokens=2048)
-            gap_issues = result.get("gap_issues", [])
-            added = 0
-            for issue in gap_issues:
-                if "column" not in issue or "type" not in issue:
-                    continue
-                self.state.prioritized_issues.append(
-                    {**issue, "source": "synthesis_gap_detection"}
-                )
-                self.log(
-                    "act",
-                    f"Gap detected in '{issue['column']}': {issue.get('detail', '')}",
-                )
-                added += 1
-            if added:
-                self.state.prioritized_issues.sort(
-                    key=lambda x: SEVERITY_RANK.get(x.get("severity", "low"), 2)
-                )
-            self.log("act", f"Gap detection complete — {added} additional issue(s) found")
-        except Exception as e:
-            self.log("error", f"Gap detection failed: {e}")
 
     def observe(self):
         score, dimensions = compute_reliability_score(self.state.df_raw, self.state)

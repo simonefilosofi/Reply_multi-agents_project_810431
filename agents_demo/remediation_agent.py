@@ -7,8 +7,8 @@ from itertools import combinations
 
 from agents_demo.base_agent import BaseAgent, SMART
 from agents_demo.code_validator_agent import CodeValidatorAgent
-from state_demo.constants import PLACEHOLDERS
-from state_demo.helpers import missing_mask
+from state_demo.constants import GAP_DETECTION_ISSUE_TYPES, ISSUE_TYPES, PLACEHOLDERS, SEVERITY_RANK
+from state_demo.helpers import missing_mask, non_empty_values
 from tools import (
     cap_outliers,
     fill_missing_categorical,
@@ -38,9 +38,7 @@ class RemediationAgent(BaseAgent):
         "You are a data quality remediation specialist. You plan and apply "
         "automated fixes for data quality issues, making conservative decisions "
         "that preserve data integrity. For ambiguous missing-value cases, you "
-        "recommend the best imputation strategy. "
-        "Always respond with a JSON object: "
-        '{"strategy": "median" | "mode" | "flag", "reason": "..."}'
+        "recommend the best imputation strategy."
     )
 
     def think(self):
@@ -150,6 +148,7 @@ class RemediationAgent(BaseAgent):
 
         if issues_by_type.get("duplicate_rows"):
             removed = remove_duplicate_rows(df)
+            df.reset_index(drop=True, inplace=True)
             self._log_fix(
                 {"type": "duplicate_rows", "column": "_rows_"},
                 "auto_fixed",
@@ -261,20 +260,23 @@ class RemediationAgent(BaseAgent):
             "ambiguous_year_format", "invalid_year_value",
         ):
             for issue in issues_by_type.get(flag_type, []):
+                col = issue.get("column", "")
+                if col and col not in df.columns:
+                    # column was already dropped (e.g. as a duplicate) — skip
+                    continue
                 self._flag_issue(issue)
 
         self._recompute_additive_derivatives(df, self.state.df_raw)
         self.state.df_cleaned = df
 
-        # Route gap issues (no deterministic handler) to CodeValidatorAgent
-        gap_issues = [
-            issue for issue in self.state.prioritized_issues
-            if issue.get("source") == "synthesis_gap_detection"
-        ]
+        # Post-remediation gap detection: run on cleaned data so the LLM
+        # sees the actual current state, not the original raw values.
+        gap_issues = self._run_gap_detection(df)
+        for issue in gap_issues:
+            self.state.prioritized_issues.append(issue)
         if gap_issues:
             self.log("act",
-                     f"Routing {len(gap_issues)} gap issue(s) to "
-                     f"CodeValidatorAgent")
+                     f"Routing {len(gap_issues)} gap issue(s) to CodeValidatorAgent")
             validator = CodeValidatorAgent(self.state)
             validator.run(gap_issues)
 
@@ -386,6 +388,115 @@ class RemediationAgent(BaseAgent):
                 if col_c in recomputed:
                     break
 
+    def _run_gap_detection(self, df) -> list:
+        """LLM gap detection on df_cleaned — finds issues that remain after
+        all deterministic fixes. Returns a list of gap issues ready for
+        CodeValidatorAgent."""
+
+        # Per-column map of what was already fixed — explicit so LLM won't re-detect
+        fixed_per_col: dict = {}
+        for f in self.state.fix_log:
+            if f["action"] == "auto_fixed":
+                col = f["column"]
+                fixed_per_col.setdefault(col, []).append(
+                    f"{f['issue_type']}: {f['description']}"
+                )
+
+        # Already-handled (type, column) pairs — used for post-filter
+        handled_pairs = {
+            (f["issue_type"], f["column"])
+            for f in self.state.fix_log
+        }
+
+        col_to_issues: dict = {}
+        for issue in self.state.prioritized_issues:
+            col = issue.get("column", "")
+            col_to_issues.setdefault(col, []).append(issue)
+
+        sections = []
+        for col in df.columns:
+            nev = non_empty_values(df[col])
+            if len(nev) == 0:
+                continue
+            sample = list(
+                nev.sample(min(50, len(nev)), random_state=42).astype(str)
+            )
+            dtype = str(df[col].dtype)
+            already_fixed = fixed_per_col.get(col, [])
+            sections.append(
+                f"Column: '{col}' (dtype: {dtype})\n"
+                f"Sample (current cleaned values): {sample}\n"
+                f"Already fixed for this column: "
+                f"{already_fixed if already_fixed else ['nothing']}"
+            )
+
+        if not sections:
+            return []
+
+        allowed_types_text = "\n".join(
+            f"  {t}: {ISSUE_TYPES[t]}"
+            for t in sorted(GAP_DETECTION_ISSUE_TYPES)
+        )
+
+        user = (
+            f"Dataset domain: "
+            f"{self.state.dataset_fingerprint.get('domain', 'unknown')}\n\n"
+            + "\n\n".join(sections)
+            + "\n\nYou are looking for data quality issues that REMAIN in the "
+            "current cleaned values AFTER all automated fixes have been applied. "
+            "The samples above show the CURRENT state of the data.\n\n"
+            "Rules:\n"
+            "- Only report issues clearly visible in the current sample values\n"
+            "- Do NOT re-report issues listed in 'Already fixed for this column'\n"
+            "- Do NOT flag missing values, sparse columns, duplicates, or naming issues\n"
+            "- Each issue must be fixable with a simple pandas transformation\n"
+            "- Use .astype(str) before any .str operations on non-object columns\n"
+            "- If nothing new remains, return an empty list\n\n"
+            f"Allowed issue types (use ONLY these):\n{allowed_types_text}\n\n"
+            'Return JSON: {"gap_issues": [{"column": "...", "type": "...", '
+            '"detail": "...", "severity": "high|medium|low", '
+            '"filter": "pandas boolean expression selecting affected rows"}]}'
+        )
+
+        try:
+            result = self.call_llm_json(user, max_tokens=2048,
+                                        required_keys=["gap_issues"])
+            gap_issues = result.get("gap_issues", [])
+            valid = []
+            for issue in gap_issues:
+                col = issue.get("column", "")
+                itype = issue.get("type", "")
+                if not col or not itype:
+                    continue
+                if col not in df.columns:
+                    continue
+                if itype not in GAP_DETECTION_ISSUE_TYPES:
+                    self.log("act",
+                             f"Gap issue rejected — type '{itype}' not in vocabulary")
+                    continue
+                if (itype, col) in handled_pairs:
+                    self.log("act",
+                             f"Gap issue rejected — '{itype}' on '{col}' "
+                             f"already handled")
+                    continue
+                if issue.get("severity") not in ("high", "medium", "low"):
+                    continue
+                valid.append({**issue, "source": "synthesis_gap_detection"})
+                self.log("act",
+                         f"Post-remediation gap: '{col}' [{itype}] — "
+                         f"{issue.get('detail', '')}")
+            self.log("act",
+                     f"Post-remediation gap detection complete — "
+                     f"{len(valid)} issue(s) found")
+            if valid:
+                self.state.prioritized_issues.sort(
+                    key=lambda x: SEVERITY_RANK.get(x.get("severity", "low"), 2)
+                )
+            return valid
+        except Exception as e:
+            self.log("error", f"Post-remediation gap detection failed: {e}")
+            return []
+
     def _fix_missing_values(self, df, issue, fp):
         col = issue["column"]
         if col not in df.columns:
@@ -472,7 +583,8 @@ class RemediationAgent(BaseAgent):
             f'Respond ONLY with JSON: {{"strategy": "median"|"mode"|"flag", "reason": "..."}}'
         )
         try:
-            result = self.call_llm_json(user, max_tokens=512)
+            result = self.call_llm_json(user, max_tokens=512,
+                                        required_keys=["strategy"])
             strategy = result.get("strategy", "flag")
             reason = result.get("reason", "")
             self.log("act", f"LLM strategy for '{col}': {strategy} -- {reason}")
