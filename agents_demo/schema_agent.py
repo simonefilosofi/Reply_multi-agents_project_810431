@@ -2,6 +2,7 @@
 fingerprint classification and validates column naming conventions."""
 
 from agents_demo.base_agent import BaseAgent, SMART
+from state_demo.constants import SCHEMA_ISSUE_TYPES
 from tools import check_naming_conventions, check_type_issues
 
 
@@ -30,6 +31,7 @@ class SchemaAgent(BaseAgent):
         )
         issues += check_naming_conventions(df)
 
+        issues = self.llm_enrich_issues(issues, df, SCHEMA_ISSUE_TYPES)
         self.state.schema_report = {
             "issues": issues,
             "total_issues": len(issues),
