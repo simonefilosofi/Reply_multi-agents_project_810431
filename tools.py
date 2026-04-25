@@ -684,6 +684,127 @@ def detect_rare_categories(df: pd.DataFrame, categorical_cols: list) -> list:
     return issues
 
 
+# ── Cross-column mapping ──────────────────────────────────────────────────────
+
+def detect_column_mapping_pairs(
+    df: pd.DataFrame,
+    max_cardinality: int = 80,
+    min_clean: int = 20,
+    min_imputable: int = 10,
+    min_coverage: float = 0.70,
+) -> list:
+    """Find column pairs where one column's values can reliably predict the other.
+
+    Scans all column pairs with low cardinality.  For each direction (A→B and
+    B→A), checks whether clean rows (both non-null/non-placeholder) show a
+    consistent mapping with ≥ min_coverage mode-agreement and that at least
+    min_imputable rows could be filled from the mapping.
+
+    Returns one issue per imputable direction found, with an extra
+    'mapping_source' key for the RemediationAgent to use.
+    """
+    issues = []
+    _placeholder_lower = {p.lower() for p in PLACEHOLDERS} | {""}
+
+    def _is_valid(series: pd.Series) -> pd.Series:
+        return series.notna() & ~series.astype(str).str.strip().str.lower().isin(
+            _placeholder_lower
+        )
+
+    candidates = [
+        col for col in df.columns
+        if 2 <= df[col].nunique(dropna=True) <= max_cardinality
+    ]
+    if len(candidates) < 2:
+        return issues
+
+    seen: set = set()
+    for col_a, col_b in combinations(candidates, 2):
+        for src, tgt in ((col_a, col_b), (col_b, col_a)):
+            if (src, tgt) in seen:
+                continue
+
+            tgt_missing = ~_is_valid(df[tgt])
+            n_imputable = int((_is_valid(df[src]) & tgt_missing).sum())
+            if n_imputable < min_imputable:
+                continue
+
+            clean_mask = _is_valid(df[src]) & _is_valid(df[tgt])
+            n_clean = int(clean_mask.sum())
+            if n_clean < min_clean:
+                continue
+
+            clean = df.loc[clean_mask, [src, tgt]].copy()
+            clean[src] = clean[src].astype(str)
+            clean[tgt] = clean[tgt].astype(str)
+
+            mode_map: dict = {}
+            for src_val, group in clean.groupby(src, sort=False):
+                modes = group[tgt].mode()
+                if len(modes) > 0:
+                    mode_map[str(src_val)] = modes.iloc[0]
+
+            if not mode_map:
+                continue
+
+            predicted = clean[src].map(mode_map)
+            coverage = float((clean[tgt] == predicted).mean())
+            if coverage < min_coverage:
+                continue
+
+            seen.add((src, tgt))
+            issues.append({
+                "column": tgt,
+                "type": "lookup_imputability",
+                "detail": (
+                    f"'{tgt}' can be inferred from '{src}': "
+                    f"{n_clean} anchor rows, {coverage:.0%} mapping consistency, "
+                    f"{n_imputable} rows can be imputed"
+                ),
+                "severity": "medium",
+                "mapping_source": src,
+            })
+
+    return issues
+
+
+def build_column_lookup(
+    df: pd.DataFrame, col_source: str, col_target: str
+) -> dict:
+    """Build {source_value: most_common_target_value} from clean rows."""
+    _pl = {p.lower() for p in PLACEHOLDERS} | {""}
+    src_valid = df[col_source].notna() & ~df[col_source].astype(str).str.strip().str.lower().isin(_pl)
+    tgt_valid = df[col_target].notna() & ~df[col_target].astype(str).str.strip().str.lower().isin(_pl)
+    clean = df.loc[src_valid & tgt_valid, [col_source, col_target]].copy()
+    clean[col_source] = clean[col_source].astype(str)
+    clean[col_target] = clean[col_target].astype(str)
+    lookup: dict = {}
+    for src_val, group in clean.groupby(col_source, sort=False):
+        modes = group[col_target].mode()
+        if len(modes) > 0:
+            lookup[str(src_val)] = modes.iloc[0]
+    return lookup
+
+
+def apply_lookup_imputation(
+    df: pd.DataFrame, col_source: str, col_target: str, lookup: dict
+) -> int:
+    """Fill missing col_target values via lookup[col_source]. Returns count filled."""
+    if not lookup or col_source not in df.columns or col_target not in df.columns:
+        return 0
+    _pl = {p.lower() for p in PLACEHOLDERS} | {""}
+    tgt_missing = df[col_target].isna() | df[col_target].astype(str).str.strip().str.lower().isin(_pl)
+    src_present = df[col_source].notna() & ~df[col_source].astype(str).str.strip().str.lower().isin(_pl)
+    imputable = df.index[tgt_missing & src_present]
+    count = 0
+    for idx in imputable:
+        imputed_val = lookup.get(str(df.at[idx, col_source]))
+        if imputed_val is not None:
+            df.at[idx, col_target] = imputed_val
+            count += 1
+    return count
+
+
 # ── Constraints ───────────────────────────────────────────────────────────────
 
 def check_column_value_agreement(
@@ -1460,20 +1581,51 @@ def fix_mixed_type(df: pd.DataFrame, col: str) -> int:
     return int(df[col].isna().sum()) - before_na
 
 
-def fix_invalid_dates(df: pd.DataFrame, col: str) -> tuple[str, int]:
-    """Re-parse a date column choosing the best dayfirst setting in-place.
+_IT_MONTH_MAP = {
+    "gen": "jan", "feb": "feb", "mar": "mar", "apr": "apr",
+    "mag": "may", "giu": "jun", "lug": "jul", "ago": "aug",
+    "set": "sep", "ott": "oct", "nov": "nov", "dic": "dec",
+    "gennaio": "january", "febbraio": "february", "marzo": "march",
+    "aprile": "april", "maggio": "may", "giugno": "june",
+    "luglio": "july", "agosto": "august", "settembre": "september",
+    "ottobre": "october", "novembre": "november", "dicembre": "december",
+}
 
-    Detects YYYYMM period-code columns and handles them without converting to
-    datetime (pd.to_datetime cannot parse YYYYMM without an explicit format and
-    would null every value). For YYYYMM columns, invalid entries are nulled and
-    the valid integer codes are preserved as-is.
+_EXPLICIT_DATE_FORMATS = [
+    "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y",
+    "%Y-%m-%d", "%Y/%m/%d", "%Y%m%d",
+    "%d/%m/%y", "%d-%m-%y",           # 2-digit year variants
+    "%m/%d/%Y",                        # US format fallback
+]
+
+
+def _translate_italian_months(series: pd.Series) -> pd.Series:
+    """Replace Italian month names/abbreviations with English equivalents."""
+    def _translate(val: str) -> str:
+        for it, en in _IT_MONTH_MAP.items():
+            # word-boundary replacement, case-insensitive
+            val = re.sub(rf"(?i)\b{re.escape(it)}\b", en, val)
+        return val
+    return series.astype(str).apply(_translate)
+
+
+def fix_invalid_dates(df: pd.DataFrame, col: str) -> tuple[str, int]:
+    """Re-parse a date column using a multi-strategy cascade in-place.
+
+    Strategy order:
+    1. YYYYMM period-code detection — preserve as integer codes, no datetime.
+    2. Explicit format strings tried in priority order (covers Italian locale:
+       DD/MM/YYYY, DD-MM-YY, YYYY/MM/DD, dots, etc.).
+    3. Italian month-name translation (GIU 11 2024 → Jun 11 2024) then
+       pd.to_datetime with dayfirst=True.
+    4. Fallback: pd.to_datetime with dayfirst best-of-two.
 
     Returns (method_used, valid_count).
     """
     if col not in df.columns:
         return "", 0
 
-    # Detect YYYYMM period codes: strip optional .0 suffix and check pattern
+    # ── 1. YYYYMM period codes ────────────────────────────────────────────────
     clean = df[col].astype(str).str.strip().str.replace(r"\.0+$", "", regex=True)
     yyyymm_frac = clean.apply(
         lambda v: bool(re.match(r"^\d{6}$", v))
@@ -1491,6 +1643,33 @@ def fix_invalid_dates(df: pd.DataFrame, col: str) -> tuple[str, int]:
         df[col] = clean.where(valid_mask, other=pd.NA)
         return "YYYYMM_validated", int(valid_mask.sum())
 
+    # ── 2. Explicit format strings ────────────────────────────────────────────
+    best_fmt, best_parsed, best_count = "", None, 0
+    for fmt in _EXPLICIT_DATE_FORMATS:
+        try:
+            parsed = pd.to_datetime(df[col], format=fmt, errors="coerce")
+            cnt = int(parsed.notna().sum())
+            if cnt > best_count:
+                best_count = cnt
+                best_parsed = parsed
+                best_fmt = fmt
+        except Exception:
+            continue
+    total = int(df[col].notna().sum()) or 1
+    if best_parsed is not None and best_count / total >= 0.70:
+        df[col] = best_parsed
+        return f"explicit_fmt={best_fmt}", best_count
+
+    # ── 3. Italian month names → English then parse ───────────────────────────
+    translated = _translate_italian_months(df[col])
+    if (translated != df[col].astype(str)).any():
+        parsed_it = pd.to_datetime(translated, errors="coerce", dayfirst=True)
+        cnt_it = int(parsed_it.notna().sum())
+        if cnt_it > best_count:
+            df[col] = parsed_it
+            return "italian_month_names", cnt_it
+
+    # ── 4. Generic dayfirst best-of-two fallback ─────────────────────────────
     parsed_df = pd.to_datetime(df[col], errors="coerce", dayfirst=True)
     parsed_nd = pd.to_datetime(df[col], errors="coerce", dayfirst=False)
     if parsed_df.notna().sum() >= parsed_nd.notna().sum():

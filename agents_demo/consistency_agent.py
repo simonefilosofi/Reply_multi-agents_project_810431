@@ -9,6 +9,7 @@ from tools import (
     check_conditional_completeness,
     check_date_format_consistency,
     check_date_ordering,
+    detect_column_mapping_pairs,
 )
 
 
@@ -38,6 +39,7 @@ class ConsistencyAgent(BaseAgent):
         issues += check_date_ordering(df, date_cols)
         issues += check_case_consistency(df, cat_cols)
         issues += check_conditional_completeness(df, fp)
+        issues += detect_column_mapping_pairs(df)
 
         issues = self.llm_enrich_issues(issues, df, CONSISTENCY_ISSUE_TYPES)
         self.state.consistency_report = {
@@ -51,10 +53,12 @@ class ConsistencyAgent(BaseAgent):
         case_issues = sum(1 for i in issues if i["type"] == "case_inconsistency")
         order_issues = sum(1 for i in issues if i["type"] == "date_order")
         cond_issues = sum(1 for i in issues if i["type"] == "conditional_completeness")
+        lookup_issues = sum(1 for i in issues if i["type"] == "lookup_imputability")
         self.log("observe",
                  f"Found {len(issues)} consistency issues: "
                  f"{format_issues} format, {case_issues} case, "
-                 f"{order_issues} date order, {cond_issues} conditional")
+                 f"{order_issues} date order, {cond_issues} conditional, "
+                 f"{lookup_issues} lookup-imputability")
 
     def reply(self):
         self.summarize_issues(
