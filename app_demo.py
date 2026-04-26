@@ -29,11 +29,65 @@ load_dotenv()
 st.set_page_config(page_title="Data Quality Pipeline", layout="wide")
 st.title("Multi-Agent Data Quality Pipeline")
 
-uploaded_files = st.file_uploader(
-    "Upload one or more datasets",
-    type=["csv", "json", "xlsx", "xls", "parquet"],
-    accept_multiple_files=True,
-)
+# ── Pipeline step registry ─────────────────────────────────────────────────────
+# (AgentClass, internal_key, display_name, prompt)
+PIPELINE_STEPS = [
+    (IngestionAgent,    "ingestion",    "Ingestion",
+     "Load and ingest the dataset."),
+    (ProfilerAgent,     "profiler",     "Profiler",
+     "Classify all columns by semantic type and generate a dataset fingerprint."),
+    (SchemaAgent,       "schema",       "Schema",
+     "Validate column data types and naming conventions."),
+    (CompletenessAgent, "completeness", "Completeness",
+     "Detect missing, empty, and placeholder values across all columns."),
+    (DuplicateAgent,    "duplicate",    "Duplicates",
+     "Identify duplicate rows, redundant column pairs, and key-collision records."),
+    (AnomalyAgent,      "anomaly",      "Anomaly",
+     "Detect statistical outliers and rare categories."),
+    (ConsistencyAgent,  "consistency",  "Consistency",
+     "Check date format consistency, case consistency, and conditional completeness."),
+    (ConstraintAgent,   "constraint",   "Constraints",
+     "Enforce domain constraints, format patterns, and numeric corruption checks."),
+    (SynthesisAgent,    "synthesis",    "Synthesis",
+     "Synthesize all findings, identify cross-cutting patterns, compute reliability."),
+    (RemediationAgent,  "remediation",  "Remediation",
+     "Apply automated fixes and flag issues requiring human review."),
+    (ReportAgent,       "report",       "Report",
+     "Compile the final data quality report with visualizations."),
+]
+
+_REPORT_ATTRS = {
+    "schema":       "schema_report",
+    "completeness": "completeness_report",
+    "duplicate":    "duplicate_report",
+    "anomaly":      "anomaly_report",
+    "consistency":  "consistency_report",
+    "constraint":   "constraint_report",
+}
+
+
+def _step_info(state: PipelineState, key: str) -> str:
+    """Return a short info string for the status table after an agent completes."""
+    if key == "ingestion":
+        m = state.ingestion_meta
+        return f"{m.get('rows', '?')} rows × {m.get('columns', '?')} cols"
+    if key == "profiler":
+        domain = state.dataset_fingerprint.get("domain", "?")
+        return domain[:45] + ("…" if len(domain) > 45 else "")
+    if key in _REPORT_ATTRS:
+        report = getattr(state, _REPORT_ATTRS[key], {})
+        n = report.get("total_issues", 0)
+        return f"{n} issue{'s' if n != 1 else ''}"
+    if key == "synthesis":
+        return f"reliability {state.reliability_score_before:.0f}/100 (pre-fix)"
+    if key == "remediation":
+        auto   = sum(1 for f in state.fix_log if "auto"   in f.get("action", ""))
+        flagged = sum(1 for f in state.fix_log if f.get("action") == "flagged_for_review")
+        llm    = sum(1 for f in state.fix_log if f.get("action") == "auto_fixed_by_llm")
+        return f"{auto} fixed ({llm} by LLM), {flagged} flagged"
+    if key == "report":
+        return f"reliability {state.reliability_score_after:.0f}/100 (post-fix)"
+    return "—"
 
 
 def run_pipeline(file_obj):
@@ -43,52 +97,74 @@ def run_pipeline(file_obj):
         tmp_path = tmp.name
 
     state = PipelineState(source_path=tmp_path)
+    n = len(PIPELINE_STEPS)
 
-    with st.spinner(f"[{file_obj.name}] Loading dataset..."):
-        IngestionAgent(state).run(
-            prompt=f"Load and ingest the dataset at '{file_obj.name}'."
-        )
+    # ── Live progress UI ───────────────────────────────────────────────────────
+    st.markdown("#### Pipeline Progress")
+    col_table, col_log = st.columns([2, 3])
 
-    with st.spinner(f"[{file_obj.name}] Profiling dataset..."):
-        ProfilerAgent(state).run(
-            prompt="Classify all columns by semantic type and generate a dataset fingerprint."
-        )
+    status_list = ["⏳ Pending"] * n
+    info_list   = ["—"] * n
 
-    with st.spinner(f"[{file_obj.name}] Running Layer 1 analysis..."):
-        SchemaAgent(state).run(
-            prompt="Validate column data types and naming conventions."
-        )
-        CompletenessAgent(state).run(
-            prompt="Detect all missing, empty, and placeholder values across all columns."
-        )
-        DuplicateAgent(state).run(
-            prompt="Identify duplicate rows, redundant column pairs, and key-collision records."
-        )
-        AnomalyAgent(state).run(
-            prompt="Detect statistical outliers in numerical columns and rare categories in categorical columns."
-        )
-        ConsistencyAgent(state).run(
-            prompt="Check date format consistency, categorical case consistency, date ordering, and conditional completeness."
-        )
-        ConstraintAgent(state).run(
-            prompt="Enforce domain constraints inferred from the dataset profile: cross-column value agreement, format patterns, domain negatives, numeric corruption subtypes, and float precision noise."
-        )
+    with col_table:
+        st.caption("Agent Status")
+        table_ph = st.empty()
 
-    with st.spinner(f"[{file_obj.name}] Synthesizing results..."):
-        SynthesisAgent(state).run(
-            prompt="Synthesize all agent findings, identify cross-cutting patterns, and compute the pre-remediation reliability score."
-        )
+    with col_log:
+        st.caption("Execution Log")
+        log_ph = st.empty()
 
-    with st.spinner(f"[{file_obj.name}] Applying remediations..."):
-        RemediationAgent(state).run(
-            prompt="Apply automated fixes for all detected issues and flag issues requiring human review."
+    log_lines: list = []
+
+    def _redraw_table():
+        df = pd.DataFrame({
+            "Agent":  [s[2] for s in PIPELINE_STEPS],
+            "Status": status_list,
+            "Info":   info_list,
+        })
+        table_ph.dataframe(
+            df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Agent":  st.column_config.TextColumn("Agent",  width="small"),
+                "Status": st.column_config.TextColumn("Status", width="medium"),
+                "Info":   st.column_config.TextColumn("Info",   width="large"),
+            },
         )
 
-    with st.spinner(f"[{file_obj.name}] Generating report..."):
-        ReportAgent(state).run(
-            prompt="Compile the final data quality report with visualizations and executive narrative."
-        )
+    def _redraw_log():
+        log_ph.code("\n".join(log_lines) if log_lines else "— waiting for first agent —")
 
+    _redraw_table()
+    _redraw_log()
+
+    # ── Sequential agent execution ─────────────────────────────────────────────
+    for i, (AgentClass, key, display_name, prompt) in enumerate(PIPELINE_STEPS):
+        status_list[i] = "🔄 Running…"
+        _redraw_table()
+
+        prev_len = len(state.agent_log)
+        AgentClass(state).run(prompt=prompt)
+        new_entries = state.agent_log[prev_len:]
+
+        status_list[i] = "✅ Done"
+        info_list[i]   = _step_info(state, key)
+        _redraw_table()
+
+        # Append this agent's log block
+        sep = "─" * 56
+        log_lines += [sep, f"  {display_name}", sep]
+        for e in new_entries:
+            phase = e["phase"].upper()
+            msg   = e["message"]
+            if len(msg) > 320:
+                msg = msg[:317] + "…"
+            log_lines.append(f"  [{phase:<8}] {msg}")
+        log_lines.append("")
+        _redraw_log()
+
+    # ── Cleanup & chart extraction ─────────────────────────────────────────────
     os.unlink(tmp_path)
 
     chart_images = {}
@@ -100,22 +176,24 @@ def run_pipeline(file_obj):
     return state, chart_images
 
 
+# ── Results display ────────────────────────────────────────────────────────────
+
 def display_results(state, chart_images, dataset_name):
     st.header("Reliability Score")
     before = state.reliability_score_before
-    after = state.reliability_score_after
-    delta = after - before
+    after  = state.reliability_score_after
+    delta  = after - before
 
     col1, col2, col3 = st.columns(3)
     col1.metric("Before Remediation", f"{before}/100")
-    col2.metric("After Remediation", f"{after}/100", delta=f"{delta:+.1f}")
-    col3.metric("Improvement", f"{delta:+.1f} points")
+    col2.metric("After Remediation",  f"{after}/100", delta=f"{delta:+.1f}")
+    col3.metric("Improvement",        f"{delta:+.1f} points")
 
     st.header("Dataset Overview")
     col1, col2, col3 = st.columns(3)
-    col1.metric("Rows", state.ingestion_meta.get("rows", "-"))
+    col1.metric("Rows",    state.ingestion_meta.get("rows", "-"))
     col2.metric("Columns", state.ingestion_meta.get("columns", "-"))
-    col3.metric("Format", state.source_format.upper())
+    col3.metric("Format",  state.source_format.upper())
 
     st.dataframe(state.df_raw.head(10), use_container_width=True)
 
@@ -124,43 +202,37 @@ def display_results(state, chart_images, dataset_name):
     col1, col2 = st.columns(2)
     col1.markdown(f"**Domain:** {fp.get('domain', '-')}")
     col1.markdown(f"**Language:** {fp.get('language', '-')}")
-    col2.markdown(
-        f"**ID columns:** {', '.join(fp.get('id_columns', [])) or '-'}"
-    )
-    col2.markdown(
-        f"**Date columns:** {', '.join(fp.get('date_columns', [])) or '-'}"
-    )
+    col2.markdown(f"**ID columns:** {', '.join(fp.get('id_columns', [])) or '-'}")
+    col2.markdown(f"**Date columns:** {', '.join(fp.get('date_columns', [])) or '-'}")
 
     st.header("Executive Summary")
-    st.info(
-        state.final_report.get("executive_summary", state.synthesis_summary)
-    )
+    st.info(state.final_report.get("executive_summary", state.synthesis_summary))
 
     issues = state.prioritized_issues
-    high = sum(1 for i in issues if i["severity"] == "high")
+    high   = sum(1 for i in issues if i["severity"] == "high")
     medium = sum(1 for i in issues if i["severity"] == "medium")
-    low = sum(1 for i in issues if i["severity"] == "low")
+    low    = sum(1 for i in issues if i["severity"] == "low")
 
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total Issues", len(issues))
-    col2.metric("High", high)
+    col2.metric("High",   high)
     col3.metric("Medium", medium)
-    col4.metric("Low", low)
+    col4.metric("Low",    low)
 
     st.subheader("Prioritized Issues")
     if issues:
         st.dataframe(issues, use_container_width=True)
 
     st.header("Remediation Results")
-    fix_log = state.fix_log
-    auto_fixed = [f for f in fix_log if f["action"] == "auto_fixed"]
+    fix_log       = state.fix_log
+    auto_fixed    = [f for f in fix_log if f["action"] == "auto_fixed"]
     auto_fixed_llm = [f for f in fix_log if f["action"] == "auto_fixed_by_llm"]
-    flagged = [f for f in fix_log if f["action"] == "flagged_for_review"]
+    flagged       = [f for f in fix_log if f["action"] == "flagged_for_review"]
 
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Actions", len(fix_log))
-    col2.metric("Auto-Fixed", len(auto_fixed))
-    col3.metric("Fixed by LLM", len(auto_fixed_llm))
+    col1.metric("Total Actions",     len(fix_log))
+    col2.metric("Auto-Fixed",        len(auto_fixed))
+    col3.metric("Fixed by LLM",      len(auto_fixed_llm))
     col4.metric("Flagged for Review", len(flagged))
 
     if auto_fixed:
@@ -212,50 +284,40 @@ def display_results(state, chart_images, dataset_name):
 
     if state.df_cleaned is not None and not state.df_cleaned.empty:
         st.subheader("Cleaned Dataset Preview")
-        rows_raw = len(state.df_raw)
+        rows_raw   = len(state.df_raw)
         rows_clean = len(state.df_cleaned)
-        cols_raw = len(state.df_raw.columns)
+        cols_raw   = len(state.df_raw.columns)
         cols_clean = len(state.df_cleaned.columns)
         c1, c2 = st.columns(2)
-        c1.metric("Rows", f"{rows_raw} → {rows_clean}", delta=rows_clean - rows_raw)
+        c1.metric("Rows",    f"{rows_raw} → {rows_clean}",  delta=rows_clean - rows_raw)
         c2.metric("Columns", f"{cols_raw} → {cols_clean}", delta=cols_clean - cols_raw)
         st.dataframe(state.df_cleaned.head(10), use_container_width=True)
 
     st.header("Visualizations")
     chart_order = [
         ("issue_severity_distribution.png", "Issue Severity Distribution"),
-        ("issues_by_agent.png", "Issues by Agent"),
-        ("completeness_heatmap.png", "Completeness Heatmap"),
-        ("reliability_before_after.png", "Reliability Before vs After"),
+        ("issues_by_agent.png",             "Issues by Agent"),
+        ("completeness_heatmap.png",        "Completeness Heatmap"),
+        ("reliability_before_after.png",    "Reliability Before vs After"),
     ]
     col1, col2 = st.columns(2)
     for idx, (filename, caption) in enumerate(chart_order):
         target = col1 if idx % 2 == 0 else col2
         if filename in chart_images:
-            target.image(
-                chart_images[filename],
-                caption=caption,
-                use_container_width=True,
-            )
+            target.image(chart_images[filename], caption=caption, use_container_width=True)
 
     st.header("Issues by Agent")
     reports = {
-        "Schema": (state.schema_report, state.schema_summary),
-        "Completeness": (
-            state.completeness_report, state.completeness_summary,
-        ),
-        "Duplicates": (state.duplicate_report, state.duplicate_summary),
-        "Anomalies": (state.anomaly_report, state.anomaly_summary),
-        "Consistency": (
-            state.consistency_report, state.consistency_summary,
-        ),
-        "Constraints": (
-            state.constraint_report, state.constraint_summary,
-        ),
+        "Schema":       (state.schema_report,       state.schema_summary),
+        "Completeness": (state.completeness_report,  state.completeness_summary),
+        "Duplicates":   (state.duplicate_report,     state.duplicate_summary),
+        "Anomalies":    (state.anomaly_report,        state.anomaly_summary),
+        "Consistency":  (state.consistency_report,   state.consistency_summary),
+        "Constraints":  (state.constraint_report,    state.constraint_summary),
     }
     for name, (report, summary) in reports.items():
         count = report.get("total_issues", 0)
-        with st.expander(f"{name} -- {count} issue(s)"):
+        with st.expander(f"{name} — {count} issue(s)"):
             if summary:
                 st.info(summary)
             agent_issues = report.get("issues", [])
@@ -278,11 +340,9 @@ def display_results(state, chart_images, dataset_name):
     else:
         st.info("No cross-agent insights generated.")
 
-    with st.expander("Agent Communication Log"):
+    with st.expander("Full Agent Communication Log"):
         if state.agent_log:
-            st.dataframe(
-                pd.DataFrame(state.agent_log), use_container_width=True,
-            )
+            st.dataframe(pd.DataFrame(state.agent_log), use_container_width=True)
         else:
             st.info("No agent log entries.")
 
@@ -297,7 +357,7 @@ def display_results(state, chart_images, dataset_name):
     )
     if state.df_cleaned is not None and not state.df_cleaned.empty:
         cleaned_csv = state.df_cleaned.to_csv(index=False).encode("utf-8")
-        base_name = dataset_name.rsplit(".", 1)[0]
+        base_name   = dataset_name.rsplit(".", 1)[0]
         col2.download_button(
             label="Download Cleaned Dataset (CSV)",
             data=cleaned_csv,
@@ -315,20 +375,30 @@ def _serialize_report(report):
         if isinstance(obj, pd.DataFrame):
             return obj.to_dict(orient="records")
         return str(obj)
-
     return json.dumps(report, indent=2, default=default_handler)
 
 
+# ── Main ───────────────────────────────────────────────────────────────────────
+
+uploaded_files = st.file_uploader(
+    "Upload one or more datasets",
+    type=["csv", "json", "xlsx", "xls", "parquet"],
+    accept_multiple_files=True,
+)
+
 if uploaded_files:
-    if st.button("Run Analysis"):
+    if st.button("Run Analysis", type="primary"):
         results = []
         for file_obj in uploaded_files:
+            st.divider()
+            st.subheader(f"📂 {file_obj.name}")
             state, chart_images = run_pipeline(file_obj)
             results.append((file_obj.name, state, chart_images))
         st.session_state["pipeline_results"] = results
 
 if "pipeline_results" in st.session_state:
     results = st.session_state["pipeline_results"]
+    st.divider()
 
     if len(results) > 1:
         st.header("Multi-Dataset Comparison")
@@ -337,12 +407,9 @@ if "pipeline_results" in st.session_state:
             with cols[idx]:
                 st.subheader(name)
                 before = state.reliability_score_before
-                after = state.reliability_score_after
+                after  = state.reliability_score_after
                 st.metric("Before", f"{before}/100")
-                st.metric(
-                    "After", f"{after}/100",
-                    delta=f"{after - before:+.1f}",
-                )
+                st.metric("After",  f"{after}/100", delta=f"{after - before:+.1f}")
                 st.metric("Issues Found", len(state.prioritized_issues))
                 st.metric("Fixes Applied", len(state.fix_log))
 
@@ -352,4 +419,5 @@ if "pipeline_results" in st.session_state:
                 display_results(state, charts, name)
     else:
         name, state, charts = results[0]
+        st.header(f"Results — {name}")
         display_results(state, charts, name)
