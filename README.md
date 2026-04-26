@@ -1,100 +1,55 @@
-# Reply — Multi-Agent Data Quality System
+# NoiPA — Multi-Agent Data Quality Pipeline
 
-A multi-agent pipeline for automated data quality analysis, built for the Reply/LUISS ML 2025/26 project. The system uses [Groq](https://console.groq.com) for LLM inference (free API).
+A Supervisor-style multi-agent system that ingests Italian Public Administration (NoiPA) datasets, detects quality issues across six dimensions (schema, completeness, consistency, anomaly, constraints, duplicates), automatically remediates what it can, and produces a multi-dimensional reliability score before and after remediation.
 
----
-
-## Requirements
-
-- Python 3.9+
-- A free [Groq API key](https://console.groq.com)
+> Status: **work in progress**. The repository is being refactored according to the 14-step roadmap in [`Implementation Plan v2.md`](./Implementation%20Plan%20v2.md). Final README content lands in Step 14.
 
 ---
 
-## Setup
-
-### 1. Clone the repository
+## Quickstart
 
 ```bash
 git clone <repo-url>
 cd Reply_multi-agents_project_810431
+python -m venv .venv && source .venv/Scripts/activate   # Windows; use bin/activate on macOS/Linux
+pip install -e ".[dev]"
+cp .env.example .env                                    # add your ANTHROPIC_API_KEY / OPENAI_API_KEY
+streamlit run app_demo.py
 ```
 
-### 2. Create and activate the virtual environment
+---
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate       # macOS / Linux
-# .venv\Scripts\activate        # Windows
-```
-
-### 3. Install dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Add your Groq API key
-
-Create a `.env` file in the project root:
+## Repository layout (target, see `CLAUDE.md`)
 
 ```
-GROQ_API_KEY=your_key_here
+state_demo/      # configuration, typed issue model, locale registry, pipeline state
+agents_demo/    # one file per agent + LangGraph wiring + PydanticAI clients
+tools.py        # stateless detection / fix functions
+tools_code_validator.py  # sandbox utilities for the code validator
+app_demo.py     # Streamlit dashboard
+data/examples/  # synthetic Italian-locale demo datasets
+tests/          # pytest harness
+docs/           # architecture diagram, presentation outline, decision log
 ```
+
+---
+
+## Tech stack (April 2026)
+
+LangGraph (orchestration) + PydanticAI (typed LLM I/O), Pydantic 2 discriminated unions for issues, Pandas 2.x dataframes, Streamlit UI, Docker-based sandbox for LLM-generated fixes (with a hardened-subprocess fallback).
+
+Default models: Anthropic `claude-sonnet-4-6` (smart) and `claude-haiku-4-5-20251001` (fast); OpenAI `gpt-5.4` / `gpt-5.4-mini` as fallbacks. Pinned versions live in [`pyproject.toml`](./pyproject.toml).
+
+---
+
+## Plan and contract
+
+- The 14-step roadmap is in [`Implementation Plan v2.md`](./Implementation%20Plan%20v2.md).
+- Operating contract for any AI agent working on this repo is in [`CLAUDE.md`](./CLAUDE.md).
+- Decisions taken under uncertainty are appended to `docs/cleanup_decisions.md` as the project advances.
 
 ---
 
 ## Datasets
 
-Located in `Datasets Reply-20260313/project_data_quality/`:
-
-| File | Description |
-|---|---|
-| `attivazioniCessazioni.csv` | Employee activations and terminations |
-| `spesa.csv` | Expenditure data |
-
----
-
-## Project Structure
-
-```
-.
-├── Datasets Reply-20260313/
-│   └── project_data_quality/
-│       ├── attivazioniCessazioni.csv
-│       └── spesa.csv
-├── state/
-│   ├── pipeline_state.py       # shared memory passed between all agents
-│   └── fingerprint_schema.py   # Pydantic schema for dataset profiling
-├── agents/
-│   ├── base_agent.py           # base class: Groq client, retry logic
-│   ├── ingestion_agent.py      # Layer 0: loads CSV/JSON/Excel/Parquet
-│   ├── profiler_agent.py       # Layer 0: classifies dataset semantically
-│   ├── schema_agent.py         # Layer 1: checks column type consistency
-│   ├── completeness_agent.py   # Layer 1: checks for missing values
-│   ├── duplicate_agent.py      # Layer 1: detects duplicate rows and columns
-│   └── anomaly_agent.py        # Layer 1: detects outliers and rare values
-├── guidelines/
-├── requirements.txt
-└── README.md
-```
-
----
-
-## Pipeline (work in progress)
-
-| Layer | Agents | Status |
-|---|---|---|
-| 0 — Intake | IngestionAgent, ProfilerAgent | done |
-| 1 — Analysis | SchemaAgent, CompletenessAgent, DuplicateAgent, AnomalyAgent | done |
-| 2 — Synthesis | SynthesisAgent | coming |
-| 3 — Action | RemediationAgent, AutoFixAgent | coming |
-| 4 — Output | ReportAgent | coming |
-
----
-
-## Notes
-
-- LLM inference runs via Groq (free tier) — no local GPU required.
-- The `.venv/` directory is not tracked by git. Each contributor must create it locally.
-- Never commit your `.env` file.
+Real NoiPA samples live in [`Datasets-Reply-20260313/project_data_quality/`](./Datasets-Reply-20260313/project_data_quality/) and are not modified by the pipeline. Synthetic Italian-locale demo CSVs (clean, dirty, large) are produced under `data/examples/` from Step 5 onwards.

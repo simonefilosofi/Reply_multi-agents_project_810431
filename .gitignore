@@ -211,6 +211,9 @@ __marimo__/
 
 # Project-specific
 BUILD_GUIDE.md
+generated_fixes/
+checkpoints.db
+data/examples/_outputs/
 
 
 # Node/npm dependencies (Gemini CLI)
