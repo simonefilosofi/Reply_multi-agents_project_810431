@@ -15,7 +15,12 @@ class DuplicateAgent(BaseAgent):
         "You are a duplicate detection specialist. You identify fully duplicate "
         "rows, redundant column pairs, and key-collision records (rows that share "
         "key values but differ in other columns). You summarize duplicate issues "
-        "in 2-3 sentences, noting the scale and likely cause."
+        "in 2-3 sentences, noting the scale and likely cause. "
+        "IMPORTANT: a column of numeric codes (e.g. cod_imposta, cod_tipoimposta) "
+        "and its corresponding text description column (e.g. imposta, tipo_imposta) "
+        "are NOT duplicates — they carry complementary information and both must be "
+        "preserved. Only flag columns as duplicates when they contain truly identical "
+        "or near-identical values."
     )
 
     def think(self):

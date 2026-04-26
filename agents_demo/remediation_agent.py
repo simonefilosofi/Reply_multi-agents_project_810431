@@ -14,6 +14,7 @@ from state_demo.helpers import missing_mask, non_empty_values
 from tools import (
     apply_lookup_imputation,
     build_column_lookup,
+    _is_placeholder_series,
     cap_outliers,
     fill_missing_categorical,
     fill_missing_numerical,
@@ -119,9 +120,9 @@ class RemediationAgent(BaseAgent):
             col = issue["column"]
             if col not in df.columns:
                 continue
-            placeholder_mask = (
-                df[col].astype(str).str.strip().str.lower().isin(PLACEHOLDERS)
-            )
+            # Use combined exact-match + regex detection so that values like
+            # 'da verificare', 'imposta x', or whitespace-only cells are caught.
+            placeholder_mask = _is_placeholder_series(df[col])
             count = int(placeholder_mask.sum())
             if count > 0:
                 df.loc[placeholder_mask, col] = None
@@ -268,6 +269,28 @@ class RemediationAgent(BaseAgent):
             # skip if either column was already dropped by a previous iteration
             if col_a not in df.columns or col_b not in df.columns:
                 continue
+            # Value-domain guard: if the two columns have different value spaces
+            # (e.g. numeric codes vs text descriptions) they are complementary,
+            # not structural duplicates — skip the drop regardless of the issue source.
+            # Placeholder values are excluded so shared sentinels (n.d., -, ?) don't
+            # inflate the similarity score.
+            def _content(col):
+                vals = df[col].dropna().astype(str).str.strip()
+                return {v for v in vals
+                        if v and v.lower() not in PLACEHOLDERS
+                        and not all(c in r"-./?#\/ " for c in v)}
+            set_a = _content(col_a)
+            set_b = _content(col_b)
+            if set_a and set_b:
+                jaccard = len(set_a & set_b) / len(set_a | set_b)
+                if jaccard < 0.20:
+                    self._log_fix(
+                        issue, "flagged_for_review",
+                        f"Skipped drop of '{col_a}'/'{col_b}': "
+                        f"value-domain Jaccard={jaccard:.2f} — columns are complementary",
+                        0,
+                    )
+                    continue
             to_drop = pick_duplicate_column_to_drop(col_a, col_b)
             to_keep = col_b if to_drop == col_a else col_a
             if to_drop in dropped_cols:

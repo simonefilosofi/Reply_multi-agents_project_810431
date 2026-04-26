@@ -9,22 +9,40 @@ PLACEHOLDERS = {
     "non disponibile", "non applicabile",
     "//", "///", "?", "??", "???", "#", "#n/d", "#nd", "#n/a",
     "error",
+    # Italian administrative placeholders
+    "da verificare", "da definire", "da inserire", "da completare",
+    "in attesa", "non pervenuto", "non rilevato", "non classificato",
+    "n.c.", "nc",
 }
 
+# Regex patterns for placeholder-like values that can't be caught by exact match.
+# Used alongside PLACEHOLDERS for detection and replacement.
+PLACEHOLDER_PATTERNS = [
+    re.compile(r'^\s*$'),                                                  # empty / whitespace-only
+    re.compile(r'^\w[\w\s]*\s+x\s*$', re.IGNORECASE),                    # "imposta x", "tipo x"
+    re.compile(r'^da\s+\w[\w\s]*$', re.IGNORECASE),                      # "da …" catch-all admin phrases
+    re.compile(r'^in\s+attesa\b', re.IGNORECASE),                         # "in attesa di …"
+]
+
+# ISO 8601 patterns must come first so they are counted before ambiguous DD/MM patterns.
 DATE_PATTERNS = [
-    ("DD/MM/YYYY", re.compile(r"^\d{1,2}/\d{1,2}/\d{4}$")),
-    ("DD-MM-YYYY", re.compile(r"^\d{2}-\d{2}-\d{4}$")),
-    ("DD.MM.YYYY", re.compile(r"^\d{2}\.\d{2}\.\d{4}$")),
-    ("YYYY-MM-DD", re.compile(r"^\d{4}-\d{2}-\d{2}$")),
-    ("YYYYMMDD", re.compile(r"^\d{8}$")),
+    ("YYYY-MM-DDTHH:MM:SS", re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$")),
+    ("YYYY-MM-DD HH:MM:SS", re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$")),
+    ("DD/MM/YYYY",           re.compile(r"^\d{1,2}/\d{1,2}/\d{4}$")),
+    ("DD-MM-YYYY",           re.compile(r"^\d{2}-\d{2}-\d{4}$")),
+    ("DD.MM.YYYY",           re.compile(r"^\d{2}\.\d{2}\.\d{4}$")),
+    ("YYYY-MM-DD",           re.compile(r"^\d{4}-\d{2}-\d{2}$")),
+    ("YYYYMMDD",             re.compile(r"^\d{8}$")),
 ]
 
 DATE_FORMAT_MAP = {
-    "DD/MM/YYYY": "%d/%m/%Y",
-    "DD-MM-YYYY": "%d-%m-%Y",
-    "DD.MM.YYYY": "%d.%m.%Y",
-    "YYYY-MM-DD": "%Y-%m-%d",
-    "YYYYMMDD": "%Y%m%d",
+    "YYYY-MM-DDTHH:MM:SS": "%Y-%m-%dT%H:%M:%S",
+    "YYYY-MM-DD HH:MM:SS": "%Y-%m-%d %H:%M:%S",
+    "DD/MM/YYYY":           "%d/%m/%Y",
+    "DD-MM-YYYY":           "%d-%m-%Y",
+    "DD.MM.YYYY":           "%d.%m.%Y",
+    "YYYY-MM-DD":           "%Y-%m-%d",
+    "YYYYMMDD":             "%Y%m%d",
 }
 
 SEVERITY_RANK = {"high": 0, "medium": 1, "low": 2}

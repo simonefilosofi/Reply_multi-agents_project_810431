@@ -15,7 +15,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from state_demo.constants import DATE_FORMAT_MAP, DATE_PATTERNS, PLACEHOLDERS
+from state_demo.constants import (
+    DATE_FORMAT_MAP, DATE_PATTERNS, PLACEHOLDERS, PLACEHOLDER_PATTERNS,
+)
 from state_demo.fingerprint_schema import DatasetFingerprint
 from state_demo.helpers import missing_mask, non_empty_values
 
@@ -488,10 +490,30 @@ def detect_duplicate_columns(df: pd.DataFrame, likely_pairs: list) -> list:
     issues = []
     already_flagged: set = set()
 
+    def _jaccard(col_a: str, col_b: str) -> float:
+        """Value-domain Jaccard similarity between two columns (string-cast).
+
+        Placeholder values (n.d., -, ?, etc.) are excluded so that columns whose
+        only shared values are sentinels are not falsely treated as duplicates.
+        """
+        def _content_values(col):
+            vals = df[col].dropna().astype(str).str.strip()
+            return {v for v in vals
+                    if v and v.lower() not in PLACEHOLDERS
+                    and not all(c in r"-./?#\/ " for c in v)}
+
+        set_a = _content_values(col_a)
+        set_b = _content_values(col_b)
+        if not set_a or not set_b:
+            return 0.0
+        return len(set_a & set_b) / len(set_a | set_b)
+
     # Pass 1 — profiler suggestions
     for pair in likely_pairs:
         if len(pair) == 2 and pair[0] in df.columns and pair[1] in df.columns:
             key = tuple(sorted(pair))
+            if _jaccard(pair[0], pair[1]) < 0.20:
+                continue  # different value domains (e.g. code vs description)
             already_flagged.add(key)
             issues.append({
                 "column": f"{pair[0]} / {pair[1]}",
@@ -537,6 +559,8 @@ def detect_duplicate_columns(df: pd.DataFrame, likely_pairs: list) -> list:
                 continue
             ratio = SequenceMatcher(None, norm_a, norm_b).ratio()
             if ratio >= 0.85:
+                if _jaccard(col_a, col_b) < 0.20:
+                    continue  # similar names but different value domains
                 already_flagged.add(key)
                 issues.append({
                     "column": f"{col_a} / {col_b}",
@@ -564,6 +588,8 @@ def detect_duplicate_columns(df: pd.DataFrame, likely_pairs: list) -> list:
                 else (norm_b, stripped_a)
             )
             if len(shorter) >= 5 and shorter in longer:
+                if _jaccard(col_a, col_b) < 0.20:
+                    continue  # substring name match but different value domains (code vs description)
                 already_flagged.add(key)
                 issues.append({
                     "column": f"{col_a} / {col_b}",
@@ -1147,17 +1173,32 @@ def normalize_period_column(df: pd.DataFrame, col: str) -> tuple[int, int]:
     return n_normalised, n_nulled
 
 
+def _is_placeholder_series(s: pd.Series) -> pd.Series:
+    """Return a boolean mask identifying placeholder values in a string Series.
+
+    Combines exact-match against PLACEHOLDERS (after strip+lower) with
+    regex-pattern matching against PLACEHOLDER_PATTERNS (original case, stripped).
+    """
+    stripped_lower = s.astype(str).str.strip().str.lower()
+    exact_mask = stripped_lower.isin(PLACEHOLDERS)
+    stripped = s.astype(str).str.strip()
+    regex_mask = stripped.apply(
+        lambda v: any(p.search(v) for p in PLACEHOLDER_PATTERNS)
+    )
+    return exact_mask | regex_mask
+
+
 def check_placeholder_values(df: pd.DataFrame) -> list:
     """Detect individual cells containing known placeholder strings in any column,
     regardless of overall missing rate.
 
-    Unlike compute_completeness (which has a >5% threshold), this function reports
-    columns with even a single placeholder cell, enabling surgical remediation.
+    Uses both exact-match (PLACEHOLDERS) and regex patterns (PLACEHOLDER_PATTERNS)
+    so that values like 'da verificare', 'imposta x', or whitespace-only strings
+    are caught alongside standard sentinels like '-', '?', 'n.d.'.
     """
     issues = []
     for col in df.columns:
-        s = df[col].astype(str).str.strip().str.lower()
-        placeholder_mask = s.isin(PLACEHOLDERS)
+        placeholder_mask = _is_placeholder_series(df[col])
         count = int(placeholder_mask.sum())
         if count == 0:
             continue
@@ -1167,8 +1208,8 @@ def check_placeholder_values(df: pd.DataFrame) -> list:
             "column": col,
             "type": "placeholder_values",
             "detail": (
-                f"{count} cells contain known placeholder strings "
-                f"(e.g. '-', '//', '?', 'n.d.') that should be NULL"
+                f"{count} cells contain placeholder/sentinel strings "
+                f"(e.g. '-', '//', 'da verificare', 'imposta x') that should be NULL"
             ),
             "severity": severity,
             "rows_affected": count,
@@ -1192,6 +1233,7 @@ def _is_month_column(df: pd.DataFrame, col: str) -> bool:
     if len(raw) < 5:
         return False
     resolved = 0
+    valid_int_vals = []
     for v in raw.astype(str).str.strip():
         lower = v.lower()
         if lower in _ALL_MONTH_NAMES:
@@ -1201,9 +1243,18 @@ def _is_month_column(df: pd.DataFrame, col: str) -> bool:
             n = float(v)
             if n % 1 == 0 and int(n) in (set(range(-1, 14)) | {99}):
                 resolved += 1
+                if 1 <= int(n) <= 12:
+                    valid_int_vals.append(int(n))
         except (ValueError, TypeError):
             pass
-    return resolved / len(raw) >= 0.80
+    if resolved / len(raw) < 0.80:
+        return False
+    # A genuine month column must have at least one value ≤ 4 (Jan–Apr).
+    # Columns whose minimum valid integer is ≥ 5 are likely code columns
+    # whose value range happens to overlap with month numbers.
+    if valid_int_vals and min(valid_int_vals) > 4:
+        return False
+    return True
 
 
 def check_month_column(df: pd.DataFrame, cols: list) -> list:
@@ -1592,10 +1643,17 @@ _IT_MONTH_MAP = {
 }
 
 _EXPLICIT_DATE_FORMATS = [
+    # ISO 8601 variants first — completely unambiguous, no dayfirst influence
+    "%Y-%m-%dT%H:%M:%S.%f",
+    "%Y-%m-%dT%H:%M:%S",
+    "%Y-%m-%d %H:%M:%S",
+    "%Y-%m-%d",
+    "%Y/%m/%d",
+    "%Y%m%d",
+    # Locale-specific — ambiguous between day/month, tried after ISO
     "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y",
-    "%Y-%m-%d", "%Y/%m/%d", "%Y%m%d",
-    "%d/%m/%y", "%d-%m-%y",           # 2-digit year variants
-    "%m/%d/%Y",                        # US format fallback
+    "%d/%m/%y", "%d-%m-%y",
+    "%m/%d/%Y",
 ]
 
 
@@ -1774,14 +1832,16 @@ def cap_outliers(
 def standardize_date_format(df: pd.DataFrame, col: str) -> tuple[str, str]:
     """Standardize a date column to the dominant format in-place.
 
+    Derives dayfirst from the dominant format so that ISO dates (YYYY-*)
+    are never re-parsed with dayfirst=True, which would swap day and month
+    (e.g. 2024-01-11 → November 1 instead of January 11).
+
     Returns (action, detail) where action is 'auto_fixed' or 'flagged_for_review'.
     """
     if col not in df.columns:
         return "flagged_for_review", "Column not found"
     if pd.api.types.is_datetime64_any_dtype(df[col]):
-        return "auto_fixed", (
-            f"Column already parsed as datetime -- format is standardized"
-        )
+        return "auto_fixed", "Column already parsed as datetime — format is standardized"
     values = df[col].dropna().astype(str).str.strip()
     pattern_counts: dict[str, int] = {}
     for val in values:
@@ -1793,7 +1853,13 @@ def standardize_date_format(df: pd.DataFrame, col: str) -> tuple[str, str]:
         return "flagged_for_review", "No recognized date patterns found"
     dominant = max(pattern_counts, key=pattern_counts.get)
     fmt = DATE_FORMAT_MAP.get(dominant, "%d/%m/%Y")
-    parsed = pd.to_datetime(df[col], errors="coerce", dayfirst=True)
+
+    # ISO-family formats start with %Y → year-first → dayfirst must be False.
+    # Locale formats start with %d → day-first → dayfirst=True is correct.
+    # Using dayfirst=True on ISO strings causes dateutil to swap day and month
+    # (e.g. "2024-01-11" becomes November 1 instead of January 11).
+    dayfirst = not fmt.startswith("%Y")
+    parsed = pd.to_datetime(df[col], errors="coerce", dayfirst=dayfirst)
     reformatted = parsed.dt.strftime(fmt)
     reformatted[parsed.isna()] = pd.NA
     changed = int((reformatted != df[col].astype(str)).sum())
