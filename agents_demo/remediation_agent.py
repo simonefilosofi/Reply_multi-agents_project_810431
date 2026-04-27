@@ -1,20 +1,20 @@
 """Layer 3 remediation agent. Applies automated fixes for data quality issues
 identified by Layer 1 agents, logs all actions to the fix log, and uses LLM
-reasoning for ambiguous remediation decisions."""
+reasoning for ambiguous remediation decisions.
+"""
 
 from collections import defaultdict
-from itertools import combinations
 
 import pandas as pd
 
-from agents_demo.base_agent import BaseAgent, SMART
+from agents_demo.base_agent import SMART, BaseAgent
 from agents_demo.code_validator_agent import CodeValidatorAgent
 from state_demo.constants import GAP_DETECTION_ISSUE_TYPES, ISSUE_TYPES, PLACEHOLDERS, SEVERITY_RANK
 from state_demo.helpers import missing_mask, non_empty_values
 from tools import (
+    _is_placeholder_series,
     apply_lookup_imputation,
     build_column_lookup,
-    _is_placeholder_series,
     cap_outliers,
     fill_missing_categorical,
     fill_missing_numerical,
@@ -23,7 +23,6 @@ from tools import (
     fix_invalid_dates,
     fix_mixed_type,
     fix_month_column,
-    fix_special_month_codes,
     fix_year_column,
     normalize_case,
     normalize_period_column,
@@ -50,20 +49,32 @@ class RemediationAgent(BaseAgent):
         issues = self.state.prioritized_issues
         insights = self.state.cross_agent_insights
         auto_types = {
-            "duplicate_rows", "outliers", "mixed_type", "naming_convention",
-            "format_inconsistency", "case_inconsistency", "missing_values",
-            "invalid_dates", "float_precision_noise", "fractional_integers",
-            "format_pattern_violation", "placeholder_values",
-            "period_format_inconsistency", "special_month_code",
-            "month_format_inconsistency", "ambiguous_year_format",
+            "duplicate_rows",
+            "outliers",
+            "mixed_type",
+            "naming_convention",
+            "format_inconsistency",
+            "case_inconsistency",
+            "missing_values",
+            "invalid_dates",
+            "float_precision_noise",
+            "fractional_integers",
+            "format_pattern_violation",
+            "placeholder_values",
+            "period_format_inconsistency",
+            "special_month_code",
+            "month_format_inconsistency",
+            "ambiguous_year_format",
             "year_format_inconsistency",
         }
         auto_count = sum(1 for i in issues if i["type"] in auto_types)
         flag_count = len(issues) - auto_count
-        self.log("think",
-                 f"{self.prompt} | Planning remediation for {len(issues)} issues "
-                 f"({auto_count} auto-fixable, {flag_count} flag-only). "
-                 f"{len(insights)} cross-agent insights available.")
+        self.log(
+            "think",
+            f"{self.prompt} | Planning remediation for {len(issues)} issues "
+            f"({auto_count} auto-fixable, {flag_count} flag-only). "
+            f"{len(insights)} cross-agent insights available.",
+        )
 
     def act(self):
         df = self.state.df_raw.copy()
@@ -78,43 +89,50 @@ class RemediationAgent(BaseAgent):
         for issue in issues_by_type.get("period_format_inconsistency", []):
             col = issue["column"]
             normalised, nulled = normalize_period_column(df, col)
-            self._log_fix(issue, "auto_fixed",
-                          f"Normalised {normalised} period values to canonical "
-                          f"YYYYMM format; {nulled} unparseable values set to NULL",
-                          normalised + nulled)
+            self._log_fix(
+                issue,
+                "auto_fixed",
+                f"Normalised {normalised} period values to canonical "
+                f"YYYYMM format; {nulled} unparseable values set to NULL",
+                normalised + nulled,
+            )
 
         # Merge month_format_inconsistency + special_month_code into one fix pass
         # (fix_month_column handles text names, specials, and out-of-range in one go)
         month_cols_fixed = set()
-        for issue in (
-            issues_by_type.get("month_format_inconsistency", [])
-            + issues_by_type.get("special_month_code", [])
+        for issue in issues_by_type.get("month_format_inconsistency", []) + issues_by_type.get(
+            "special_month_code", []
         ):
             col = issue["column"]
             if col in month_cols_fixed:
                 continue
             month_cols_fixed.add(col)
             changed = fix_month_column(df, col)
-            self._log_fix(issue, "auto_fixed",
-                          f"Normalised {changed} month values to integers 1-12 "
-                          f"(converted text names, nulled special codes)",
-                          changed)
+            self._log_fix(
+                issue,
+                "auto_fixed",
+                f"Normalised {changed} month values to integers 1-12 "
+                f"(converted text names, nulled special codes)",
+                changed,
+            )
 
         # Year column normalisation: trailing noise + 2-digit century expansion
         year_cols_fixed = set()
-        for issue in (
-            issues_by_type.get("year_format_inconsistency", [])
-            + issues_by_type.get("ambiguous_year_format", [])
+        for issue in issues_by_type.get("year_format_inconsistency", []) + issues_by_type.get(
+            "ambiguous_year_format", []
         ):
             col = issue["column"]
             if col in year_cols_fixed:
                 continue
             year_cols_fixed.add(col)
             changed = fix_year_column(df, col)
-            self._log_fix(issue, "auto_fixed",
-                          f"Normalised {changed} year values to 4-digit integers "
-                          f"(stripped trailing noise, expanded 2-digit years)",
-                          changed)
+            self._log_fix(
+                issue,
+                "auto_fixed",
+                f"Normalised {changed} year values to 4-digit integers "
+                f"(stripped trailing noise, expanded 2-digit years)",
+                changed,
+            )
 
         for issue in issues_by_type.get("placeholder_values", []):
             col = issue["column"]
@@ -126,32 +144,39 @@ class RemediationAgent(BaseAgent):
             count = int(placeholder_mask.sum())
             if count > 0:
                 df.loc[placeholder_mask, col] = None
-                self._log_fix(issue, "auto_fixed",
-                              f"Replaced {count} placeholder cells with NULL",
-                              count)
+                self._log_fix(
+                    issue, "auto_fixed", f"Replaced {count} placeholder cells with NULL", count
+                )
 
         for issue in issues_by_type.get("fractional_integers", []):
             col = issue["column"]
             nulled = fix_fractional_integers(df, col)
-            self._log_fix(issue, "auto_fixed",
-                          f"Nulled {nulled} values with non-trivial fractional "
-                          f"parts in integer column",
-                          nulled)
+            self._log_fix(
+                issue,
+                "auto_fixed",
+                f"Nulled {nulled} values with non-trivial fractional parts in integer column",
+                nulled,
+            )
 
         for issue in issues_by_type.get("mixed_type", []):
             col = issue["column"]
             coerced = fix_mixed_type(df, col)
-            self._log_fix(issue, "auto_fixed",
-                          f"Coerced to numeric -- {coerced} non-numeric values became NaN",
-                          coerced)
+            self._log_fix(
+                issue,
+                "auto_fixed",
+                f"Coerced to numeric -- {coerced} non-numeric values became NaN",
+                coerced,
+            )
 
         for issue in issues_by_type.get("invalid_dates", []):
             col = issue["column"]
             method, valid = fix_invalid_dates(df, col)
-            self._log_fix(issue, "auto_fixed",
-                          f"Re-parsed dates ({method}) -- "
-                          f"{valid}/{len(df)} values parsed successfully",
-                          valid)
+            self._log_fix(
+                issue,
+                "auto_fixed",
+                f"Re-parsed dates ({method}) -- {valid}/{len(df)} values parsed successfully",
+                valid,
+            )
 
         if issues_by_type.get("duplicate_rows"):
             removed = remove_duplicate_rows(df)
@@ -169,19 +194,25 @@ class RemediationAgent(BaseAgent):
         for issue in issues_by_type.get("outliers", []):
             col = issue["column"]
             if col in id_cols:
-                self._log_fix(issue, "flagged_for_review",
-                              f"Outlier in ID/key column — "
-                              f"capping would corrupt semantics, requires manual review",
-                              0)
+                self._log_fix(
+                    issue,
+                    "flagged_for_review",
+                    "Outlier in ID/key column — "
+                    "capping would corrupt semantics, requires manual review",
+                    0,
+                )
                 continue
 
             # Guard: never cap columns the profiler classified as categorical —
             # they contain codes or enums, not continuous quantities.
             if col in cat_cols:
-                self._log_fix(issue, "flagged_for_review",
-                              f"Column classified as categorical (codes/enums) — "
-                              f"outlier capping suppressed to preserve category integrity",
-                              0)
+                self._log_fix(
+                    issue,
+                    "flagged_for_review",
+                    "Column classified as categorical (codes/enums) — "
+                    "outlier capping suppressed to preserve category integrity",
+                    0,
+                )
                 continue
 
             # Guard: don't cap power-law / highly-skewed distributions.
@@ -196,11 +227,13 @@ class RemediationAgent(BaseAgent):
                 iqr = q3 - q1
                 cap_rate = (
                     ((raw_numeric < q1 - 3 * iqr) | (raw_numeric > q3 + 3 * iqr)).mean()
-                    if iqr > 0 else 0.0
+                    if iqr > 0
+                    else 0.0
                 )
                 if abs(skewness) > 2.0 or cap_rate > 0.05:
                     self._log_fix(
-                        issue, "flagged_for_review",
+                        issue,
+                        "flagged_for_review",
                         f"Skewed distribution (skewness={skewness:.2f}, "
                         f"{cap_rate:.1%} of values beyond 3×IQR fence) — "
                         f"capping suppressed to preserve power-law structure; "
@@ -211,17 +244,22 @@ class RemediationAgent(BaseAgent):
 
             lower, upper, count = cap_outliers(df, col, self.state.df_raw[col])
             if count > 0:
-                self._log_fix(issue, "auto_fixed",
-                              f"Capped {count} outliers to [{lower:.2f}, {upper:.2f}] (3×IQR fence)",
-                              count)
+                self._log_fix(
+                    issue,
+                    "auto_fixed",
+                    f"Capped {count} outliers to [{lower:.2f}, {upper:.2f}] (3×IQR fence)",
+                    count,
+                )
 
         for issue in issues_by_type.get("float_precision_noise", []):
             col = issue["column"]
             changed = round_float_precision(df, col, decimals=2)
-            self._log_fix(issue, "auto_fixed",
-                          f"Rounded {changed} values to 2 decimal places "
-                          f"to remove floating-point noise",
-                          changed)
+            self._log_fix(
+                issue,
+                "auto_fixed",
+                f"Rounded {changed} values to 2 decimal places to remove floating-point noise",
+                changed,
+            )
 
         for issue in issues_by_type.get("format_pattern_violation", []):
             col = issue.get("column", "")
@@ -229,32 +267,39 @@ class RemediationAgent(BaseAgent):
             # Never auto-null values in ID or key columns based on a pattern —
             # an incorrect LLM-inferred regex would destroy the primary key.
             if col in id_cols or col in fp.get("suggested_key_columns", []):
-                self._log_fix(issue, "flagged_for_review",
-                              f"Format pattern violation in ID/key column "
-                              f"'{col}' — auto-nulling suppressed to preserve "
-                              f"primary key integrity",
-                              0)
+                self._log_fix(
+                    issue,
+                    "flagged_for_review",
+                    f"Format pattern violation in ID/key column "
+                    f"'{col}' — auto-nulling suppressed to preserve "
+                    f"primary key integrity",
+                    0,
+                )
             elif pattern:
                 nulled = null_pattern_violations(df, col, pattern)
-                self._log_fix(issue, "auto_fixed",
-                              f"Nulled {nulled} values violating expected "
-                              f"format pattern",
-                              nulled)
+                self._log_fix(
+                    issue,
+                    "auto_fixed",
+                    f"Nulled {nulled} values violating expected format pattern",
+                    nulled,
+                )
             else:
                 self._flag_issue(issue)
 
         for issue in issues_by_type.get("format_inconsistency", []):
             col = issue.get("column", "")
             action, detail = standardize_date_format(df, col)
-            self._log_fix(issue, action, detail,
-                          0 if action == "flagged_for_review" else 1)
+            self._log_fix(issue, action, detail, 0 if action == "flagged_for_review" else 1)
 
         for issue in issues_by_type.get("case_inconsistency", []):
             col = issue.get("column", "")
             changed = normalize_case(df, col)
-            self._log_fix(issue, "auto_fixed",
-                          f"Normalized {changed} values to most frequent casing variant",
-                          changed)
+            self._log_fix(
+                issue,
+                "auto_fixed",
+                f"Normalized {changed} values to most frequent casing variant",
+                changed,
+            )
 
         # Drop duplicate columns BEFORE renaming so the original names
         # detected by DuplicateAgent still exist in df.
@@ -269,6 +314,7 @@ class RemediationAgent(BaseAgent):
             # skip if either column was already dropped by a previous iteration
             if col_a not in df.columns or col_b not in df.columns:
                 continue
+
             # Value-domain guard: if the two columns have different value spaces
             # (e.g. numeric codes vs text descriptions) they are complementary,
             # not structural duplicates — skip the drop regardless of the issue source.
@@ -276,16 +322,20 @@ class RemediationAgent(BaseAgent):
             # inflate the similarity score.
             def _content(col):
                 vals = df[col].dropna().astype(str).str.strip()
-                return {v for v in vals
-                        if v and v.lower() not in PLACEHOLDERS
-                        and not all(c in r"-./?#\/ " for c in v)}
+                return {
+                    v
+                    for v in vals
+                    if v and v.lower() not in PLACEHOLDERS and not all(c in r"-./?#\/ " for c in v)
+                }
+
             set_a = _content(col_a)
             set_b = _content(col_b)
             if set_a and set_b:
                 jaccard = len(set_a & set_b) / len(set_a | set_b)
                 if jaccard < 0.20:
                     self._log_fix(
-                        issue, "flagged_for_review",
+                        issue,
+                        "flagged_for_review",
                         f"Skipped drop of '{col_a}'/'{col_b}': "
                         f"value-domain Jaccard={jaccard:.2f} — columns are complementary",
                         0,
@@ -298,7 +348,8 @@ class RemediationAgent(BaseAgent):
             df.drop(columns=[to_drop], inplace=True)
             dropped_cols.add(to_drop)
             self._log_fix(
-                issue, "auto_fixed",
+                issue,
+                "auto_fixed",
                 f"Dropped duplicate column '{to_drop}' (kept '{to_keep}')",
                 0,
             )
@@ -310,9 +361,9 @@ class RemediationAgent(BaseAgent):
                 continue
             old, new = fix_column_naming(df, col)
             if new != old:
-                self._log_fix(issue, "auto_fixed",
-                              f"Renamed '{old}' -> '{new}'", 0,
-                              old=old, new=new)
+                self._log_fix(
+                    issue, "auto_fixed", f"Renamed '{old}' -> '{new}'", 0, old=old, new=new
+                )
 
         # Duplicate-key on id_columns: rows with the same primary key value
         # are a data integrity violation — drop subsequent duplicates (keep first).
@@ -328,7 +379,8 @@ class RemediationAgent(BaseAgent):
                 df.reset_index(drop=True, inplace=True)
                 removed = before - len(df)
                 self._log_fix(
-                    issue, "auto_fixed",
+                    issue,
+                    "auto_fixed",
                     f"Removed {removed} rows with duplicate primary key "
                     f"[{issue['column']}] (kept first occurrence per key)",
                     removed,
@@ -353,7 +405,8 @@ class RemediationAgent(BaseAgent):
             if filled > 0:
                 lookup_filled_total += filled
                 self._log_fix(
-                    issue, "auto_fixed",
+                    issue,
+                    "auto_fixed",
                     f"Imputed {filled} missing '{tgt}' values from '{src}' "
                     f"via learned mapping ({len(lookup)} unique mappings)",
                     filled,
@@ -363,11 +416,16 @@ class RemediationAgent(BaseAgent):
 
         for flag_type in (
             "sparse_column",
-            "date_order", "rare_categories", "conditional_completeness",
-            "cross_column_mismatch", "domain_negative_values",
-            "currency_symbol_in_numeric", "comma_decimal_format",
+            "date_order",
+            "rare_categories",
+            "conditional_completeness",
+            "cross_column_mismatch",
+            "domain_negative_values",
+            "currency_symbol_in_numeric",
+            "comma_decimal_format",
             "nd_placeholder_in_numeric",
-            "ambiguous_year_format", "invalid_year_value",
+            "ambiguous_year_format",
+            "invalid_year_value",
         ):
             for issue in issues_by_type.get(flag_type, []):
                 col = issue.get("column", "")
@@ -385,8 +443,7 @@ class RemediationAgent(BaseAgent):
         for issue in gap_issues:
             self.state.prioritized_issues.append(issue)
         if gap_issues:
-            self.log("act",
-                     f"Routing {len(gap_issues)} gap issue(s) to CodeValidatorAgent")
+            self.log("act", f"Routing {len(gap_issues)} gap issue(s) to CodeValidatorAgent")
             validator = CodeValidatorAgent(self.state)
             validator.run(gap_issues)
 
@@ -395,11 +452,25 @@ class RemediationAgent(BaseAgent):
     # candidates for automatic recomputation.  This prevents the algorithm from
     # "correcting" a base measurement (e.g. cost, revenue) using a derived
     # quantity (e.g. profit), which would propagate capping errors incorrectly.
-    _DERIVED_KEYWORDS = frozenset({
-        "profit", "margin", "net", "total", "balance",
-        "diff", "delta", "change", "result", "gain", "loss",
-        "surplus", "deficit", "yield", "return",
-    })
+    _DERIVED_KEYWORDS = frozenset(
+        {
+            "profit",
+            "margin",
+            "net",
+            "total",
+            "balance",
+            "diff",
+            "delta",
+            "change",
+            "result",
+            "gain",
+            "loss",
+            "surplus",
+            "deficit",
+            "yield",
+            "return",
+        }
+    )
 
     @classmethod
     def _looks_derived(cls, col_name: str) -> bool:
@@ -427,7 +498,8 @@ class RemediationAgent(BaseAgent):
 
         # Which columns were touched by outlier capping?
         capped_cols = {
-            f["column"] for f in self.state.fix_log
+            f["column"]
+            for f in self.state.fix_log
             if f["issue_type"] == "outliers" and f["action"] == "auto_fixed"
         }
         if not capped_cols:
@@ -435,7 +507,8 @@ class RemediationAgent(BaseAgent):
 
         # Collect numerical columns present in both frames
         num_cols = [
-            col for col in df_clean.columns
+            col
+            for col in df_clean.columns
             if col in df_raw.columns
             and pd.to_numeric(df_raw[col], errors="coerce").notna().mean() > 0.80
         ]
@@ -491,8 +564,7 @@ class RemediationAgent(BaseAgent):
                         )
                         self.log(
                             "act",
-                            f"Recomputed derived column '{col_c}' = "
-                            f"'{col_a}' − '{col_b}'",
+                            f"Recomputed derived column '{col_c}' = '{col_a}' − '{col_b}'",
                         )
                         break
                 if col_c in recomputed:
@@ -501,22 +573,17 @@ class RemediationAgent(BaseAgent):
     def _run_gap_detection(self, df) -> list:
         """LLM gap detection on df_cleaned — finds issues that remain after
         all deterministic fixes. Returns a list of gap issues ready for
-        CodeValidatorAgent."""
-
+        CodeValidatorAgent.
+        """
         # Per-column map of what was already fixed — explicit so LLM won't re-detect
         fixed_per_col: dict = {}
         for f in self.state.fix_log:
             if f["action"] == "auto_fixed":
                 col = f["column"]
-                fixed_per_col.setdefault(col, []).append(
-                    f"{f['issue_type']}: {f['description']}"
-                )
+                fixed_per_col.setdefault(col, []).append(f"{f['issue_type']}: {f['description']}")
 
         # Already-handled (type, column) pairs — used for post-filter
-        handled_pairs = {
-            (f["issue_type"], f["column"])
-            for f in self.state.fix_log
-        }
+        handled_pairs = {(f["issue_type"], f["column"]) for f in self.state.fix_log}
 
         col_to_issues: dict = {}
         for issue in self.state.prioritized_issues:
@@ -528,9 +595,7 @@ class RemediationAgent(BaseAgent):
             nev = non_empty_values(df[col])
             if len(nev) == 0:
                 continue
-            sample = list(
-                nev.sample(min(50, len(nev)), random_state=42).astype(str)
-            )
+            sample = list(nev.sample(min(50, len(nev)), random_state=42).astype(str))
             dtype = str(df[col].dtype)
             already_fixed = fixed_per_col.get(col, [])
             sections.append(
@@ -544,8 +609,7 @@ class RemediationAgent(BaseAgent):
             return []
 
         allowed_types_text = "\n".join(
-            f"  {t}: {ISSUE_TYPES[t]}"
-            for t in sorted(GAP_DETECTION_ISSUE_TYPES)
+            f"  {t}: {ISSUE_TYPES[t]}" for t in sorted(GAP_DETECTION_ISSUE_TYPES)
         )
 
         user = (
@@ -569,8 +633,7 @@ class RemediationAgent(BaseAgent):
         )
 
         try:
-            result = self.call_llm_json(user, max_tokens=2048,
-                                        required_keys=["gap_issues"])
+            result = self.call_llm_json(user, max_tokens=2048, required_keys=["gap_issues"])
             gap_issues = result.get("gap_issues", [])
             valid = []
             for issue in gap_issues:
@@ -581,23 +644,20 @@ class RemediationAgent(BaseAgent):
                 if col not in df.columns:
                     continue
                 if itype not in GAP_DETECTION_ISSUE_TYPES:
-                    self.log("act",
-                             f"Gap issue rejected — type '{itype}' not in vocabulary")
+                    self.log("act", f"Gap issue rejected — type '{itype}' not in vocabulary")
                     continue
                 if (itype, col) in handled_pairs:
-                    self.log("act",
-                             f"Gap issue rejected — '{itype}' on '{col}' "
-                             f"already handled")
+                    self.log("act", f"Gap issue rejected — '{itype}' on '{col}' already handled")
                     continue
                 if issue.get("severity") not in ("high", "medium", "low"):
                     continue
                 valid.append({**issue, "source": "synthesis_gap_detection"})
-                self.log("act",
-                         f"Post-remediation gap: '{col}' [{itype}] — "
-                         f"{issue.get('detail', '')}")
-            self.log("act",
-                     f"Post-remediation gap detection complete — "
-                     f"{len(valid)} issue(s) found")
+                self.log(
+                    "act", f"Post-remediation gap: '{col}' [{itype}] — {issue.get('detail', '')}"
+                )
+            self.log(
+                "act", f"Post-remediation gap detection complete — {len(valid)} issue(s) found"
+            )
             if valid:
                 self.state.prioritized_issues.sort(
                     key=lambda x: SEVERITY_RANK.get(x.get("severity", "low"), 2)
@@ -627,7 +687,8 @@ class RemediationAgent(BaseAgent):
         valid_vals = df.loc[~is_missing, col].dropna()
         if valid_vals.astype(str).str.strip().nunique() <= 2:
             self._log_fix(
-                issue, "flagged_for_review",
+                issue,
+                "flagged_for_review",
                 f"Binary flag column with {rows_affected} missing values "
                 f"— auto-imputation suppressed to preserve flag distribution; "
                 f"requires domain review",
@@ -640,7 +701,8 @@ class RemediationAgent(BaseAgent):
             # summary statistics; flag instead of auto-fill.
             if severity in ("high", "medium"):
                 self._log_fix(
-                    issue, "flagged_for_review",
+                    issue,
+                    "flagged_for_review",
                     f"Numerical column with {rows_affected} missing values "
                     f"(severity={severity}): median imputation suppressed to "
                     f"prevent statistical bias — requires domain review",
@@ -652,15 +714,14 @@ class RemediationAgent(BaseAgent):
             self._log_fix(issue, action, detail, rows_affected)
         elif col in date_cols:
             self._log_fix(
-                issue, "flagged_for_review",
+                issue,
+                "flagged_for_review",
                 f"Date column with {rows_affected} missing values "
                 f"-- requires domain knowledge to impute",
                 rows_affected,
             )
         elif col in cat_cols:
-            success, detail = fill_missing_categorical(
-                df, col, is_missing, issue["severity"]
-            )
+            success, detail = fill_missing_categorical(df, col, is_missing, issue["severity"])
             action = "auto_fixed" if success else "flagged_for_review"
             self._log_fix(issue, action, detail, rows_affected)
         else:
@@ -670,14 +731,13 @@ class RemediationAgent(BaseAgent):
                 action = "auto_fixed" if success else "flagged_for_review"
                 self._log_fix(issue, action, detail, rows_affected)
             elif strategy == "mode":
-                success, detail = fill_missing_categorical(
-                    df, col, is_missing, issue["severity"]
-                )
+                success, detail = fill_missing_categorical(df, col, is_missing, issue["severity"])
                 action = "auto_fixed" if success else "flagged_for_review"
                 self._log_fix(issue, action, detail, rows_affected)
             else:
                 self._log_fix(
-                    issue, "flagged_for_review",
+                    issue,
+                    "flagged_for_review",
                     f"Unclassified column with {rows_affected} missing values "
                     f"-- flagged for human review",
                     rows_affected,
@@ -693,8 +753,7 @@ class RemediationAgent(BaseAgent):
             f'Respond ONLY with JSON: {{"strategy": "median"|"mode"|"flag", "reason": "..."}}'
         )
         try:
-            result = self.call_llm_json(user, max_tokens=512,
-                                        required_keys=["strategy"])
+            result = self.call_llm_json(user, max_tokens=512, required_keys=["strategy"])
             strategy = result.get("strategy", "flag")
             reason = result.get("reason", "")
             self.log("act", f"LLM strategy for '{col}': {strategy} -- {reason}")
@@ -742,29 +801,32 @@ class RemediationAgent(BaseAgent):
         df_clean = self.state.df_cleaned
         rows_removed = len(df_raw) - len(df_clean)
         cols_renamed = sum(
-            1 for f in self.state.fix_log
+            1
+            for f in self.state.fix_log
             if f["issue_type"] == "naming_convention" and f["action"] == "auto_fixed"
         )
         auto_fixed = sum(
-            1 for f in self.state.fix_log
-            if f["action"] in ("auto_fixed", "auto_fixed_by_llm")
+            1 for f in self.state.fix_log if f["action"] in ("auto_fixed", "auto_fixed_by_llm")
         )
         flagged = sum(1 for f in self.state.fix_log if f["action"] == "flagged_for_review")
-        self.log("observe",
-                 f"Remediation complete: {auto_fixed} auto-fixed, "
-                 f"{flagged} flagged for review. "
-                 f"Rows removed: {rows_removed}, "
-                 f"columns renamed: {cols_renamed}. "
-                 f"df_cleaned shape: {df_clean.shape}")
+        self.log(
+            "observe",
+            f"Remediation complete: {auto_fixed} auto-fixed, "
+            f"{flagged} flagged for review. "
+            f"Rows removed: {rows_removed}, "
+            f"columns renamed: {cols_renamed}. "
+            f"df_cleaned shape: {df_clean.shape}",
+        )
 
     def reply(self):
-        fix_summary = "\n".join(
-            f"- [{f['action']}] {f['column']}: {f['description']}"
-            for f in self.state.fix_log
-        ) or "No fixes applied."
+        fix_summary = (
+            "\n".join(
+                f"- [{f['action']}] {f['column']}: {f['description']}" for f in self.state.fix_log
+            )
+            or "No fixes applied."
+        )
         auto_fixed = sum(
-            1 for f in self.state.fix_log
-            if f["action"] in ("auto_fixed", "auto_fixed_by_llm")
+            1 for f in self.state.fix_log if f["action"] in ("auto_fixed", "auto_fixed_by_llm")
         )
         flagged = sum(1 for f in self.state.fix_log if f["action"] == "flagged_for_review")
 
@@ -779,8 +841,7 @@ class RemediationAgent(BaseAgent):
         except Exception as e:
             self.log("error", str(e))
             narrative = (
-                f"{auto_fixed} issues auto-remediated, "
-                f"{flagged} issues flagged for human review."
+                f"{auto_fixed} issues auto-remediated, {flagged} issues flagged for human review."
             )
         self.state.remediation_plan = self.state.fix_log
         self.log("reply", narrative)

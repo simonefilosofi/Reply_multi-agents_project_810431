@@ -9,8 +9,6 @@ import subprocess
 import sys
 import tempfile
 
-from typing import Optional, Union
-
 import numpy as np
 import pandas as pd
 
@@ -25,18 +23,19 @@ SANDBOX_TIMEOUT = 10
 
 # ── Filter helpers ─────────────────────────────────────────────────────────────
 
+
 def eval_filter_expression(
     filter_expr: str,
     df: pd.DataFrame,
     col: str,
-) -> tuple[Optional[pd.Series], str]:
+) -> tuple[pd.Series | None, str]:
     """Evaluate a filter expression string against df[col].
 
     Returns (mask, error). mask is a boolean Series on success; error is a
     non-empty string describing the failure on error.
     """
     try:
-        mask = eval(  # noqa: S307
+        mask = eval(
             filter_expr,
             {"df": df, "col": col, "pd": pd, "np": np},
         )
@@ -55,7 +54,7 @@ def check_filter_coverage(
     target: pd.DataFrame,
     df: pd.DataFrame,
     filter_expr: str,
-    col: Optional[str] = None,
+    col: str | None = None,
 ) -> str:
     """Return a non-empty feedback string if the filter is invalid, else ''.
 
@@ -76,6 +75,7 @@ def check_filter_coverage(
 
 # ── Subsample builder ──────────────────────────────────────────────────────────
 
+
 def build_test_subsample(
     df: pd.DataFrame,
     target_rows: pd.DataFrame,
@@ -93,22 +93,19 @@ def build_test_subsample(
         if len(normal_pool) > 0
         else normal_pool
     )
-    return (
-        pd.concat([target_rows, normal_rows])
-        .drop_duplicates()
-        .reset_index(drop=True)
-    )
+    return pd.concat([target_rows, normal_rows]).drop_duplicates().reset_index(drop=True)
 
 
 # ── Subprocess sandbox ─────────────────────────────────────────────────────────
+
 
 def run_in_sandbox(
     df: pd.DataFrame,
     col: str,
     code: str,
     runner_path: str,
-    sandbox_uid: Optional[int] = None,
-) -> tuple[bool, Union[pd.DataFrame, str]]:
+    sandbox_uid: int | None = None,
+) -> tuple[bool, pd.DataFrame | str]:
     """Run LLM-generated fix code in an isolated subprocess.
 
     Serialises df to a temp CSV, writes code to a temp .py file, invokes
@@ -132,8 +129,7 @@ def run_in_sandbox(
             f.write(code)
 
         run_kwargs: dict = dict(
-            args=[sys.executable, runner_path,
-                  inp_path, func_path, out_path, col],
+            args=[sys.executable, runner_path, inp_path, func_path, out_path, col],
             timeout=SANDBOX_TIMEOUT,
             capture_output=True,
         )
@@ -160,16 +156,18 @@ def run_in_sandbox(
                     pass
 
 
-def resolve_sandbox_uid() -> Optional[int]:
+def resolve_sandbox_uid() -> int | None:
     """Return the UID of sandbox_user, or None if not configured."""
     try:
         import pwd
+
         return pwd.getpwnam("sandbox_user").pw_uid
     except (KeyError, ImportError):
         return None
 
 
 # ── Safety guards ──────────────────────────────────────────────────────────────
+
 
 def safety_guard_quantitative(
     original: pd.Series,
@@ -185,10 +183,7 @@ def safety_guard_quantitative(
     threshold = 1.0 if issue_type in normalisation_types else CHANGE_THRESHOLD
     pct_changed = (fixed.values != original.values).mean()
     if pct_changed > threshold:
-        return False, (
-            f"Too many values changed: {pct_changed:.0%} > "
-            f"{threshold:.0%} threshold"
-        )
+        return False, (f"Too many values changed: {pct_changed:.0%} > {threshold:.0%} threshold")
     return True, ""
 
 
@@ -198,7 +193,7 @@ def safety_guard_type_consistency(
 ) -> tuple[bool, str]:
     """Fail if the numeric-parseable rate shifts by more than TYPE_DRIFT_THRESHOLD."""
     orig_rate = pd.to_numeric(original, errors="coerce").notna().mean()
-    fixed_rate = pd.to_numeric(fixed,    errors="coerce").notna().mean()
+    fixed_rate = pd.to_numeric(fixed, errors="coerce").notna().mean()
     delta = abs(orig_rate - fixed_rate)
     if delta > TYPE_DRIFT_THRESHOLD:
         return False, (
@@ -211,6 +206,7 @@ def safety_guard_type_consistency(
 
 # ── Prompt builders ────────────────────────────────────────────────────────────
 
+
 def build_filter_prompt(
     col: str,
     issue: dict,
@@ -220,9 +216,7 @@ def build_filter_prompt(
     """Build the LLM prompt for generating a filter expression."""
     dtype = str(df[col].dtype)
     sample = list(non_empty_values(df[col]).head(20).astype(str))
-    feedback_line = (
-        f"\nPrevious attempt feedback: {feedback}" if feedback else ""
-    )
+    feedback_line = f"\nPrevious attempt feedback: {feedback}" if feedback else ""
     dtype_hint = (
         "IMPORTANT: df[col] is NOT object/string dtype — use "
         f".astype(str) before any .str accessor (dtype={dtype}).\n"
@@ -293,7 +287,7 @@ def build_llm_review_prompt(
     fixed: pd.Series,
 ) -> str:
     """Build the LLM safety-review prompt comparing original vs fixed values."""
-    orig_sample  = list(original.dropna().head(10).astype(str))
+    orig_sample = list(original.dropna().head(10).astype(str))
     fixed_sample = list(fixed.dropna().head(10).astype(str))
     return (
         f"Issue being fixed: {issue['detail']}\n"
@@ -306,6 +300,7 @@ def build_llm_review_prompt(
 
 
 # ── Code extraction ────────────────────────────────────────────────────────────
+
 
 def extract_code_from_llm_response(raw: str) -> str:
     """Strip markdown code fences from an LLM response, returning bare code."""

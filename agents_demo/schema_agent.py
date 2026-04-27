@@ -1,7 +1,8 @@
 """Layer 1 schema validation agent. Checks column data types against the
-fingerprint classification and validates column naming conventions."""
+fingerprint classification and validates column naming conventions.
+"""
 
-from agents_demo.base_agent import BaseAgent, SMART
+from agents_demo.base_agent import SMART, BaseAgent
 from state_demo.constants import SCHEMA_ISSUE_TYPES
 from tools import check_naming_conventions, check_type_issues
 
@@ -39,18 +40,17 @@ class SchemaAgent(BaseAgent):
 
     def observe(self):
         issues = self.state.schema_report["issues"]
-        type_issues = sum(
-            1 for i in issues if i["type"] in ("mixed_type", "invalid_dates")
+        type_issues = sum(1 for i in issues if i["type"] in ("mixed_type", "invalid_dates"))
+        naming_issues = sum(1 for i in issues if i["type"] == "naming_convention")
+        self.log(
+            "observe",
+            f"Found {len(issues)} schema issues: "
+            f"{type_issues} type, {naming_issues} naming convention",
         )
-        naming_issues = sum(
-            1 for i in issues if i["type"] == "naming_convention"
-        )
-        self.log("observe",
-                 f"Found {len(issues)} schema issues: "
-                 f"{type_issues} type, {naming_issues} naming convention")
 
     def reply(self):
         self.summarize_issues(
             self.state.schema_report["issues"],
-            "schema_summary", "schema",
+            "schema_summary",
+            "schema",
         )

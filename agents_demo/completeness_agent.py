@@ -1,9 +1,10 @@
 """Layer 1 completeness analysis agent. Detects missing values, empty strings,
-and common placeholder patterns across all columns."""
+and common placeholder patterns across all columns.
+"""
 
-from agents_demo.base_agent import BaseAgent, SMART
+from agents_demo.base_agent import SMART, BaseAgent
 from state_demo.constants import COMPLETENESS_ISSUE_TYPES
-from tools import compute_completeness, check_placeholder_values
+from tools import check_placeholder_values, compute_completeness
 
 
 class CompletenessAgent(BaseAgent):
@@ -40,13 +41,16 @@ class CompletenessAgent(BaseAgent):
 
     def observe(self):
         report = self.state.completeness_report
-        self.log("observe",
-                 f"Found {report['total_issues']} completeness issues. "
-                 f"Overall dataset completeness: "
-                 f"{self.state.overall_completeness:.1%}")
+        self.log(
+            "observe",
+            f"Found {report['total_issues']} completeness issues. "
+            f"Overall dataset completeness: "
+            f"{self.state.overall_completeness:.1%}",
+        )
 
     def reply(self):
         self.summarize_issues(
             self.state.completeness_report["issues"],
-            "completeness_summary", "completeness",
+            "completeness_summary",
+            "completeness",
         )

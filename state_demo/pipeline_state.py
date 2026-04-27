@@ -1,8 +1,8 @@
 """Pipeline state dataclass holding all intermediate and final results
-produced by agents across all layers of the data quality pipeline."""
+produced by agents across all layers of the data quality pipeline.
+"""
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 import pandas as pd
 
@@ -41,7 +41,7 @@ class PipelineState:
 
     remediation_plan: list = field(default_factory=list)
     fix_log: list = field(default_factory=list)
-    df_cleaned: Optional[pd.DataFrame] = None
+    df_cleaned: pd.DataFrame | None = None
 
     human_review_items: list = field(default_factory=list)
 

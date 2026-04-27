@@ -4,7 +4,7 @@ Detects statistical outliers in numerical columns using the 3xIQR Tukey outer
 fence and rare categories in categorical columns.
 """
 
-from agents_demo.base_agent import BaseAgent, SMART
+from agents_demo.base_agent import SMART, BaseAgent
 from state_demo.constants import ANOMALY_ISSUE_TYPES
 from tools import detect_outliers, detect_rare_categories
 
@@ -45,5 +45,6 @@ class AnomalyAgent(BaseAgent):
     def reply(self):
         self.summarize_issues(
             self.state.anomaly_report["issues"],
-            "anomaly_summary", "anomaly",
+            "anomaly_summary",
+            "anomaly",
         )

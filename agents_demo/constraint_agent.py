@@ -1,8 +1,9 @@
 """Layer 1 constraint validation agent. Enforces domain rules inferred by the
 profiler (cross-column equality, format patterns, domain negatives) and runs
-deterministic corruption-type and float-precision checks on numeric columns."""
+deterministic corruption-type and float-precision checks on numeric columns.
+"""
 
-from agents_demo.base_agent import BaseAgent, SMART
+from agents_demo.base_agent import SMART, BaseAgent
 from state_demo.constants import CONSTRAINT_ISSUE_TYPES
 from tools import (
     check_column_value_agreement,
@@ -83,13 +84,10 @@ class ConstraintAgent(BaseAgent):
         if precision_issues:
             self.log(
                 "act",
-                f"Float precision noise detected in "
-                f"{len(precision_issues)} column(s)",
+                f"Float precision noise detected in {len(precision_issues)} column(s)",
             )
 
-        fractional_issues = check_fractional_integers(
-            df, list(df.columns)
-        )
+        fractional_issues = check_fractional_integers(df, list(df.columns))
         issues.extend(fractional_issues)
         if fractional_issues:
             self.log(
@@ -99,16 +97,13 @@ class ConstraintAgent(BaseAgent):
                 + ", ".join(i["column"] for i in fractional_issues),
             )
 
-        period_issues = check_period_formats(
-            df, fp.get("categorical_columns", [])
-        )
+        period_issues = check_period_formats(df, fp.get("categorical_columns", []))
         issues.extend(period_issues)
         if period_issues:
             self.log(
                 "act",
                 f"Period format inconsistency detected in "
-                f"{len(period_issues)} column(s): "
-                + ", ".join(i["column"] for i in period_issues),
+                f"{len(period_issues)} column(s): " + ", ".join(i["column"] for i in period_issues),
             )
 
         all_cols = list(df.columns)
@@ -118,8 +113,7 @@ class ConstraintAgent(BaseAgent):
             self.log(
                 "act",
                 f"Special month codes found in "
-                f"{len(month_issues)} column(s): "
-                + ", ".join(i["column"] for i in month_issues),
+                f"{len(month_issues)} column(s): " + ", ".join(i["column"] for i in month_issues),
             )
 
         year_issues = check_year_column(df, all_cols)
@@ -128,8 +122,7 @@ class ConstraintAgent(BaseAgent):
             self.log(
                 "act",
                 f"Invalid/ambiguous year values in "
-                f"{len(year_issues)} column(s): "
-                + ", ".join(i["column"] for i in year_issues),
+                f"{len(year_issues)} column(s): " + ", ".join(i["column"] for i in year_issues),
             )
 
         issues = self.llm_enrich_issues(issues, df, CONSTRAINT_ISSUE_TYPES)

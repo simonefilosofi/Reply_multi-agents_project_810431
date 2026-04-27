@@ -10,15 +10,18 @@ import re
 from itertools import combinations
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
 from state_demo.constants import (
-    DATE_FORMAT_MAP, DATE_PATTERNS, PLACEHOLDERS, PLACEHOLDER_PATTERNS,
+    DATE_FORMAT_MAP,
+    DATE_PATTERNS,
+    PLACEHOLDER_PATTERNS,
+    PLACEHOLDERS,
 )
-from state_demo.fingerprint_schema import DatasetFingerprint
 from state_demo.helpers import missing_mask, non_empty_values
 from state_demo.locale_it import (
     CURRENCY_SYMBOLS,
@@ -34,14 +37,54 @@ _ALL_MONTH_NAMES: dict[str, int] = {**MONTH_ABBR_IT_EN, **MONTH_FULL_IT_EN}
 
 # ── Schema: reserved words ─────────────────────────────────────────────────────
 RESERVED_WORDS = {
-    "class", "def", "return", "import", "from", "lambda", "global",
-    "none", "true", "false", "and", "or", "not", "in", "is",
-    "if", "else", "for", "while", "try", "except", "with", "as",
-    "pass", "break", "continue", "yield",
-    "select", "where", "join", "insert", "update", "delete", "drop",
-    "table", "index", "group", "order", "having", "union", "create",
+    "class",
+    "def",
+    "return",
+    "import",
+    "from",
+    "lambda",
+    "global",
+    "none",
+    "true",
+    "false",
+    "and",
+    "or",
+    "not",
+    "in",
+    "is",
+    "if",
+    "else",
+    "for",
+    "while",
+    "try",
+    "except",
+    "with",
+    "as",
+    "pass",
+    "break",
+    "continue",
+    "yield",
+    "select",
+    "where",
+    "join",
+    "insert",
+    "update",
+    "delete",
+    "drop",
+    "table",
+    "index",
+    "group",
+    "order",
+    "having",
+    "union",
+    "create",
     "alter",
-    "values", "columns", "dtypes", "shape", "name", "count",
+    "values",
+    "columns",
+    "dtypes",
+    "shape",
+    "name",
+    "count",
 }
 
 
@@ -67,6 +110,7 @@ def _severity_from_rate(rate: float, high: float = 0.20, medium: float = 0.05) -
 
 # ── Ingestion ──────────────────────────────────────────────────────────────────
 
+
 def load_dataset(path: str) -> tuple[pd.DataFrame, str]:
     """Load a dataset from CSV, JSON, Excel, or Parquet.
 
@@ -74,7 +118,7 @@ def load_dataset(path: str) -> tuple[pd.DataFrame, str]:
     """
     ext = path.rsplit(".", 1)[-1].lower()
     if ext == "csv":
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
+        with open(path, encoding="utf-8", errors="replace") as f:
             sample = f.read(8192)
         try:
             dialect = csv.Sniffer().sniff(sample)
@@ -82,8 +126,11 @@ def load_dataset(path: str) -> tuple[pd.DataFrame, str]:
         except csv.Error:
             sep = ","
         df = pd.read_csv(
-            path, sep=sep, dtype=str,
-            encoding="utf-8", on_bad_lines="warn",
+            path,
+            sep=sep,
+            dtype=str,
+            encoding="utf-8",
+            on_bad_lines="warn",
         )
     elif ext == "json":
         with open(path, encoding="utf-8") as f:
@@ -98,6 +145,7 @@ def load_dataset(path: str) -> tuple[pd.DataFrame, str]:
 
 
 # ── Profiling ──────────────────────────────────────────────────────────────────
+
 
 def compute_column_stats(df: pd.DataFrame) -> str:
     """Build a column-statistics block string for the profiler LLM prompt."""
@@ -116,10 +164,7 @@ def _looks_like_yyyymm(int_series: pd.Series) -> bool:
     """Return True if the majority of integer values look like YYYYMM period codes."""
     years = int_series // 100
     months = int_series % 100
-    valid = (
-        (int_series >= 190001) & (int_series <= 209912)
-        & (months >= 1) & (months <= 12)
-    )
+    valid = (int_series >= 190001) & (int_series <= 209912) & (months >= 1) & (months <= 12)
     return valid.mean() > 0.90
 
 
@@ -209,6 +254,7 @@ def statistical_fingerprint(df: pd.DataFrame) -> dict:
 
 # ── Schema ─────────────────────────────────────────────────────────────────────
 
+
 def check_type_issues(
     df: pd.DataFrame,
     numerical_cols: list,
@@ -227,15 +273,17 @@ def check_type_issues(
         if non_numeric > 0:
             pct = non_numeric / len(nev)
             severity = _severity_from_rate(pct)
-            issues.append({
-                "column": col,
-                "type": "mixed_type",
-                "detail": (
-                    f"Expected numeric but {non_numeric} values "
-                    f"({pct:.0%}) cannot parse as numbers"
-                ),
-                "severity": severity,
-            })
+            issues.append(
+                {
+                    "column": col,
+                    "type": "mixed_type",
+                    "detail": (
+                        f"Expected numeric but {non_numeric} values "
+                        f"({pct:.0%}) cannot parse as numbers"
+                    ),
+                    "severity": severity,
+                }
+            )
 
     for col in date_cols:
         if not _has_column(df, col):
@@ -243,12 +291,14 @@ def check_type_issues(
         nev = non_empty_values(df[col])
         bad_frac = pd.to_datetime(nev, errors="coerce", dayfirst=True).isna().mean()
         if bad_frac > 0.10:
-            issues.append({
-                "column": col,
-                "type": "invalid_dates",
-                "detail": f"{bad_frac:.0%} values cannot be parsed as dates",
-                "severity": "medium",
-            })
+            issues.append(
+                {
+                    "column": col,
+                    "type": "invalid_dates",
+                    "detail": f"{bad_frac:.0%} values cannot be parsed as dates",
+                    "severity": "medium",
+                }
+            )
 
     return issues
 
@@ -271,16 +321,19 @@ def check_naming_conventions(df: pd.DataFrame) -> list:
         if col and col[0].isdigit():
             violations.append("starts with a digit (invalid identifier)")
         if violations:
-            issues.append({
-                "column": col,
-                "type": "naming_convention",
-                "detail": "; ".join(violations),
-                "severity": "low",
-            })
+            issues.append(
+                {
+                    "column": col,
+                    "type": "naming_convention",
+                    "detail": "; ".join(violations),
+                    "severity": "low",
+                }
+            )
     return issues
 
 
 # ── Completeness ───────────────────────────────────────────────────────────────
+
 
 def compute_completeness(
     df: pd.DataFrame,
@@ -310,26 +363,30 @@ def compute_completeness(
         else:
             continue
 
-        issues.append({
-            "column": col,
-            "type": "missing_values",
-            "detail": (
-                f"{rate:.0%} of values are missing, empty, or placeholder "
-                f"({missing_count}/{total})"
-            ),
-            "severity": severity,
-        })
+        issues.append(
+            {
+                "column": col,
+                "type": "missing_values",
+                "detail": (
+                    f"{rate:.0%} of values are missing, empty, or placeholder "
+                    f"({missing_count}/{total})"
+                ),
+                "severity": severity,
+            }
+        )
 
     for col in sparse_cols:
         if col not in df.columns:
             continue
         empty_pct = 1 - completeness_by_column.get(col, 1.0)
-        issues.append({
-            "column": col,
-            "type": "sparse_column",
-            "detail": f"Column is {empty_pct:.0%} empty \u2014 candidate for removal",
-            "severity": "medium",
-        })
+        issues.append(
+            {
+                "column": col,
+                "type": "sparse_column",
+                "detail": f"Column is {empty_pct:.0%} empty \u2014 candidate for removal",
+                "severity": "medium",
+            }
+        )
 
     total_cells = len(df) * len(df.columns)
     overall = 1 - (total_missing_all / total_cells) if total_cells > 0 else 1.0
@@ -337,6 +394,7 @@ def compute_completeness(
 
 
 # ── Consistency ────────────────────────────────────────────────────────────────
+
 
 def check_date_format_consistency(df: pd.DataFrame, date_cols: list) -> list:
     """Detect columns where multiple date formats are in use."""
@@ -357,20 +415,17 @@ def check_date_format_consistency(df: pd.DataFrame, date_cols: list) -> list:
         total_matched = sum(pattern_counts.values())
         if total_matched == 0:
             continue
-        significant = [
-            label for label, cnt in pattern_counts.items()
-            if cnt / total_matched > 0.05
-        ]
+        significant = [label for label, cnt in pattern_counts.items() if cnt / total_matched > 0.05]
         if len(significant) >= 2:
-            detail = ", ".join(
-                f"{label} ({pattern_counts[label]})" for label in significant
+            detail = ", ".join(f"{label} ({pattern_counts[label]})" for label in significant)
+            issues.append(
+                {
+                    "column": col,
+                    "type": "format_inconsistency",
+                    "detail": f"{len(significant)} date formats detected: {detail}",
+                    "severity": "medium",
+                }
             )
-            issues.append({
-                "column": col,
-                "type": "format_inconsistency",
-                "detail": f"{len(significant)} date formats detected: {detail}",
-                "severity": "medium",
-            })
     return issues
 
 
@@ -387,16 +442,14 @@ def check_date_ordering(df: pd.DataFrame, date_cols: list) -> list:
             continue
         violations = int((parsed_a[both_valid] > parsed_b[both_valid]).sum())
         if violations > 0:
-            issues.append({
-                "column": f"{col_a} / {col_b}",
-                "type": "date_order",
-                "detail": (
-                    f"{violations} rows where '{col_a}' is later than '{col_b}'"
-                ),
-                "severity": (
-                    "high" if violations / both_valid.sum() > 0.05 else "medium"
-                ),
-            })
+            issues.append(
+                {
+                    "column": f"{col_a} / {col_b}",
+                    "type": "date_order",
+                    "detail": (f"{violations} rows where '{col_a}' is later than '{col_b}'"),
+                    "severity": ("high" if violations / both_valid.sum() > 0.05 else "medium"),
+                }
+            )
     return issues
 
 
@@ -416,15 +469,17 @@ def check_case_consistency(df: pd.DataFrame, cat_cols: list) -> list:
             continue
         difference = raw_unique - lower_unique
         if difference > 3 and difference / raw_unique > 0.05:
-            issues.append({
-                "column": col,
-                "type": "case_inconsistency",
-                "detail": (
-                    f"{difference} values differ only by case "
-                    f"({raw_unique} unique raw vs {lower_unique} unique lowercase)"
-                ),
-                "severity": "low",
-            })
+            issues.append(
+                {
+                    "column": col,
+                    "type": "case_inconsistency",
+                    "detail": (
+                        f"{difference} values differ only by case "
+                        f"({raw_unique} unique raw vs {lower_unique} unique lowercase)"
+                    ),
+                    "severity": "low",
+                }
+            )
     return issues
 
 
@@ -451,35 +506,36 @@ def check_conditional_completeness(df: pd.DataFrame, fp: dict) -> list:
         fill_rate = filled_b[filled_a].mean()
         if 0.90 <= fill_rate < 1.0:
             missing_when_a = int((filled_a & ~filled_b).sum())
-            issues.append({
-                "column": f"{col_a} / {col_b}",
-                "type": "conditional_completeness",
-                "detail": (
-                    f"{missing_when_a} rows have '{col_a}' filled "
-                    f"but '{col_b}' empty"
-                ),
-                "severity": "low",
-            })
+            issues.append(
+                {
+                    "column": f"{col_a} / {col_b}",
+                    "type": "conditional_completeness",
+                    "detail": (f"{missing_when_a} rows have '{col_a}' filled but '{col_b}' empty"),
+                    "severity": "low",
+                }
+            )
 
     return issues
 
 
 # ── Duplicates ─────────────────────────────────────────────────────────────────
 
+
 def detect_duplicate_rows(df: pd.DataFrame) -> list:
     """Detect fully duplicate rows."""
     issues = []
     dup_rows = int(df.duplicated().sum())
     if dup_rows > 0:
-        issues.append({
-            "column": "_rows_",
-            "type": "duplicate_rows",
-            "detail": (
-                f"{dup_rows} fully duplicate rows "
-                f"({dup_rows / len(df):.1%} of dataset)"
-            ),
-            "severity": "high" if dup_rows / len(df) > 0.05 else "medium",
-        })
+        issues.append(
+            {
+                "column": "_rows_",
+                "type": "duplicate_rows",
+                "detail": (
+                    f"{dup_rows} fully duplicate rows ({dup_rows / len(df):.1%} of dataset)"
+                ),
+                "severity": "high" if dup_rows / len(df) > 0.05 else "medium",
+            }
+        )
     return issues
 
 
@@ -507,11 +563,14 @@ def detect_duplicate_columns(df: pd.DataFrame, likely_pairs: list) -> list:
         Placeholder values (n.d., -, ?, etc.) are excluded so that columns whose
         only shared values are sentinels are not falsely treated as duplicates.
         """
+
         def _content_values(col):
             vals = df[col].dropna().astype(str).str.strip()
-            return {v for v in vals
-                    if v and v.lower() not in PLACEHOLDERS
-                    and not all(c in r"-./?#\/ " for c in v)}
+            return {
+                v
+                for v in vals
+                if v and v.lower() not in PLACEHOLDERS and not all(c in r"-./?#\/ " for c in v)
+            }
 
         set_a = _content_values(col_a)
         set_b = _content_values(col_b)
@@ -526,15 +585,17 @@ def detect_duplicate_columns(df: pd.DataFrame, likely_pairs: list) -> list:
             if _jaccard(pair[0], pair[1]) < 0.20:
                 continue  # different value domains (e.g. code vs description)
             already_flagged.add(key)
-            issues.append({
-                "column": f"{pair[0]} / {pair[1]}",
-                "type": "duplicate_columns",
-                "detail": (
-                    f"Columns '{pair[0]}' and '{pair[1]}' appear to contain "
-                    f"the same data (profiler suggestion)"
-                ),
-                "severity": "medium",
-            })
+            issues.append(
+                {
+                    "column": f"{pair[0]} / {pair[1]}",
+                    "type": "duplicate_columns",
+                    "detail": (
+                        f"Columns '{pair[0]}' and '{pair[1]}' appear to contain "
+                        f"the same data (profiler suggestion)"
+                    ),
+                    "severity": "medium",
+                }
+            )
 
     # Pass 2 — name-normalization: same snake_case → semantic duplicate
     norm_to_cols: dict = {}
@@ -550,21 +611,24 @@ def detect_duplicate_columns(df: pd.DataFrame, likely_pairs: list) -> list:
             if key in already_flagged:
                 continue
             already_flagged.add(key)
-            issues.append({
-                "column": f"{col_a} / {col_b}",
-                "type": "duplicate_columns",
-                "detail": (
-                    f"Columns '{col_a}' and '{col_b}' refer to the same field "
-                    f"(both normalise to '{norm}')"
-                ),
-                "severity": "high",
-            })
+            issues.append(
+                {
+                    "column": f"{col_a} / {col_b}",
+                    "type": "duplicate_columns",
+                    "detail": (
+                        f"Columns '{col_a}' and '{col_b}' refer to the same field "
+                        f"(both normalise to '{norm}')"
+                    ),
+                    "severity": "high",
+                }
+            )
 
     # Pass 3 — fuzzy name matching: very similar normalised names (typos, spaces)
     from difflib import SequenceMatcher
+
     norm_list = [(col, _normalize_col_name(col)) for col in df.columns]
     for i, (col_a, norm_a) in enumerate(norm_list):
-        for col_b, norm_b in norm_list[i + 1:]:
+        for col_b, norm_b in norm_list[i + 1 :]:
             key = tuple(sorted([col_a, col_b]))
             if key in already_flagged:
                 continue
@@ -573,20 +637,22 @@ def detect_duplicate_columns(df: pd.DataFrame, likely_pairs: list) -> list:
                 if _jaccard(col_a, col_b) < 0.20:
                     continue  # similar names but different value domains
                 already_flagged.add(key)
-                issues.append({
-                    "column": f"{col_a} / {col_b}",
-                    "type": "duplicate_columns",
-                    "detail": (
-                        f"Columns '{col_a}' and '{col_b}' have very similar "
-                        f"names (similarity {ratio:.0%}) — likely the same field"
-                    ),
-                    "severity": "high",
-                })
+                issues.append(
+                    {
+                        "column": f"{col_a} / {col_b}",
+                        "type": "duplicate_columns",
+                        "detail": (
+                            f"Columns '{col_a}' and '{col_b}' have very similar "
+                            f"names (similarity {ratio:.0%}) — likely the same field"
+                        ),
+                        "severity": "high",
+                    }
+                )
 
     # Pass 4 — digit-stripped substring: '3descrizione' ⊂ 'descrizione_ente'
     for i, (col_a, norm_a) in enumerate(norm_list):
         stripped_a = norm_a.lstrip("0123456789").strip("_")
-        for col_b, norm_b in norm_list[i + 1:]:
+        for col_b, norm_b in norm_list[i + 1 :]:
             key = tuple(sorted([col_a, col_b]))
             if key in already_flagged or not stripped_a:
                 continue
@@ -595,22 +661,23 @@ def detect_duplicate_columns(df: pd.DataFrame, likely_pairs: list) -> list:
                 continue
             # flag if one stripped name is a meaningful substring of the other
             longer, shorter = (
-                (norm_a, stripped_b) if len(norm_a) >= len(norm_b)
-                else (norm_b, stripped_a)
+                (norm_a, stripped_b) if len(norm_a) >= len(norm_b) else (norm_b, stripped_a)
             )
             if len(shorter) >= 5 and shorter in longer:
                 if _jaccard(col_a, col_b) < 0.20:
                     continue  # substring name match but different value domains (code vs description)
                 already_flagged.add(key)
-                issues.append({
-                    "column": f"{col_a} / {col_b}",
-                    "type": "duplicate_columns",
-                    "detail": (
-                        f"Columns '{col_a}' and '{col_b}' refer to the same "
-                        f"field ('{shorter}' is contained in '{longer}')"
-                    ),
-                    "severity": "high",
-                })
+                issues.append(
+                    {
+                        "column": f"{col_a} / {col_b}",
+                        "type": "duplicate_columns",
+                        "detail": (
+                            f"Columns '{col_a}' and '{col_b}' refer to the same "
+                            f"field ('{shorter}' is contained in '{longer}')"
+                        ),
+                        "severity": "high",
+                    }
+                )
 
     # Pass 6 — value-equality scan across all remaining pairs
     cols = list(df.columns)
@@ -621,24 +688,23 @@ def detect_duplicate_columns(df: pd.DataFrame, likely_pairs: list) -> list:
         try:
             if df[col_a].astype(str).equals(df[col_b].astype(str)):
                 already_flagged.add(key)
-                issues.append({
-                    "column": f"{col_a} / {col_b}",
-                    "type": "duplicate_columns",
-                    "detail": (
-                        f"Columns '{col_a}' and '{col_b}' are identical "
-                        f"(value-equality check)"
-                    ),
-                    "severity": "medium",
-                })
+                issues.append(
+                    {
+                        "column": f"{col_a} / {col_b}",
+                        "type": "duplicate_columns",
+                        "detail": (
+                            f"Columns '{col_a}' and '{col_b}' are identical (value-equality check)"
+                        ),
+                        "severity": "medium",
+                    }
+                )
         except Exception:
             continue
 
     return issues
 
 
-def detect_key_collisions(
-    df: pd.DataFrame, key_cols: list
-) -> tuple[list, str]:
+def detect_key_collisions(df: pd.DataFrame, key_cols: list) -> tuple[list, str]:
     """Detect rows sharing key column values but differing in other columns.
 
     Returns (issues, skip_reason). skip_reason is non-empty when no check was done.
@@ -652,20 +718,23 @@ def detect_key_collisions(
     issues = []
     if n_key_only > 0:
         col_list = ", ".join(key_cols)
-        issues.append({
-            "column": col_list,
-            "type": "duplicate_key",
-            "detail": (
-                f"{n_key_only} rows share the same key values in [{col_list}] "
-                f"but differ in other columns "
-                f"-- possible duplicate records or data entry errors"
-            ),
-            "severity": "high",
-        })
+        issues.append(
+            {
+                "column": col_list,
+                "type": "duplicate_key",
+                "detail": (
+                    f"{n_key_only} rows share the same key values in [{col_list}] "
+                    f"but differ in other columns "
+                    f"-- possible duplicate records or data entry errors"
+                ),
+                "severity": "high",
+            }
+        )
     return issues, ""
 
 
 # ── Anomalies ──────────────────────────────────────────────────────────────────
+
 
 def detect_outliers(df: pd.DataFrame, numerical_cols: list) -> list:
     """Detect extreme values in numerical columns using the IQR fence rule.
@@ -691,15 +760,17 @@ def detect_outliers(df: pd.DataFrame, numerical_cols: list) -> list:
         upper = q3 + 3.0 * iqr
         outliers = int(((numeric < lower) | (numeric > upper)).sum())
         if outliers > 0:
-            issues.append({
-                "column": col,
-                "type": "outliers",
-                "detail": (
-                    f"{outliers} values outside the 3×IQR outer fence "
-                    f"[{lower:.2f}, {upper:.2f}]"
-                ),
-                "severity": "medium",
-            })
+            issues.append(
+                {
+                    "column": col,
+                    "type": "outliers",
+                    "detail": (
+                        f"{outliers} values outside the 3×IQR outer fence "
+                        f"[{lower:.2f}, {upper:.2f}]"
+                    ),
+                    "severity": "medium",
+                }
+            )
     return issues
 
 
@@ -712,16 +783,19 @@ def detect_rare_categories(df: pd.DataFrame, categorical_cols: list) -> list:
         counts = df[col].value_counts(normalize=True)
         rare = counts[counts < 0.01]
         if len(rare) > 0:
-            issues.append({
-                "column": col,
-                "type": "rare_categories",
-                "detail": f"{len(rare)} categories appear in less than 1% of rows",
-                "severity": "low",
-            })
+            issues.append(
+                {
+                    "column": col,
+                    "type": "rare_categories",
+                    "detail": f"{len(rare)} categories appear in less than 1% of rows",
+                    "severity": "low",
+                }
+            )
     return issues
 
 
 # ── Cross-column mapping ──────────────────────────────────────────────────────
+
 
 def detect_column_mapping_pairs(
     df: pd.DataFrame,
@@ -744,14 +818,9 @@ def detect_column_mapping_pairs(
     _placeholder_lower = {p.lower() for p in PLACEHOLDERS} | {""}
 
     def _is_valid(series: pd.Series) -> pd.Series:
-        return series.notna() & ~series.astype(str).str.strip().str.lower().isin(
-            _placeholder_lower
-        )
+        return series.notna() & ~series.astype(str).str.strip().str.lower().isin(_placeholder_lower)
 
-    candidates = [
-        col for col in df.columns
-        if 2 <= df[col].nunique(dropna=True) <= max_cardinality
-    ]
+    candidates = [col for col in df.columns if 2 <= df[col].nunique(dropna=True) <= max_cardinality]
     if len(candidates) < 2:
         return issues
 
@@ -790,28 +859,32 @@ def detect_column_mapping_pairs(
                 continue
 
             seen.add((src, tgt))
-            issues.append({
-                "column": tgt,
-                "type": "lookup_imputability",
-                "detail": (
-                    f"'{tgt}' can be inferred from '{src}': "
-                    f"{n_clean} anchor rows, {coverage:.0%} mapping consistency, "
-                    f"{n_imputable} rows can be imputed"
-                ),
-                "severity": "medium",
-                "mapping_source": src,
-            })
+            issues.append(
+                {
+                    "column": tgt,
+                    "type": "lookup_imputability",
+                    "detail": (
+                        f"'{tgt}' can be inferred from '{src}': "
+                        f"{n_clean} anchor rows, {coverage:.0%} mapping consistency, "
+                        f"{n_imputable} rows can be imputed"
+                    ),
+                    "severity": "medium",
+                    "mapping_source": src,
+                }
+            )
 
     return issues
 
 
-def build_column_lookup(
-    df: pd.DataFrame, col_source: str, col_target: str
-) -> dict:
+def build_column_lookup(df: pd.DataFrame, col_source: str, col_target: str) -> dict:
     """Build {source_value: most_common_target_value} from clean rows."""
     _pl = {p.lower() for p in PLACEHOLDERS} | {""}
-    src_valid = df[col_source].notna() & ~df[col_source].astype(str).str.strip().str.lower().isin(_pl)
-    tgt_valid = df[col_target].notna() & ~df[col_target].astype(str).str.strip().str.lower().isin(_pl)
+    src_valid = df[col_source].notna() & ~df[col_source].astype(str).str.strip().str.lower().isin(
+        _pl
+    )
+    tgt_valid = df[col_target].notna() & ~df[col_target].astype(str).str.strip().str.lower().isin(
+        _pl
+    )
     clean = df.loc[src_valid & tgt_valid, [col_source, col_target]].copy()
     clean[col_source] = clean[col_source].astype(str)
     clean[col_target] = clean[col_target].astype(str)
@@ -830,8 +903,12 @@ def apply_lookup_imputation(
     if not lookup or col_source not in df.columns or col_target not in df.columns:
         return 0
     _pl = {p.lower() for p in PLACEHOLDERS} | {""}
-    tgt_missing = df[col_target].isna() | df[col_target].astype(str).str.strip().str.lower().isin(_pl)
-    src_present = df[col_source].notna() & ~df[col_source].astype(str).str.strip().str.lower().isin(_pl)
+    tgt_missing = df[col_target].isna() | df[col_target].astype(str).str.strip().str.lower().isin(
+        _pl
+    )
+    src_present = df[col_source].notna() & ~df[col_source].astype(str).str.strip().str.lower().isin(
+        _pl
+    )
     mask = tgt_missing & src_present
     if not mask.any():
         return 0
@@ -843,17 +920,20 @@ def apply_lookup_imputation(
 
 # ── Constraints ───────────────────────────────────────────────────────────────
 
-def check_column_value_agreement(
-    df: pd.DataFrame, col_a: str, col_b: str
-) -> list:
+
+def check_column_value_agreement(df: pd.DataFrame, col_a: str, col_b: str) -> list:
     """Flag rows where two columns that should be equal actually disagree."""
     if col_a not in df.columns or col_b not in df.columns:
         return []
     a = df[col_a].astype(str).str.strip()
     b = df[col_b].astype(str).str.strip()
     both_filled = (
-        df[col_a].notna() & (a != "") & (a.str.lower() != "nan")
-        & df[col_b].notna() & (b != "") & (b.str.lower() != "nan")
+        df[col_a].notna()
+        & (a != "")
+        & (a.str.lower() != "nan")
+        & df[col_b].notna()
+        & (b != "")
+        & (b.str.lower() != "nan")
     )
     if both_filled.sum() < 5:
         return []
@@ -862,15 +942,17 @@ def check_column_value_agreement(
         return []
     pct = mismatches / both_filled.sum()
     severity = "high" if pct > 0.05 else "medium"
-    return [{
-        "column": f"{col_a} / {col_b}",
-        "type": "cross_column_mismatch",
-        "detail": (
-            f"{mismatches} rows ({pct:.0%}) where '{col_a}' and '{col_b}' "
-            f"should agree but differ"
-        ),
-        "severity": severity,
-    }]
+    return [
+        {
+            "column": f"{col_a} / {col_b}",
+            "type": "cross_column_mismatch",
+            "detail": (
+                f"{mismatches} rows ({pct:.0%}) where '{col_a}' and '{col_b}' "
+                f"should agree but differ"
+            ),
+            "severity": severity,
+        }
+    ]
 
 
 def check_domain_negatives(df: pd.DataFrame, col: str) -> list:
@@ -881,20 +963,19 @@ def check_domain_negatives(df: pd.DataFrame, col: str) -> list:
     neg_count = int((numeric < 0).sum())
     if neg_count == 0:
         return []
-    return [{
-        "column": col,
-        "type": "domain_negative_values",
-        "detail": (
-            f"{neg_count} negative values in a column where negatives "
-            f"are domain-impossible"
-        ),
-        "severity": "high",
-    }]
+    return [
+        {
+            "column": col,
+            "type": "domain_negative_values",
+            "detail": (
+                f"{neg_count} negative values in a column where negatives are domain-impossible"
+            ),
+            "severity": "high",
+        }
+    ]
 
 
-def check_format_pattern(
-    df: pd.DataFrame, col: str, pattern: str, description: str
-) -> list:
+def check_format_pattern(df: pd.DataFrame, col: str, pattern: str, description: str) -> list:
     """Flag values that do not match the expected regex pattern."""
     if not _has_column(df, col):
         return []
@@ -911,22 +992,24 @@ def check_format_pattern(
         return []
     pct = n_violations / len(nev)
     severity = _severity_from_rate(pct)
-    return [{
-        "column": col,
-        "type": "format_pattern_violation",
-        "detail": (
-            f"{n_violations} values ({pct:.0%}) do not match expected "
-            f"format: {description}"
-        ),
-        "severity": severity,
-        "pattern": pattern,
-        "description": description,
-    }]
+    return [
+        {
+            "column": col,
+            "type": "format_pattern_violation",
+            "detail": (
+                f"{n_violations} values ({pct:.0%}) do not match expected format: {description}"
+            ),
+            "severity": severity,
+            "pattern": pattern,
+            "description": description,
+        }
+    ]
 
 
 def check_numeric_corruption_types(df: pd.DataFrame, col: str) -> list:
     """Classify WHY a numeric column has non-numeric values (symbols, comma
-    decimals, ND placeholders)."""
+    decimals, ND placeholders).
+    """
     if not _has_column(df, col):
         return []
     nev = non_empty_values(df[col])
@@ -939,48 +1022,49 @@ def check_numeric_corruption_types(df: pd.DataFrame, col: str) -> list:
 
     currency_count = int(bad.str.contains(_CURRENCY_SYMBOLS_REGEX, regex=True).sum())
     if currency_count > 0:
-        issues.append({
-            "column": col,
-            "type": "currency_symbol_in_numeric",
-            "detail": (
-                f"{currency_count} values contain currency symbols "
-                f"(e.g. €) that prevent numeric parsing"
-            ),
-            "severity": "high",
-        })
+        issues.append(
+            {
+                "column": col,
+                "type": "currency_symbol_in_numeric",
+                "detail": (
+                    f"{currency_count} values contain currency symbols "
+                    f"(e.g. €) that prevent numeric parsing"
+                ),
+                "severity": "high",
+            }
+        )
 
-    comma_decimal_count = int(
-        bad.str.match(IT_DECIMAL_PATTERN.pattern).sum()
-    )
+    comma_decimal_count = int(bad.str.match(IT_DECIMAL_PATTERN.pattern).sum())
     if comma_decimal_count > 0:
-        issues.append({
-            "column": col,
-            "type": "comma_decimal_format",
-            "detail": (
-                f"{comma_decimal_count} values use comma as decimal "
-                f"separator (Italian locale format)"
-            ),
-            "severity": "high",
-        })
+        issues.append(
+            {
+                "column": col,
+                "type": "comma_decimal_format",
+                "detail": (
+                    f"{comma_decimal_count} values use comma as decimal "
+                    f"separator (Italian locale format)"
+                ),
+                "severity": "high",
+            }
+        )
 
     nd_count = int(bad.str.lower().str.strip().isin(ND_PATTERNS).sum())
     if nd_count > 0:
-        issues.append({
-            "column": col,
-            "type": "nd_placeholder_in_numeric",
-            "detail": (
-                f"{nd_count} values use 'N.D.' or similar placeholder "
-                f"instead of a proper NULL"
-            ),
-            "severity": "medium",
-        })
+        issues.append(
+            {
+                "column": col,
+                "type": "nd_placeholder_in_numeric",
+                "detail": (
+                    f"{nd_count} values use 'N.D.' or similar placeholder instead of a proper NULL"
+                ),
+                "severity": "medium",
+            }
+        )
 
     return issues
 
 
-def check_float_precision(
-    df: pd.DataFrame, numerical_cols: list, max_decimals: int = 2
-) -> list:
+def check_float_precision(df: pd.DataFrame, numerical_cols: list, max_decimals: int = 2) -> list:
     """Flag numeric columns with excessive decimal digits (floating-point noise)."""
     issues = []
     for col in numerical_cols:
@@ -990,30 +1074,31 @@ def check_float_precision(
         if len(numeric) == 0:
             continue
         noisy = numeric.apply(
-            lambda v: len(str(v).split(".")[-1]) > max_decimals
-            if "." in str(v) else False
+            lambda v: len(str(v).split(".")[-1]) > max_decimals if "." in str(v) else False
         )
         n_noisy = int(noisy.sum())
         if n_noisy > len(numeric) * 0.10:
-            issues.append({
-                "column": col,
-                "type": "float_precision_noise",
-                "detail": (
-                    f"{n_noisy} values have more than {max_decimals} "
-                    f"decimal places — likely floating-point arithmetic noise"
-                ),
-                "severity": "low",
-            })
+            issues.append(
+                {
+                    "column": col,
+                    "type": "float_precision_noise",
+                    "detail": (
+                        f"{n_noisy} values have more than {max_decimals} "
+                        f"decimal places — likely floating-point arithmetic noise"
+                    ),
+                    "severity": "low",
+                }
+            )
     return issues
 
 
 # Ordered list of (format_label, compiled_regex) used for period detection
 _PERIOD_PATTERNS: list[tuple[str, re.Pattern]] = [
-    ("YYYYMM",   re.compile(r"^\d{6}(?:\.0+)?$")),
-    ("YYYY-MM",  re.compile(r"^\d{4}-\d{2}$")),
+    ("YYYYMM", re.compile(r"^\d{6}(?:\.0+)?$")),
+    ("YYYY-MM", re.compile(r"^\d{4}-\d{2}$")),
     ("MON-YYYY", re.compile(r"^[A-Za-z]{3}-\d{4}$")),
-    ("MM/YYYY",  re.compile(r"^\d{1,2}/\d{4}$")),
-    ("TEXT_YYYY",re.compile(r"^[A-Za-z].*\s\d{4}$")),
+    ("MM/YYYY", re.compile(r"^\d{1,2}/\d{4}$")),
+    ("TEXT_YYYY", re.compile(r"^[A-Za-z].*\s\d{4}$")),
 ]
 
 
@@ -1110,24 +1195,24 @@ def check_period_formats(df: pd.DataFrame, categorical_cols: list) -> list:
 
         active_formats = [lbl for lbl, cnt in format_hits.items() if cnt > 0]
         n_formats = len(active_formats)
-        unparseable = int(
-            nev.apply(lambda v: _parse_period_value(v) is None).sum()
-        )
+        unparseable = int(nev.apply(lambda v: _parse_period_value(v) is None).sum())
         pct_unparseable = unparseable / len(nev)
 
         if n_formats > 1 or unparseable > 0:
             severity = "high" if pct_unparseable > 0.05 else "medium"
-            issues.append({
-                "column": col,
-                "type": "period_format_inconsistency",
-                "detail": (
-                    f"{n_formats} period format(s) detected "
-                    f"({', '.join(active_formats)}); "
-                    f"{unparseable} value(s) ({pct_unparseable:.1%}) "
-                    f"cannot be normalised to YYYYMM"
-                ),
-                "severity": severity,
-            })
+            issues.append(
+                {
+                    "column": col,
+                    "type": "period_format_inconsistency",
+                    "detail": (
+                        f"{n_formats} period format(s) detected "
+                        f"({', '.join(active_formats)}); "
+                        f"{unparseable} value(s) ({pct_unparseable:.1%}) "
+                        f"cannot be normalised to YYYYMM"
+                    ),
+                    "severity": severity,
+                }
+            )
 
     return issues
 
@@ -1153,11 +1238,10 @@ def normalize_period_column(df: pd.DataFrame, col: str) -> tuple[int, int]:
 
     df[col] = original.apply(_convert)
 
-    n_nulled = int((df[col].isna() & original.notna() &
-                    (original.astype(str).str.strip() != "")).sum())
-    n_normalised = int(
-        (df[col].notna() & (df[col].astype(str) != original.astype(str))).sum()
+    n_nulled = int(
+        (df[col].isna() & original.notna() & (original.astype(str).str.strip() != "")).sum()
     )
+    n_normalised = int((df[col].notna() & (df[col].astype(str) != original.astype(str))).sum())
     return n_normalised, n_nulled
 
 
@@ -1171,7 +1255,7 @@ def _is_placeholder_series(s: pd.Series) -> pd.Series:
     exact_mask = stripped_lower.isin(PLACEHOLDERS)
     stripped = s.astype(str).str.strip()
     regex_mask = stripped.apply(
-        lambda v: any(p.search(v) for p in PLACEHOLDER_PATTERNS)
+        lambda v: isinstance(v, str) and any(p.search(v) for p in PLACEHOLDER_PATTERNS)
     )
     return exact_mask | regex_mask
 
@@ -1192,16 +1276,18 @@ def check_placeholder_values(df: pd.DataFrame) -> list:
             continue
         pct = count / len(df)
         severity = _severity_from_rate(pct)
-        issues.append({
-            "column": col,
-            "type": "placeholder_values",
-            "detail": (
-                f"{count} cells contain placeholder/sentinel strings "
-                f"(e.g. '-', '//', 'da verificare', 'imposta x') that should be NULL"
-            ),
-            "severity": severity,
-            "rows_affected": count,
-        })
+        issues.append(
+            {
+                "column": col,
+                "type": "placeholder_values",
+                "detail": (
+                    f"{count} cells contain placeholder/sentinel strings "
+                    f"(e.g. '-', '//', 'da verificare', 'imposta x') that should be NULL"
+                ),
+                "severity": severity,
+                "rows_affected": count,
+            }
+        )
     return issues
 
 
@@ -1263,20 +1349,25 @@ def check_month_column(df: pd.DataFrame, cols: list) -> list:
         raw = df[col].dropna().astype(str).str.strip()
 
         # --- text month names ---
-        text_months = [v for v in raw if v.lower() in _ALL_MONTH_NAMES
-                       and not v.lstrip("-").replace(".", "").isdigit()]
+        text_months = [
+            v
+            for v in raw
+            if v.lower() in _ALL_MONTH_NAMES and not v.lstrip("-").replace(".", "").isdigit()
+        ]
         n_text = len(text_months)
         if n_text > 0:
             pct = n_text / len(raw)
-            issues.append({
-                "column": col,
-                "type": "month_format_inconsistency",
-                "detail": (
-                    f"{n_text} values ({pct:.1%}) are text month names "
-                    f"(e.g. '{text_months[0]}') — should be integers 1-12"
-                ),
-                "severity": "medium" if pct > 0.05 else "low",
-            })
+            issues.append(
+                {
+                    "column": col,
+                    "type": "month_format_inconsistency",
+                    "detail": (
+                        f"{n_text} values ({pct:.1%}) are text month names "
+                        f"(e.g. '{text_months[0]}') — should be integers 1-12"
+                    ),
+                    "severity": "medium" if pct > 0.05 else "low",
+                }
+            )
 
         # --- special integer codes ---
         numeric = _coerce_numeric(df[col], dropna=True)
@@ -1286,16 +1377,18 @@ def check_month_column(df: pd.DataFrame, cols: list) -> list:
         if n_special > 0:
             special_vals = sorted(int_vals[special_mask].unique().tolist())
             pct = n_special / len(raw)
-            issues.append({
-                "column": col,
-                "type": "special_month_code",
-                "detail": (
-                    f"{n_special} values ({pct:.1%}) are special month codes "
-                    f"{special_vals} — likely unknowns or annual aggregates; "
-                    f"should be NULL or a dedicated category"
-                ),
-                "severity": "medium" if pct > 0.05 else "low",
-            })
+            issues.append(
+                {
+                    "column": col,
+                    "type": "special_month_code",
+                    "detail": (
+                        f"{n_special} values ({pct:.1%}) are special month codes "
+                        f"{special_vals} — likely unknowns or annual aggregates; "
+                        f"should be NULL or a dedicated category"
+                    ),
+                    "severity": "medium" if pct > 0.05 else "low",
+                }
+            )
     return issues
 
 
@@ -1335,46 +1428,50 @@ def check_year_column(df: pd.DataFrame, cols: list) -> list:
         n_dirty = int(dirty_mask.sum())
         if n_dirty > 0:
             pct = n_dirty / len(raw)
-            issues.append({
-                "column": col,
-                "type": "year_format_inconsistency",
-                "detail": (
-                    f"{n_dirty} values ({pct:.1%}) have trailing non-digit "
-                    f"characters (e.g. '2024.') — can be cleaned automatically"
-                ),
-                "severity": "low",
-            })
+            issues.append(
+                {
+                    "column": col,
+                    "type": "year_format_inconsistency",
+                    "detail": (
+                        f"{n_dirty} values ({pct:.1%}) have trailing non-digit "
+                        f"characters (e.g. '2024.') — can be cleaned automatically"
+                    ),
+                    "severity": "low",
+                }
+            )
 
         # 2-digit years (auto-fixable via century inference)
         two_digit_mask = (int_vals >= 0) & (int_vals <= 99)
         n_two = int(two_digit_mask.sum())
         if n_two > 0:
             pct = n_two / len(int_vals)
-            issues.append({
-                "column": col,
-                "type": "ambiguous_year_format",
-                "detail": (
-                    f"{n_two} values ({pct:.1%}) appear to be 2-digit years "
-                    f"— century will be inferred from the dominant year in the column"
-                ),
-                "severity": "medium",
-            })
+            issues.append(
+                {
+                    "column": col,
+                    "type": "ambiguous_year_format",
+                    "detail": (
+                        f"{n_two} values ({pct:.1%}) appear to be 2-digit years "
+                        f"— century will be inferred from the dominant year in the column"
+                    ),
+                    "severity": "medium",
+                }
+            )
 
         # Truly out-of-range (not 2-digit, not dirty trailing)
-        out_of_range = int(
-            ((int_vals < 1900) | (int_vals > 2099)).sum()
-        ) - n_two
+        out_of_range = int(((int_vals < 1900) | (int_vals > 2099)).sum()) - n_two
         if out_of_range > 0:
             pct = out_of_range / len(int_vals)
-            issues.append({
-                "column": col,
-                "type": "invalid_year_value",
-                "detail": (
-                    f"{out_of_range} values ({pct:.1%}) fall outside the valid "
-                    f"year range [1900-2099]"
-                ),
-                "severity": "medium",
-            })
+            issues.append(
+                {
+                    "column": col,
+                    "type": "invalid_year_value",
+                    "detail": (
+                        f"{out_of_range} values ({pct:.1%}) fall outside the valid "
+                        f"year range [1900-2099]"
+                    ),
+                    "severity": "medium",
+                }
+            )
     return issues
 
 
@@ -1450,9 +1547,8 @@ def fix_year_column(df: pd.DataFrame, col: str) -> int:
 
     # Infer the century prefix from the dominant 4-digit year
     four_digit = pd.to_numeric(
-        df[col].dropna().astype(str).str.strip()
-               .str.replace(r"[^\d]$", "", regex=True),
-        errors="coerce"
+        df[col].dropna().astype(str).str.strip().str.replace(r"[^\d]$", "", regex=True),
+        errors="coerce",
     ).dropna()
     four_digit = four_digit[(four_digit >= 1900) & (four_digit <= 2099)]
     century_prefix = int(four_digit.mode().iloc[0]) // 100 * 100 if len(four_digit) > 0 else 2000
@@ -1532,20 +1628,23 @@ def check_fractional_integers(
         if n_fractional == 0:
             continue
         pct = n_fractional / len(numeric)
-        issues.append({
-            "column": col,
-            "type": "fractional_integers",
-            "detail": (
-                f"{n_fractional} values ({pct:.1%}) have non-zero fractional "
-                f"parts in a column where {whole_frac:.0%} of values are "
-                f"whole numbers — likely corrupted entries"
-            ),
-            "severity": "high" if pct > 0.02 else "medium",
-        })
+        issues.append(
+            {
+                "column": col,
+                "type": "fractional_integers",
+                "detail": (
+                    f"{n_fractional} values ({pct:.1%}) have non-zero fractional "
+                    f"parts in a column where {whole_frac:.0%} of values are "
+                    f"whole numbers — likely corrupted entries"
+                ),
+                "severity": "high" if pct > 0.02 else "medium",
+            }
+        )
     return issues
 
 
 # ── Remediation ────────────────────────────────────────────────────────────────
+
 
 def fix_fractional_integers(df: pd.DataFrame, col: str) -> int:
     """Set values with non-trivial fractional parts to NaN in-place for a
@@ -1599,9 +1698,7 @@ def null_pattern_violations(df: pd.DataFrame, col: str, pattern: str) -> int:
         compiled = re.compile(pattern)
     except re.error:
         return 0
-    violates = nev_mask & df[col].astype(str).apply(
-        lambda v: not compiled.match(str(v))
-    )
+    violates = nev_mask & df[col].astype(str).apply(lambda v: not compiled.match(str(v)))
     count = int(violates.sum())
     # Safety guard: refuse to null more than 30% of non-empty values
     if nev_count > 0 and count / nev_count > 0.30:
@@ -1642,12 +1739,7 @@ def fix_currency_symbols_in_numeric(df: pd.DataFrame, col: str) -> int:
     if not contains_symbol.any():
         return 0
     original = df[col].copy()
-    cleaned = (
-        df[col]
-        .astype(str)
-        .str.replace(_CURRENCY_SYMBOLS_REGEX, "", regex=True)
-        .str.strip()
-    )
+    cleaned = df[col].astype(str).str.replace(_CURRENCY_SYMBOLS_REGEX, "", regex=True).str.strip()
     df.loc[contains_symbol, col] = cleaned[contains_symbol]
 
     post_numeric = _coerce_numeric(non_empty_values(df[col])).notna()
@@ -1675,17 +1767,12 @@ def fix_comma_decimal_format(df: pd.DataFrame, col: str) -> int:
     pre_rate = float(pre_numeric.mean())
     pre_count = int(pre_numeric.sum())
 
-    matches = (
-        df[col].astype(str).str.match(IT_DECIMAL_PATTERN.pattern).fillna(False).astype(bool)
-    )
+    matches = df[col].astype(str).str.match(IT_DECIMAL_PATTERN.pattern).fillna(False).astype(bool)
     if int(matches.sum()) < 2:
         return 0
     original = df[col].copy()
     converted = (
-        df[col]
-        .astype(str)
-        .str.replace(".", "", regex=False)
-        .str.replace(",", ".", regex=False)
+        df[col].astype(str).str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
     )
     df.loc[matches, col] = converted[matches]
 
@@ -1705,18 +1792,23 @@ _EXPLICIT_DATE_FORMATS = [
     "%Y/%m/%d",
     "%Y%m%d",
     # Locale-specific — ambiguous between day/month, tried after ISO
-    "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y",
-    "%d/%m/%y", "%d-%m-%y",
+    "%d/%m/%Y",
+    "%d-%m-%Y",
+    "%d.%m.%Y",
+    "%d/%m/%y",
+    "%d-%m-%y",
     "%m/%d/%Y",
 ]
 
 
 def _translate_italian_months(series: pd.Series) -> pd.Series:
     """Replace Italian month names/abbreviations with English equivalents."""
+
     def _translate(val: str) -> str:
         for it, en in IT_EN_MONTH_TRANSLATION.items():
             val = re.sub(rf"(?i)\b{re.escape(it)}\b", en, val)
         return val
+
     return series.astype(str).apply(_translate)
 
 
@@ -1739,17 +1831,19 @@ def fix_invalid_dates(df: pd.DataFrame, col: str) -> tuple[str, int]:
     # ── 1. YYYYMM period codes ────────────────────────────────────────────────
     clean = df[col].astype(str).str.strip().str.replace(r"\.0+$", "", regex=True)
     yyyymm_frac = clean.apply(
-        lambda v: bool(re.match(r"^\d{6}$", v))
-        and 1 <= int(v[4:]) <= 12
-        and int(v[:4]) >= 1900
-        if re.match(r"^\d{6}$", v) else False
+        lambda v: (
+            bool(re.match(r"^\d{6}$", v)) and 1 <= int(v[4:]) <= 12 and int(v[:4]) >= 1900
+            if re.match(r"^\d{6}$", v)
+            else False
+        )
     ).mean()
     if yyyymm_frac > 0.80:
         valid_mask = clean.apply(
-            lambda v: bool(re.match(r"^\d{6}$", v))
-            and 1 <= int(v[4:]) <= 12
-            and int(v[:4]) >= 1900
-            if re.match(r"^\d{6}$", v) else False
+            lambda v: (
+                bool(re.match(r"^\d{6}$", v)) and 1 <= int(v[4:]) <= 12 and int(v[:4]) >= 1900
+                if re.match(r"^\d{6}$", v)
+                else False
+            )
         )
         df[col] = clean.where(valid_mask, other=pd.NA)
         return "YYYYMM_validated", int(valid_mask.sum())
@@ -1799,9 +1893,7 @@ def remove_duplicate_rows(df: pd.DataFrame) -> int:
     return before - len(df)
 
 
-def fill_missing_numerical(
-    df: pd.DataFrame, col: str, is_missing: pd.Series
-) -> tuple[bool, str]:
+def fill_missing_numerical(df: pd.DataFrame, col: str, is_missing: pd.Series) -> tuple[bool, str]:
     """Fill missing values in a numerical column with the column median in-place.
 
     Returns (success, detail_message).
@@ -1847,15 +1939,12 @@ def fill_missing_categorical(
         mode_value = clean.mode().iloc[0]
         df.loc[is_missing, col] = mode_value
         return True, (
-            f"Filled {rows_affected} missing/placeholder values "
-            f"with mode ('{mode_value}')"
+            f"Filled {rows_affected} missing/placeholder values with mode ('{mode_value}')"
         )
     return False, "Column is entirely placeholders/empty -- cannot compute safe mode value"
 
 
-def cap_outliers(
-    df: pd.DataFrame, col: str, raw_series: pd.Series
-) -> tuple[float, float, int]:
+def cap_outliers(df: pd.DataFrame, col: str, raw_series: pd.Series) -> tuple[float, float, int]:
     """Clip outliers in col to the 3xIQR Tukey outer fence derived from raw_series.
 
     Uses the interquartile range (Tukey outer fence = Q1 - 3xIQR, Q3 + 3xIQR).
@@ -1956,11 +2045,7 @@ def normalize_case(df: pd.DataFrame, col: str) -> int:
             lower_to_canonical[key] = val  # first = most frequent
 
     # Frequent canonical lowercase forms (>= 1% of rows) — reference for fuzzy
-    frequent_lowers = [
-        val.lower()
-        for val, cnt in value_counts.items()
-        if cnt / total >= 0.01
-    ]
+    frequent_lowers = [val.lower() for val, cnt in value_counts.items() if cnt / total >= 0.01]
 
     # Build the replacement map
     replacement: dict[str, str] = {}
@@ -2020,6 +2105,7 @@ def fix_column_naming(df: pd.DataFrame, col: str) -> tuple[str, str]:
 
 # ── Visualizations ─────────────────────────────────────────────────────────────
 
+
 def chart_severity_distribution(issues: list, images_dir: str) -> str:
     """Bar chart of issue counts by severity. Returns the saved file path."""
     severities = ["high", "medium", "low"]
@@ -2031,8 +2117,12 @@ def chart_severity_distribution(issues: list, images_dir: str) -> str:
     for bar, count in zip(bars, counts):
         if count > 0:
             ax.text(
-                bar.get_x() + bar.get_width() / 2, bar.get_height(),
-                str(count), ha="center", va="bottom", fontweight="bold",
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height(),
+                str(count),
+                ha="center",
+                va="bottom",
+                fontweight="bold",
             )
     ax.set_ylabel("Issue Count")
     ax.set_title("Issue Severity Distribution")
@@ -2051,10 +2141,7 @@ def chart_issues_by_agent(issues: list, images_dir: str) -> str:
 
     data = {
         sev: [
-            sum(
-                1 for i in issues
-                if i.get("source") == agent and i["severity"] == sev
-            )
+            sum(1 for i in issues if i.get("source") == agent and i["severity"] == sev)
             for agent in agents
         ]
         for sev in severities
@@ -2064,8 +2151,7 @@ def chart_issues_by_agent(issues: list, images_dir: str) -> str:
     width = 0.25
     fig, ax = plt.subplots(figsize=(10, 5))
     for idx, sev in enumerate(severities):
-        ax.bar(x + idx * width, data[sev], width,
-               label=sev.capitalize(), color=colors[idx])
+        ax.bar(x + idx * width, data[sev], width, label=sev.capitalize(), color=colors[idx])
     ax.set_xticks(x + width)
     ax.set_xticklabels([a.capitalize() + "Agent" for a in agents], rotation=15)
     ax.set_ylabel("Issue Count")
@@ -2078,9 +2164,7 @@ def chart_issues_by_agent(issues: list, images_dir: str) -> str:
     return path
 
 
-def chart_completeness_heatmap(
-    completeness_by_col: dict, images_dir: str
-) -> str:
+def chart_completeness_heatmap(completeness_by_col: dict, images_dir: str) -> str:
     """Heatmap of per-column completeness rates. Returns path."""
     if not completeness_by_col:
         return ""
@@ -2098,8 +2182,7 @@ def chart_completeness_heatmap(
     ax.set_title("Completeness Rate by Column (Before Remediation)")
     for idx, val in enumerate(values):
         color = "white" if val < 0.5 else "black"
-        ax.text(idx, 0, f"{val:.0%}", ha="center", va="center",
-                fontsize=7, color=color)
+        ax.text(idx, 0, f"{val:.0%}", ha="center", va="center", fontsize=7, color=color)
 
     path = f"{images_dir}/completeness_heatmap.png"
     fig.savefig(path, dpi=150, bbox_inches="tight")
@@ -2108,6 +2191,7 @@ def chart_completeness_heatmap(
 
 
 # ── Duplicate column removal ───────────────────────────────────────────────────
+
 
 def pick_duplicate_column_to_drop(col_a: str, col_b: str) -> str:
     """Choose which of two duplicate columns to drop.
@@ -2125,11 +2209,11 @@ def pick_duplicate_column_to_drop(col_a: str, col_b: str) -> str:
     import re as _re
 
     def _badness(col: str) -> tuple:
-        has_upper    = bool(_re.search(r"[A-Z]", col))
-        has_special  = bool(_re.search(r"[^a-zA-Z0-9_ ]", col))
+        has_upper = bool(_re.search(r"[A-Z]", col))
+        has_special = bool(_re.search(r"[^a-zA-Z0-9_ ]", col))
         has_digit_prefix = bool(_re.match(r"^\d", col))
         has_digit_suffix = bool(_re.search(r"_\d+$", col))
-        has_space    = " " in col
+        has_space = " " in col
         return (
             has_upper,
             has_special,
@@ -2150,8 +2234,17 @@ import ast as _ast
 
 _ALLOWED_IMPORTS = {"pandas", "numpy", "re", "math"}
 _FORBIDDEN_CALLS = {"exec", "eval", "open", "compile", "__import__"}
-_FORBIDDEN_ATTRS = {"remove", "rmdir", "system", "popen", "unlink", "rmtree",
-                    "call", "run", "Popen"}
+_FORBIDDEN_ATTRS = {
+    "remove",
+    "rmdir",
+    "system",
+    "popen",
+    "unlink",
+    "rmtree",
+    "call",
+    "run",
+    "Popen",
+}
 
 
 def validate_generated_code(code: str) -> tuple[bool, str]:
@@ -2197,16 +2290,20 @@ def chart_reliability_comparison(
 ) -> str:
     """Before-vs-after bar chart of reliability dimension scores. Returns path."""
     all_dim_keys = [
-        "schema_conformity", "completeness", "uniqueness",
-        "consistency", "anomaly_freedom",
+        "schema_conformity",
+        "completeness",
+        "uniqueness",
+        "consistency",
+        "anomaly_freedom",
     ]
     labels = [
-        "Schema\nConformity", "Completeness", "Uniqueness",
-        "Consistency", "Anomaly\nFreedom",
+        "Schema\nConformity",
+        "Completeness",
+        "Uniqueness",
+        "Consistency",
+        "Anomaly\nFreedom",
     ]
-    present_keys = [
-        k for k in all_dim_keys if k in before_dims or k in after_dims
-    ]
+    present_keys = [k for k in all_dim_keys if k in before_dims or k in after_dims]
     present_labels = [labels[all_dim_keys.index(k)] for k in present_keys]
     before_vals = [before_dims.get(k, 0) for k in present_keys]
     after_vals = [after_dims.get(k, 0) for k in present_keys]
@@ -2214,21 +2311,18 @@ def chart_reliability_comparison(
     x = np.arange(len(present_keys))
     width = 0.35
     fig, ax = plt.subplots(figsize=(10, 5))
-    bars_b = ax.bar(x - width / 2, before_vals, width,
-                    label="Before Remediation", color="#6c757d")
-    bars_a = ax.bar(x + width / 2, after_vals, width,
-                    label="After Remediation", color="#28a745")
+    bars_b = ax.bar(x - width / 2, before_vals, width, label="Before Remediation", color="#6c757d")
+    bars_a = ax.bar(x + width / 2, after_vals, width, label="After Remediation", color="#28a745")
     for bar in list(bars_b) + list(bars_a):
         h = bar.get_height()
-        ax.text(bar.get_x() + bar.get_width() / 2, h,
-                f"{h:.2f}", ha="center", va="bottom", fontsize=8)
+        ax.text(
+            bar.get_x() + bar.get_width() / 2, h, f"{h:.2f}", ha="center", va="bottom", fontsize=8
+        )
     ax.set_xticks(x)
     ax.set_xticklabels(present_labels)
     ax.set_ylabel("Score (0-1)")
     ax.set_ylim(0, 1.15)
-    ax.set_title(
-        f"Reliability Dimensions: {before_score}/100 -> {after_score}/100"
-    )
+    ax.set_title(f"Reliability Dimensions: {before_score}/100 -> {after_score}/100")
     ax.legend()
 
     path = f"{images_dir}/reliability_before_after.png"

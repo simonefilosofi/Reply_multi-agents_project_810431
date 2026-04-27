@@ -75,6 +75,8 @@ def monkeypatch_llm(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
             monkeypatch_llm["call_llm"] = "stub summary"
             monkeypatch_llm["call_llm_json"] = [{"type": "missing_values", ...}]
     """
+    from pydantic import BaseModel
+
     from agents_demo.base_agent import BaseAgent
 
     canned: dict[str, Any] = {"call_llm": "", "call_llm_json": []}
@@ -87,8 +89,14 @@ def monkeypatch_llm(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         user: str,
         max_tokens: int = 4096,
         required_keys: list[str] | None = None,
+        schema: type[BaseModel] | None = None,
     ) -> Any:
-        return canned["call_llm_json"]
+        value = canned["call_llm_json"]
+        if schema is not None:
+            if isinstance(value, schema):
+                return value
+            return schema.model_validate(value)
+        return value
 
     monkeypatch.setattr(BaseAgent, "call_llm", _fake_call_llm)
     monkeypatch.setattr(BaseAgent, "call_llm_json", _fake_call_llm_json)

@@ -1,8 +1,9 @@
 """Layer 1 duplicate detection agent. Identifies fully duplicate rows,
 duplicate column pairs flagged by the profiler, and key-collision rows
-that share key column values but differ in other columns."""
+that share key column values but differ in other columns.
+"""
 
-from agents_demo.base_agent import BaseAgent, SMART
+from agents_demo.base_agent import SMART, BaseAgent
 from state_demo.constants import DUPLICATE_ISSUE_TYPES
 from tools import detect_duplicate_columns, detect_duplicate_rows, detect_key_collisions
 
@@ -37,10 +38,12 @@ class DuplicateAgent(BaseAgent):
         # Check id_columns first — violations there are primary key errors.
         # Then check suggested_key_columns for business-key collisions.
         # Use dict.fromkeys to deduplicate while preserving order.
-        key_cols = list(dict.fromkeys(
-            [c for c in fp.get("id_columns", []) if c in df.columns]
-            + [c for c in (fp.get("suggested_key_columns") or []) if c in df.columns]
-        ))
+        key_cols = list(
+            dict.fromkeys(
+                [c for c in fp.get("id_columns", []) if c in df.columns]
+                + [c for c in (fp.get("suggested_key_columns") or []) if c in df.columns]
+            )
+        )
         collision_issues, skip_reason = detect_key_collisions(df, key_cols)
         if skip_reason:
             self.log("act", skip_reason)
@@ -64,12 +67,15 @@ class DuplicateAgent(BaseAgent):
         row_dups = sum(1 for i in issues if i["type"] == "duplicate_rows")
         col_dups = sum(1 for i in issues if i["type"] == "duplicate_columns")
         key_dups = sum(1 for i in issues if i["type"] == "duplicate_key")
-        self.log("observe",
-                 f"Found {len(issues)} duplicate issues: "
-                 f"{row_dups} row, {col_dups} column, {key_dups} key-collision")
+        self.log(
+            "observe",
+            f"Found {len(issues)} duplicate issues: "
+            f"{row_dups} row, {col_dups} column, {key_dups} key-collision",
+        )
 
     def reply(self):
         self.summarize_issues(
             self.state.duplicate_report["issues"],
-            "duplicate_summary", "duplicate",
+            "duplicate_summary",
+            "duplicate",
         )

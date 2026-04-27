@@ -1,8 +1,9 @@
 """Layer 1 consistency validation agent. Checks date format consistency,
 categorical case consistency, date column ordering, and conditional
-completeness between related column pairs."""
+completeness between related column pairs.
+"""
 
-from agents_demo.base_agent import BaseAgent, SMART
+from agents_demo.base_agent import SMART, BaseAgent
 from state_demo.constants import CONSISTENCY_ISSUE_TYPES
 from tools import (
     check_case_consistency,
@@ -54,14 +55,17 @@ class ConsistencyAgent(BaseAgent):
         order_issues = sum(1 for i in issues if i["type"] == "date_order")
         cond_issues = sum(1 for i in issues if i["type"] == "conditional_completeness")
         lookup_issues = sum(1 for i in issues if i["type"] == "lookup_imputability")
-        self.log("observe",
-                 f"Found {len(issues)} consistency issues: "
-                 f"{format_issues} format, {case_issues} case, "
-                 f"{order_issues} date order, {cond_issues} conditional, "
-                 f"{lookup_issues} lookup-imputability")
+        self.log(
+            "observe",
+            f"Found {len(issues)} consistency issues: "
+            f"{format_issues} format, {case_issues} case, "
+            f"{order_issues} date order, {cond_issues} conditional, "
+            f"{lookup_issues} lookup-imputability",
+        )
 
     def reply(self):
         self.summarize_issues(
             self.state.consistency_report["issues"],
-            "consistency_summary", "consistency",
+            "consistency_summary",
+            "consistency",
         )

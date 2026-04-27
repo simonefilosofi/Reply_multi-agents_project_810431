@@ -1,10 +1,11 @@
 """Layer 4 report agent. Computes the post-remediation reliability score,
 generates four data quality visualizations, compiles the final report
-dictionary, and produces an LLM-generated executive narrative."""
+dictionary, and produces an LLM-generated executive narrative.
+"""
 
 import os
 
-from agents_demo.base_agent import BaseAgent, SMART
+from agents_demo.base_agent import SMART, BaseAgent
 from state_demo.scoring import compute_reliability_score
 from tools import (
     chart_completeness_heatmap,
@@ -32,15 +33,15 @@ class ReportAgent(BaseAgent):
         n_issues = len(self.state.prioritized_issues)
         n_fixes = len(self.state.fix_log)
         n_insights = len(self.state.cross_agent_insights)
-        self.log("think",
-                 f"{self.prompt} | Compiling final report: {n_issues} issues, "
-                 f"{n_fixes} fix actions, {n_insights} cross-agent insights")
+        self.log(
+            "think",
+            f"{self.prompt} | Compiling final report: {n_issues} issues, "
+            f"{n_fixes} fix actions, {n_insights} cross-agent insights",
+        )
 
     def act(self):
         os.makedirs(IMAGES_DIR, exist_ok=True)
-        dataset_name = os.path.splitext(
-            os.path.basename(self.state.source_path)
-        )[0]
+        dataset_name = os.path.splitext(os.path.basename(self.state.source_path))[0]
         images_dir = os.path.join(IMAGES_DIR, dataset_name)
         os.makedirs(images_dir, exist_ok=True)
 
@@ -63,7 +64,9 @@ class ReportAgent(BaseAgent):
             return renamed if renamed and renamed in df.columns else None
 
         after_score, after_dims = compute_reliability_score(
-            self.state.df_cleaned, self.state, resolve=resolve,
+            self.state.df_cleaned,
+            self.state,
+            resolve=resolve,
         )
         self.state.reliability_score_after = after_score
 
@@ -81,8 +84,7 @@ class ReportAgent(BaseAgent):
 
         issues = self.state.prioritized_issues
         auto_fixed = sum(
-            1 for f in self.state.fix_log
-            if f["action"] in ("auto_fixed", "auto_fixed_by_llm")
+            1 for f in self.state.fix_log if f["action"] in ("auto_fixed", "auto_fixed_by_llm")
         )
         flagged = sum(1 for f in self.state.fix_log if f["action"] == "flagged_for_review")
         recommendations = [
@@ -138,10 +140,15 @@ class ReportAgent(BaseAgent):
     def observe(self):
         report = self.state.final_report
         required = (
-            "title", "dataset", "reliability_score_before",
-            "reliability_score_after", "total_issues_found",
-            "executive_summary", "agent_reports",
-            "recommendations", "visualizations",
+            "title",
+            "dataset",
+            "reliability_score_before",
+            "reliability_score_after",
+            "total_issues_found",
+            "executive_summary",
+            "agent_reports",
+            "recommendations",
+            "visualizations",
         )
         missing = [k for k in required if k not in report or not report[k]]
         if missing:
@@ -150,10 +157,12 @@ class ReportAgent(BaseAgent):
             self.log("observe", "All required report fields populated")
         before = report["reliability_score_before"]
         after = report["reliability_score_after"]
-        self.log("observe",
-                 f"Reliability: {before} -> {after} "
-                 f"(delta: {after - before:+.1f}). "
-                 f"Visualizations: {len(report['visualizations'])} charts")
+        self.log(
+            "observe",
+            f"Reliability: {before} -> {after} "
+            f"(delta: {after - before:+.1f}). "
+            f"Visualizations: {len(report['visualizations'])} charts",
+        )
 
     def reply(self):
         report = self.state.final_report

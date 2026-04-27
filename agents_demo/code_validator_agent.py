@@ -19,7 +19,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from agents_demo.base_agent import BaseAgent, SMART
+from agents_demo.base_agent import SMART, BaseAgent
 from tools import validate_generated_code
 from tools_code_validator import (
     SANDBOX_TIMEOUT,
@@ -65,36 +65,35 @@ class CodeValidatorAgent(BaseAgent):
     # ── TAOR protocol ─────────────────────────────────────────────────────────
 
     def think(self):
-        self.log("think",
-                 f"{self.prompt} | max {MAX_RETRIES} retries per issue, "
-                 f"sandbox timeout {SANDBOX_TIMEOUT}s")
+        self.log(
+            "think",
+            f"{self.prompt} | max {MAX_RETRIES} retries per issue, "
+            f"sandbox timeout {SANDBOX_TIMEOUT}s",
+        )
 
     def act(self):
-        df = (self.state.df_cleaned
-              if self.state.df_cleaned is not None
-              else self.state.df_raw.copy())
+        df = (
+            self.state.df_cleaned if self.state.df_cleaned is not None else self.state.df_raw.copy()
+        )
 
         for issue in self._gap_issues:
             col = issue.get("column")
             if not col or col not in df.columns:
-                self.log("act",
-                         f"Skipping gap issue — column '{col}' not in DataFrame")
+                self.log("act", f"Skipping gap issue — column '{col}' not in DataFrame")
                 continue
-            self.log("act",
-                     f"Processing gap issue on '{col}': {issue.get('type')}")
+            self.log("act", f"Processing gap issue on '{col}': {issue.get('type')}")
             self._process_issue(df, issue)
 
         self.state.df_cleaned = df
 
     def observe(self):
-        applied = sum(
-            1 for f in self.state.fix_log
-            if f.get("action") == "auto_fixed_by_llm"
-        )
+        applied = sum(1 for f in self.state.fix_log if f.get("action") == "auto_fixed_by_llm")
         flagged = len(self.state.human_review_items)
-        self.log("observe",
-                 f"CodeValidator complete — {applied} LLM fixes applied, "
-                 f"{flagged} item(s) flagged for human review")
+        self.log(
+            "observe",
+            f"CodeValidator complete — {applied} LLM fixes applied, "
+            f"{flagged} item(s) flagged for human review",
+        )
 
     def reply(self):
         pass
@@ -116,8 +115,7 @@ class CodeValidatorAgent(BaseAgent):
         )
         sandbox_uid = resolve_sandbox_uid()
         if sandbox_uid is None:
-            self.log("act",
-                     "sandbox_user not found — running sandbox as current user")
+            self.log("act", "sandbox_user not found — running sandbox as current user")
 
         last_code = ""
         last_error = ""
@@ -126,9 +124,7 @@ class CodeValidatorAgent(BaseAgent):
             self.log("act", f"'{col}' — attempt {attempt}/{MAX_RETRIES}")
 
             # Step 2 — generate (or regenerate) fix function
-            last_code = self._call_fix_generation(
-                issue, target_rows, last_code, last_error
-            )
+            last_code = self._call_fix_generation(issue, target_rows, last_code, last_error)
             if not last_code:
                 last_error = "LLM returned empty code"
                 continue
@@ -149,8 +145,7 @@ class CodeValidatorAgent(BaseAgent):
             )
             if not success:
                 last_error = result_or_error
-                self.log("act",
-                         f"Sandbox error on attempt {attempt}: {last_error}")
+                self.log("act", f"Sandbox error on attempt {attempt}: {last_error}")
                 continue
 
             # Step 6 — safety guards on subsample result
@@ -171,49 +166,41 @@ class CodeValidatorAgent(BaseAgent):
                 fixed_col = result_full_or_error[col].values
                 rows_affected = int((fixed_col != original_col.values).sum())
                 df[col] = fixed_col
-                self.log("act",
-                         f"Fix applied to '{col}' on attempt {attempt} "
-                         f"({rows_affected} rows changed)")
-                code_path = self._dump_code(
-                    col, issue["type"], last_code, "applied", attempt
+                self.log(
+                    "act",
+                    f"Fix applied to '{col}' on attempt {attempt} ({rows_affected} rows changed)",
                 )
-                self.state.fix_log.append({
-                    "issue_type": issue["type"],
-                    "column": col,
-                    "action": "auto_fixed_by_llm",
-                    "description": issue.get("detail", ""),
-                    "rows_affected": rows_affected,
-                    "attempts": attempt,
-                    "generated_code": last_code,
-                    "code_file": code_path,
-                })
+                code_path = self._dump_code(col, issue["type"], last_code, "applied", attempt)
+                self.state.fix_log.append(
+                    {
+                        "issue_type": issue["type"],
+                        "column": col,
+                        "action": "auto_fixed_by_llm",
+                        "description": issue.get("detail", ""),
+                        "rows_affected": rows_affected,
+                        "attempts": attempt,
+                        "generated_code": last_code,
+                        "code_file": code_path,
+                    }
+                )
                 return
             else:
                 last_error = result_full_or_error
 
-        self._dump_code(
-            col, issue["type"], last_code, "failed", MAX_RETRIES, error=last_error
-        )
-        self._add_human_review(
-            issue, last_code, last_error, MAX_RETRIES, "max_retries_exceeded"
-        )
+        self._dump_code(col, issue["type"], last_code, "failed", MAX_RETRIES, error=last_error)
+        self._add_human_review(issue, last_code, last_error, MAX_RETRIES, "max_retries_exceeded")
 
     # ── Filter validation ─────────────────────────────────────────────────────
 
-    def _validate_filter(
-        self, df: pd.DataFrame, col: str, issue: dict
-    ) -> tuple[pd.DataFrame, str]:
+    def _validate_filter(self, df: pd.DataFrame, col: str, issue: dict) -> tuple[pd.DataFrame, str]:
         filter_expr = issue.get("filter", "").strip()
         last_feedback = ""
 
         for attempt in range(1, MAX_RETRIES + 1):
-            self.log("act",
-                     f"Filter attempt {attempt}/{MAX_RETRIES} for '{col}'")
+            self.log("act", f"Filter attempt {attempt}/{MAX_RETRIES} for '{col}'")
 
             if not filter_expr:
-                filter_expr = self._call_filter_generation(
-                    df, col, issue, last_feedback
-                )
+                filter_expr = self._call_filter_generation(df, col, issue, last_feedback)
             if not filter_expr:
                 last_feedback = "LLM returned an empty filter expression"
                 filter_expr = ""
@@ -233,15 +220,19 @@ class CodeValidatorAgent(BaseAgent):
             coverage_feedback = check_filter_coverage(target, df, filter_expr, col)
             if coverage_feedback:
                 last_feedback = coverage_feedback
-                self.log("act",
-                         f"Filter rejected ({len(target)} rows / "
-                         f"{len(target)/len(df):.0%}) — retrying")
+                self.log(
+                    "act",
+                    f"Filter rejected ({len(target)} rows / "
+                    f"{len(target) / len(df):.0%}) — retrying",
+                )
                 filter_expr = ""
                 continue
 
-            self.log("act",
-                     f"Filter valid — {len(target)} target rows "
-                     f"({len(target)/len(df):.1%} of dataset)")
+            self.log(
+                "act",
+                f"Filter valid — {len(target)} target rows "
+                f"({len(target) / len(df):.1%} of dataset)",
+            )
             return target, ""
 
         return (
@@ -260,8 +251,7 @@ class CodeValidatorAgent(BaseAgent):
     ) -> str:
         prompt = build_filter_prompt(col, issue, df, feedback)
         try:
-            result = self.call_llm_json(prompt, max_tokens=256,
-                                        required_keys=["filter"])
+            result = self.call_llm_json(prompt, max_tokens=256, required_keys=["filter"])
             return result.get("filter", "").strip()
         except Exception as e:
             self.log("act", f"Filter generation failed: {e}")
@@ -298,13 +288,9 @@ class CodeValidatorAgent(BaseAgent):
 
         prompt = build_llm_review_prompt(issue, original, fixed)
         try:
-            result = self.call_llm_json(prompt, max_tokens=256,
-                                        required_keys=["approved"])
+            result = self.call_llm_json(prompt, max_tokens=256, required_keys=["approved"])
             if not result.get("approved", False):
-                return False, (
-                    f"LLM review rejected: "
-                    f"{result.get('reason', 'no reason given')}"
-                )
+                return False, (f"LLM review rejected: {result.get('reason', 'no reason given')}")
         except Exception as e:
             self.log("act", f"LLM safety review failed, proceeding: {e}")
 
@@ -343,7 +329,7 @@ class CodeValidatorAgent(BaseAgent):
             # Issue    : {issue_type}
             # Status   : {status}
             # Attempt  : {attempt}
-            # Timestamp: {datetime.now().isoformat(timespec='seconds')}
+            # Timestamp: {datetime.now().isoformat(timespec="seconds")}
         """)
         if error:
             header += f"# Error    : {error}\n"
@@ -365,13 +351,14 @@ class CodeValidatorAgent(BaseAgent):
         attempts: int,
         reason: str,
     ):
-        self.log("act",
-                 f"'{issue['column']}' flagged for human review — {reason}")
-        self.state.human_review_items.append({
-            "column": issue["column"],
-            "issue": issue,
-            "last_generated_code": code,
-            "last_error": error,
-            "attempts": attempts,
-            "reason": reason,
-        })
+        self.log("act", f"'{issue['column']}' flagged for human review — {reason}")
+        self.state.human_review_items.append(
+            {
+                "column": issue["column"],
+                "issue": issue,
+                "last_generated_code": code,
+                "last_error": error,
+                "attempts": attempts,
+                "reason": reason,
+            }
+        )

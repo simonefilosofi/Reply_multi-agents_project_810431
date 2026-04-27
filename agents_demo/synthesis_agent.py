@@ -2,9 +2,10 @@
 from Layer 1 agents, performs cross-agent convergence analysis via LLM,
 detects inter-agent conflicts, recalibrates severity based on compounding
 evidence, computes the pre-remediation reliability score, and generates
-an executive summary of data quality findings."""
+an executive summary of data quality findings.
+"""
 
-from agents_demo.base_agent import BaseAgent, SMART
+from agents_demo.base_agent import SMART, BaseAgent
 from state_demo.constants import SEVERITY_RANK
 from state_demo.scoring import compute_reliability_score
 
@@ -40,9 +41,7 @@ class SynthesisAgent(BaseAgent):
             for issue in report.get("issues", []):
                 all_issues.append({**issue, "source": source})
 
-        all_issues.sort(
-            key=lambda x: SEVERITY_RANK.get(x.get("severity", "low"), 2)
-        )
+        all_issues.sort(key=lambda x: SEVERITY_RANK.get(x.get("severity", "low"), 2))
         self.state.prioritized_issues = all_issues
 
         column_issues: dict = {}
@@ -56,16 +55,14 @@ class SynthesisAgent(BaseAgent):
 
     def _column_convergence_analysis(self, column_issues: dict):
         multi_agent_cols = {
-            col: issues for col, issues in column_issues.items()
+            col: issues
+            for col, issues in column_issues.items()
             if len(set(i["source"] for i in issues)) >= 2
         }
         if len(multi_agent_cols) > 5:
             sorted_cols = sorted(
                 multi_agent_cols,
-                key=lambda c: min(
-                    SEVERITY_RANK.get(i["severity"], 2)
-                    for i in multi_agent_cols[c]
-                ),
+                key=lambda c: min(SEVERITY_RANK.get(i["severity"], 2) for i in multi_agent_cols[c]),
             )
             multi_agent_cols = {c: multi_agent_cols[c] for c in sorted_cols[:5]}
 
@@ -75,15 +72,17 @@ class SynthesisAgent(BaseAgent):
             issue_lines = "\n".join(
                 f"  - {i['source'].title()}Agent: {i['detail']}" for i in issues
             )
-            self.log("act",
-                     f"Querying {' and '.join(agent_labels)} about "
-                     f"column '{col}': {len(agents_involved)} agents "
-                     f"flagged issues that may share a root cause.")
+            self.log(
+                "act",
+                f"Querying {' and '.join(agent_labels)} about "
+                f"column '{col}': {len(agents_involved)} agents "
+                f"flagged issues that may share a root cause.",
+            )
 
             user = (
                 f"Column '{col}' was flagged by multiple agents:\n{issue_lines}\n\n"
                 f"Reason about whether these findings share a root cause. "
-                f'Respond ONLY with a JSON object, no other text: '
+                f"Respond ONLY with a JSON object, no other text: "
                 f'{{"root_cause": "...", "recommendation": "..."}}'
             )
             try:
@@ -92,15 +91,12 @@ class SynthesisAgent(BaseAgent):
                 recommendation = result.get("recommendation", "manual review")
             except Exception as e:
                 self.log("error", f"LLM cross-agent analysis failed for '{col}': {e}")
-                root_cause = (
-                    "Multiple quality dimensions affected -- manual review recommended."
-                )
+                root_cause = "Multiple quality dimensions affected -- manual review recommended."
                 recommendation = "Inspect column in source system."
 
             insight = {
                 "insight": (
-                    f"Column '{col}' flagged by {len(agents_involved)} agents: "
-                    f"{root_cause}"
+                    f"Column '{col}' flagged by {len(agents_involved)} agents: {root_cause}"
                 ),
                 "related_agents": agents_involved,
                 "related_columns": [col],
@@ -124,12 +120,14 @@ class SynthesisAgent(BaseAgent):
                     f"({issue['detail']}). Column classification may need revision."
                 )
                 self.log("act", detail)
-                self.state.cross_agent_insights.append({
-                    "insight": detail,
-                    "related_agents": ["profiler", "schema"],
-                    "related_columns": [issue["column"]],
-                    "action_taken": "Review column classification",
-                })
+                self.state.cross_agent_insights.append(
+                    {
+                        "insight": detail,
+                        "related_agents": ["profiler", "schema"],
+                        "related_columns": [issue["column"]],
+                        "action_taken": "Review column classification",
+                    }
+                )
 
     def _severity_recalibration(self, column_issues: dict):
         for col, issues in column_issues.items():
@@ -138,10 +136,12 @@ class SynthesisAgent(BaseAgent):
             if len(medium_agents) >= 2:
                 for issue in medium_issues:
                     issue["severity"] = "high"
-                self.log("act",
-                         f"Severity recalibrated: '{col}' has medium issues from "
-                         f"{len(medium_agents)} different agents "
-                         f"({', '.join(sorted(medium_agents))}) -- upgraded to high")
+                self.log(
+                    "act",
+                    f"Severity recalibrated: '{col}' has medium issues from "
+                    f"{len(medium_agents)} different agents "
+                    f"({', '.join(sorted(medium_agents))}) -- upgraded to high",
+                )
         self.state.prioritized_issues.sort(
             key=lambda x: SEVERITY_RANK.get(x.get("severity", "low"), 2)
         )
@@ -154,31 +154,44 @@ class SynthesisAgent(BaseAgent):
         medium = sum(1 for i in issues if i["severity"] == "medium")
         low = sum(1 for i in issues if i["severity"] == "low")
         dim_text = ", ".join(f"{k}={v:.2f}" for k, v in dimensions.items())
-        self.log("observe",
-                 f"{len(issues)} issues prioritized: "
-                 f"{high} high, {medium} medium, {low} low. "
-                 f"Pre-remediation reliability score: {score}/100 ({dim_text})")
+        self.log(
+            "observe",
+            f"{len(issues)} issues prioritized: "
+            f"{high} high, {medium} medium, {low} low. "
+            f"Pre-remediation reliability score: {score}/100 ({dim_text})",
+        )
 
     def reply(self):
         all_issues = self.state.prioritized_issues
         sources = set(i["source"] for i in all_issues)
         top = all_issues[:10]
-        top_text = "\n".join(
-            f"- [{i['severity'].upper()}] ({i['source']}) {i['column']}: {i['detail']}"
-            for i in top
-        ) or "No issues found."
-        summaries = "\n".join(filter(None, [
-            self.state.schema_summary,
-            self.state.completeness_summary,
-            self.state.duplicate_summary,
-            self.state.anomaly_summary,
-            self.state.consistency_summary,
-            self.state.constraint_summary,
-        ]))
-        insights_text = "\n".join(
-            f"- {ins['insight']}: {ins['action_taken']}"
-            for ins in self.state.cross_agent_insights
-        ) or "No cross-agent insights."
+        top_text = (
+            "\n".join(
+                f"- [{i['severity'].upper()}] ({i['source']}) {i['column']}: {i['detail']}"
+                for i in top
+            )
+            or "No issues found."
+        )
+        summaries = "\n".join(
+            filter(
+                None,
+                [
+                    self.state.schema_summary,
+                    self.state.completeness_summary,
+                    self.state.duplicate_summary,
+                    self.state.anomaly_summary,
+                    self.state.consistency_summary,
+                    self.state.constraint_summary,
+                ],
+            )
+        )
+        insights_text = (
+            "\n".join(
+                f"- {ins['insight']}: {ins['action_taken']}"
+                for ins in self.state.cross_agent_insights
+            )
+            or "No cross-agent insights."
+        )
 
         user = (
             f"Task: {self.prompt}\n\n"

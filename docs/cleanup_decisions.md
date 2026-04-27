@@ -280,3 +280,155 @@ the file/line where it lives.
   performance-only synthetic.
 - **Rationale:** H5 closure. Performance: legacy 514 ms vs vectorised 27 ms
   on 50k rows (≈ 19× speedup, well above the plan's 10× target).
+
+### D7.1 — `state_from_dict` defensively copies reduced list fields
+- **File:** `agents_demo/_graph.py::state_from_dict`.
+- **Decision:** When rehydrating `agent_log` and `cross_agent_insights`
+  (the two fields wired to `operator.add` reducers), copy the input list
+  with `list(value)` instead of assigning the reference directly.
+- **Rationale:** LangGraph passes its internal accumulator list into the
+  node. Without the copy, an agent's `state.agent_log.append(...)` mutates
+  that same list in place; the `build_node_runner` then returns a delta
+  slice and the reducer adds it on top, producing duplicated entries
+  (observed in the trace: ingestion and profiler logs appearing twice).
+  Regression locked by `test_pipeline_graph_invoke_runs_every_node`, which
+  asserts ingestion emits exactly 3 TAOR entries and that no
+  `(agent, phase, message)` triple repeats.
+
+### D7.2 — `build_pipeline_graph` exposes `with_checkpointer` flag
+- **File:** `agents_demo/_graph.py::build_pipeline_graph`.
+- **Decision:** Added `with_checkpointer: bool = True` parameter. When
+  `False`, the graph compiles without a checkpointer.
+- **Rationale:** LangGraph's `MemorySaver` uses ormsgpack, which cannot
+  serialise pandas `DataFrame` objects (`TypeError: Type is not msgpack
+  serializable: DataFrame`). The end-to-end test invokes the full
+  pipeline with a real DataFrame in state, so checkpointing must be
+  opt-out for tests. Production callers keep the default.
+
+### D7.3 — `code_validator` node scaffolded but unreachable until Step 12
+- **File:** `agents_demo/_graph.py::route_after_remediation`.
+- **Decision:** The node is wired into the graph as a conditional branch
+  that only fires when `state.gap_issues` is non-empty AND the
+  `enable_code_validator` toggle is on. Step 7 leaves `gap_issues` empty,
+  so the branch is never taken.
+- **Rationale:** Building the topology now keeps Step 12 to a pure
+  in-place upgrade of `CodeValidatorAgent` without touching graph wiring.
+  The agent's `run(gap_issues)` signature mismatch with the standard
+  `run(prompt)` contract is therefore inert until Step 12 introduces the
+  proper invocation path.
+
+### D7.4 — PydanticAI model construction cached per-tier
+- **File:** `agents_demo/_llm_clients.py`.
+- **Decision:** `_model_for_tier` wrapped in `lru_cache(maxsize=64)` keyed
+  on `(tier, primary, fallback)` model identifiers. `reset_model_cache()`
+  exposed for tests to clear it after env-var changes.
+- **Rationale:** Each `FallbackModel(...)` constructor eagerly initialises
+  Anthropic and OpenAI provider instances, which is non-trivial. Caching
+  guarantees that repeated `BaseAgent._build_agent` calls inside a run
+  reuse one provider per tier instead of re-instantiating per node.
+
+---
+
+## Pre-Step-8 — environment hygiene and float-crash hotfix
+
+### D-Pre8.1 — Python cap raised from `<3.13` to `<3.14` (supersedes D1.1)
+- **File:** `pyproject.toml` (`project.requires-python`),
+  `CLAUDE.md` tech-stack row, `.python-version`,
+  `.github/workflows/ci.yml` (matrix).
+- **Decision:** Widen the supported Python range to `>=3.11,<3.14`, set
+  `.python-version` to `3.13`, add `Programming Language :: Python :: 3.13`
+  classifier, and extend the CI matrix to `["3.12", "3.13"]`. The mypy
+  `python_version` and ruff `target-version` keys remain anchored at `3.11`
+  so syntax targeting still enforces the lowest supported runtime.
+- **Rationale:** D1.1 held the cap at `<3.13` and asked the user to install
+  3.12 locally. The user's machine only ships Python 3.13.7 and they elected
+  to amend the plan rather than install a parallel interpreter. All pinned
+  dependencies that motivated the original cap have since released
+  3.13-compatible wheels: `pydantic-ai 1.87.0` (already installed), `pandas
+  >=2.2.3`, `numpy >=2.1`, `pyarrow >=18`, `langgraph 0.2.x`. The Docker
+  sandbox image (`python:3.12-slim`) is unaffected — that pin is the
+  isolated runtime for fix-code execution, not the host interpreter.
+  Surfaced and approved at the pre-Step-8 confirmation gate.
+
+### D-Pre8.0 — Step 8 begins on a working tree (no commit between gates)
+- **File:** none — process note only.
+- **Decision:** The pre-Step-8 hygiene work (D-Pre8.1, D-Pre8.2 below, plus
+  `ruff check --fix` and `ruff format`) was approved at the gate but the
+  user declined the proposed commit and asked to continue straight into
+  Step 8. The Step 8 commit will therefore include both Step 8 changes
+  and the pre-Step-8 hygiene work in a single commit at Gate 8.
+- **Rationale:** "One commit per Confirmation Gate" (CLAUDE.md) is the
+  default; collapsing two adjacent gates into one commit when the user
+  explicitly asks is acceptable. Both gates' changes are listed in the
+  commit body.
+
+### D-Pre8.2 — `_is_placeholder_series` apply-lambda guards against non-string values
+- **File:** `tools.py::_is_placeholder_series` (line 1174).
+- **Decision:** The regex-mask lambda now reads
+  `lambda v: isinstance(v, str) and any(p.search(v) for p in PLACEHOLDER_PATTERNS)`
+  instead of calling `p.search(v)` unconditionally.
+- **Rationale:** `s.astype(str).str.strip()` returns `NaN` (not the string
+  `"nan"`) for any cell where pandas chooses to preserve a missing marker
+  through the `.str` accessor — concretely, columns that arrive as
+  `Float64`/`Int64` extension dtypes with `pd.NA`. Feeding `NaN` to
+  `re.Pattern.search` raises `TypeError: expected string or bytes-like
+  object`, which crashed the placeholder check during Step 7 integration
+  testing. The defensive `isinstance` short-circuit costs one type check per
+  cell and removes the crash without altering behaviour for actual strings.
+
+---
+
+## Step 8 — Layer 0 agents + Profiler hallucination guard
+
+### D8.1 — `@model_validator(mode="before")` added to `DatasetFingerprint`
+- **File:** `state_demo/fingerprint_schema.py`
+  (new `_coerce_llm_quirks` classmethod).
+- **Decision:** Move the two LLM-output normalisations
+  (`column_descriptions` list-of-dicts → flat dict; `language` →
+  lowercase) from `ProfilerAgent.act()` into a Pydantic before-validator
+  on `DatasetFingerprint` itself.
+- **Rationale:** Step 8 mandates two things in tension: "use the
+  existing `DatasetFingerprint` Pydantic model as schema" (typed Agent
+  path; LLM output is parsed by Pydantic before we see it) AND "keep the
+  normalisation". With the typed-schema path PydanticAI does the
+  parsing inside its own retry loop; we cannot intercept the raw JSON.
+  The before-validator is the only place the normalisation can live.
+  This technically modifies a file outside Step 8's "Files to modify"
+  list — surfaced at Confirmation Gate 8. The change is purely
+  additive (no field types changed) so existing callers are unaffected.
+
+### D8.2 — `column_constraints` walked from the dumped dict, not the typed instance
+- **File:** `agents_demo/profiler_agent.py::_validate_constraints_against_data`
+  (uses `fp.model_dump()` then iterates `cleaned["column_constraints"]`).
+- **Decision:** The guard does its work on a `dict` view of the
+  fingerprint (via `model_dump()`), then re-validates the cleaned dict
+  back into a `DatasetFingerprint` at the end.
+- **Rationale:** `DatasetFingerprint.column_constraints` is typed as
+  `list[dict[str, Any]]` (per-constraint shape is heterogeneous). The
+  cleanest way to drop / mutate the list is on the dict view.
+  Re-validation at the end re-runs the schema's checks (including the
+  before-validator) so the persisted dict is provably round-trip clean.
+
+### D8.3 — Threshold constants live in `profiler_agent.py`, not `state_demo/constants.py`
+- **File:** `agents_demo/profiler_agent.py` top of module
+  (`_MUST_EQUAL_AGREEMENT_THRESHOLD`, `_NUMERIC_COERCIBLE_THRESHOLD`,
+  `_FORMAT_PATTERN_MATCH_THRESHOLD`, `_DATE_PARSE_THRESHOLD`).
+- **Decision:** The four magic numbers used by the hallucination guard
+  (0.80 / 0.50 / 0.50 / 0.50) live as private module constants on the
+  agent rather than being hoisted into `state_demo/constants.py`.
+- **Rationale:** These thresholds are guard-internal and not consumed
+  by any other agent or module. Hoisting them to `constants.py` would
+  add API surface for a single caller. If a second agent ever needs
+  the same thresholds, the move is trivial.
+
+### D8.4 — `format_pattern` match rate uses `Series.str.contains` (vectorised) not `Series.apply`
+- **File:** `agents_demo/profiler_agent.py::_validate_constraints_against_data`
+  (the `format_pattern` branch).
+- **Decision:** Compute the per-cell match rate via
+  `clean_values.str.contains(regex, regex=True, na=False).mean()`.
+- **Rationale:** The natural form
+  `clean_values.apply(lambda v: bool(regex.search(v)))` triggers ruff
+  B023 (function-uses-loop-variable) because the lambda closes over
+  `regex` from the enclosing for-loop. The `str.contains` form is also
+  faster on large columns and removes the late-binding hazard entirely.
+  No `# noqa` needed.
