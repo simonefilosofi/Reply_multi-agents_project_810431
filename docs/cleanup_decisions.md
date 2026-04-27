@@ -158,3 +158,65 @@ the file/line where it lives.
   alongside the tools.py outlier work in Step 6 (or as a small standalone
   patch). Per the CLAUDE.md "bug discovered" protocol, the user decides
   whether to address it now or schedule it.
+
+---
+
+## Step 5 — Test harness and golden fixtures
+
+### D5.1 — Tests target current canonical period form `MM-YYYY`, not `YYYYMM`
+- **File:** `tests/tools/test_tools.py::test_normalize_period_column_handles_all_supported_formats`,
+  `data/examples/README.md`.
+- **Decision:** Assert that `normalize_period_column` produces `"MM-YYYY"`
+  strings (the actual current behaviour of `tools._parse_period_value`).
+- **Rationale:** Plan principle "behaviour is preserved unless the plan
+  explicitly says it changes". The README originally claimed `YYYYMM` based on
+  an early draft; corrected here to match the implementation. If a future step
+  changes the canonical form, this test must be updated in lockstep.
+
+### D5.2 — Statistical-fingerprint test asserts only what the heuristic actually
+  produces on the clean fixture
+- **File:** `tests/tools/test_tools.py::test_statistical_fingerprint_partitions_columns`.
+- **Decision:** Assert `imposta`/`spesa` are numerical and `rata` is
+  categorical (caught by the YYYYMM-period-codes branch). Do *not* assert
+  `ente` is categorical: with 8 categories over 120 rows the cardinality
+  ratio (0.067) sits above the heuristic's 0.05 cutoff, so `ente` is left
+  unbucketed today.
+- **Rationale:** Same minimal-touch principle. Tightening the heuristic is a
+  Step 6/9 concern, not Step 5. The test documents the current contract.
+
+### D5.3 — `xfail` tests for not-yet-existing tool functions use `raises=ImportError`
+- **File:** `tests/tools/test_tools.py::test_currency_symbol_auto_fix`,
+  `tests/tools/test_tools.py::test_comma_decimal_auto_fix`.
+- **Decision:** The two A3 closure tests `import` the missing helper inside
+  the test body and rely on `@pytest.mark.xfail(strict=False, raises=ImportError)`
+  to pass-by-failing today. Once Step 6 lands the helpers, these will switch
+  from `xfail` to `xpass`/`pass` and the parity contract becomes enforceable.
+- **Rationale:** Lets the test live alongside its sibling cases without
+  blocking pytest collection. `# type: ignore[attr-defined]` on each import
+  line keeps mypy quiet without disabling it for the whole file.
+
+### D5.4 — Wide-dirty fixture covers sparse/duplicate/lookup patterns the
+  6-column NoiPA schema cannot exercise
+- **File:** `data/examples/_generate.py::build_wide_dirty_df`,
+  `tests/conftest.py::wide_dirty_df`.
+- **Decision:** A separate 30-column `wide_dirty_df` synthetic fixture
+  carries: sparse columns (>= 90 % missing), value-duplicate columns
+  (`region_code` / `regione_codice`), semantic-duplicate columns
+  (`codice_fiscale` / `cf_dip`), conditional completeness
+  (`parent_cat` / `child_cat`), and a lookup-imputable mapping
+  (`region_code` -> `capoluogo`).
+- **Rationale:** The clean/dirty NoiPA payroll slice is intentionally narrow
+  (six columns) for realism. Detectors for sparse/lookup/conditional patterns
+  need a wider, less realistic surface. Keeping the two concerns in separate
+  fixtures keeps each one easy to read.
+
+### D5.5 — Fixture import path uses `sys.path.insert` to reach `_generate.py`
+- **File:** `tests/conftest.py`.
+- **Decision:** Tests do not depend on `data/examples/` being importable as a
+  package. Instead, `tests/conftest.py` prepends
+  `<repo>/data/examples` to `sys.path` and imports the four builders directly,
+  with `# noqa: E402` on the imports to satisfy ruff's import-order rule.
+- **Rationale:** Adding `__init__.py` under `data/examples/` would make the
+  examples folder a Python package, which collides with the plan's intent
+  (CSV samples + a generator script, not an importable module). The `sys.path`
+  trick is local to `conftest.py` and confined to test runs.

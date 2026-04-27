@@ -1,0 +1,121 @@
+rata,ente,descrizione,tipo_imposta,imposta,spesa
+202302,Ministero della Salute,Premio produttivita,IRAP,1179.54,5455.46
+202410,Regione Lazio,Anticipo TFR,ADD_REG,245.1,525.65
+202408,Ministero dell'Economia,Indennita di funzione,IRAP,827.3,1672.57
+202306,Agenzia delle Entrate,Anticipo TFR,ADD_REG,795.62,1755.64
+202506,Agenzia delle Entrate,Stipendio base,IVA,1293.48,5721.97
+202411,Ministero dell'Economia,Buoni pasto,IRES,721.06,3753.79
+202202,INPS,Trattenuta sindacale,IRAP,608.38,1797.28
+202509,Comune di Milano,Straordinario,INPS,977.37,5275.49
+202403,INPS,Stipendio base,ADD_REG,436.37,972.64
+202402,Ministero dell'Economia,Premio produttivita,INPS,252.66,1314.81
+202407,Ministero della Salute,Straordinario,ADD_COM,742.92,4242.95
+202412,Comune di Milano,Rimborso spese,ADD_REG,654.49,3330.33
+202209,Ministero della Salute,Trattenuta sindacale,ADD_REG,387.23,1855.79
+202410,Comune di Roma,Straordinario,INPS,582.89,3119.58
+202509,Agenzia delle Entrate,Anticipo TFR,IRAP,581.27,1255.89
+202310,Ministero della Salute,Stipendio base,IVA,524.87,1473.38
+202407,Agenzia delle Entrate,Rimborso spese,IRPEF,600.22,1500.37
+202202,Ministero dell'Economia,Rimborso spese,IRAP,1044.33,4196.25
+202311,Ministero della Salute,Trattenuta sindacale,ADD_COM,480.47,2393.1
+202306,Regione Lazio,Straordinario,IVA,1425.84,6444.86
+202507,INPS,Stipendio base,IRPEF,1378.7,7451.22
+202205,Ministero della Salute,Anticipo TFR,INAIL,747.32,1958.62
+202303,Comune di Roma,Anticipo TFR,ADD_COM,526.12,2598.24
+202312,INAIL,Indennita di funzione,ADD_REG,826.38,2290.86
+202510,INAIL,Stipendio base,IRAP,1280.41,3947.55
+202508,Regione Lazio,Stipendio base,IVA,996.25,4821.47
+202205,Comune di Milano,Stipendio base,INPS,1216.37,7201.91
+202210,Comune di Roma,Premio produttivita,IRES,822.45,3656.76
+202507,Regione Lazio,Anticipo TFR,IRAP,967.73,2146.43
+202206,Regione Lazio,Indennita di funzione,IRES,467.83,2088.97
+202506,Comune di Roma,Rimborso spese,ADD_COM,1115.6,2420.19
+202303,Ministero dell'Economia,Indennita di funzione,INAIL,343.49,1901.76
+202502,Ministero della Salute,Straordinario,ADD_REG,1057.46,5116.32
+202307,INAIL,Buoni pasto,ADD_REG,1298.04,3494.99
+202311,Comune di Milano,Rimborso spese,ADD_COM,241.55,571.72
+202401,Comune di Milano,Premio produttivita,IRPEF,940.85,2572.41
+202211,Comune di Milano,Stipendio base,ADD_COM,187.89,1112.33
+202410,INPS,Indennita di funzione,IRPEF,1102.29,4226.45
+202404,Ministero dell'Economia,Straordinario,IVA,172.52,886.12
+202508,Ministero dell'Economia,Straordinario,INPS,1407.11,6396.21
+202502,Comune di Roma,Anticipo TFR,IRAP,249.24,1069.15
+202410,Comune di Milano,Premio produttivita,IRES,1440.38,3716.93
+202309,Agenzia delle Entrate,Straordinario,IRES,1211.28,7006.16
+202305,Comune di Milano,Anticipo TFR,ADD_REG,910.84,2919.58
+202301,Comune di Milano,Trattenuta sindacale,IRAP,1184.8,5108.94
+202512,INAIL,Buoni pasto,IRAP,1202.92,5772.94
+202306,Ministero della Salute,Trattenuta sindacale,ADD_COM,1421.74,6535.64
+202211,Regione Lazio,Indennita di funzione,IRES,417.41,2405.27
+202309,Regione Lazio,Anticipo TFR,ADD_COM,905.61,2348.93
+202210,Comune di Milano,Stipendio base,ADD_COM,187.82,757.56
+202210,INPS,Indennita di funzione,INPS,943.44,3411.61
+202203,Comune di Roma,Indennita di funzione,IRES,298.37,1162.65
+202505,INAIL,Straordinario,IRES,869.18,2152.85
+202406,Comune di Roma,Indennita di funzione,IRAP,880.02,2232.06
+202406,Regione Lazio,Stipendio base,INPS,725.68,2258.54
+202301,Regione Lazio,Rimborso spese,IRES,807.82,2600.23
+202407,INPS,Anticipo TFR,IVA,1157.69,4296.9
+202202,Comune di Milano,Stipendio base,IRPEF,1208.9,5372.29
+202509,Comune di Roma,Straordinario,INPS,763.62,3465.7
+202409,Ministero dell'Economia,Buoni pasto,IRPEF,919.41,3353.31
+202512,Comune di Roma,Anticipo TFR,INAIL,1400.29,5090.24
+202209,INPS,Rimborso spese,IRPEF,223.61,641.88
+202305,Ministero dell'Economia,Premio produttivita,IRES,219.8,956.84
+202412,INAIL,Buoni pasto,IRES,177.18,579.05
+202305,Regione Lazio,Trattenuta sindacale,ADD_REG,1003.9,2152.6
+202304,Ministero della Salute,Indennita di funzione,IRPEF,656.98,2413.48
+202211,Comune di Roma,Premio produttivita,IVA,1172.77,4569.73
+202305,Regione Lazio,Premio produttivita,INPS,1023.29,2969.97
+202201,Comune di Roma,Stipendio base,INPS,533.77,2289.78
+202306,Ministero dell'Economia,Rimborso spese,INAIL,1352.63,5766.38
+202410,Agenzia delle Entrate,Stipendio base,ADD_REG,1155.67,5556.47
+202403,Agenzia delle Entrate,Rimborso spese,IVA,442.28,2030.86
+202406,Ministero dell'Economia,Premio produttivita,ADD_REG,578.08,2664.79
+202302,Comune di Roma,Indennita di funzione,IRAP,505.94,1651.82
+202509,Ministero della Salute,Trattenuta sindacale,ADD_COM,278.54,1434.41
+202206,Agenzia delle Entrate,Stipendio base,INPS,264.29,1109.11
+202304,Agenzia delle Entrate,Buoni pasto,INAIL,1407.38,5243.44
+202203,Agenzia delle Entrate,Anticipo TFR,ADD_COM,684.96,3085.09
+202307,INAIL,Stipendio base,ADD_REG,605.81,2085.58
+202509,INPS,Trattenuta sindacale,ADD_REG,1108.04,4488.62
+202312,Comune di Roma,Anticipo TFR,INPS,851.84,4213.9
+202506,Ministero dell'Economia,Straordinario,IRPEF,1407.4,7804.89
+202302,Regione Lazio,Indennita di funzione,IVA,1181.44,6715.58
+202410,INAIL,Trattenuta sindacale,IRES,745.09,2991.19
+202308,INAIL,Buoni pasto,ADD_COM,595.72,2431.19
+202309,Ministero della Salute,Rimborso spese,IRES,1480.62,7698.46
+202502,Ministero della Salute,Straordinario,IRES,1090.75,3553.45
+202504,Ministero dell'Economia,Anticipo TFR,IRES,1429.23,7645.71
+202310,Ministero della Salute,Buoni pasto,INAIL,221.79,881.96
+202510,Regione Lazio,Straordinario,INPS,1283.27,3161.24
+202306,Regione Lazio,Anticipo TFR,ADD_COM,973.76,2228.19
+202410,Comune di Roma,Anticipo TFR,IVA,226.79,1217.4
+202511,Comune di Roma,Trattenuta sindacale,IRAP,902.97,2006.64
+202305,INPS,Stipendio base,IRPEF,1044.84,3262.46
+202411,Comune di Milano,Buoni pasto,IRPEF,67.84,226.35
+202304,INPS,Buoni pasto,IRAP,708.76,1907.97
+202203,INAIL,Indennita di funzione,ADD_COM,1246.83,4059.15
+202209,Comune di Roma,Rimborso spese,INPS,478.27,2377.37
+202308,Ministero della Salute,Premio produttivita,ADD_COM,714.89,1471.77
+202502,INAIL,Stipendio base,IRPEF,691.36,3670.22
+202210,Agenzia delle Entrate,Rimborso spese,IRPEF,487.79,2646.84
+202303,Comune di Roma,Indennita di funzione,ADD_REG,1381.74,4820.95
+202410,Regione Lazio,Rimborso spese,IRPEF,1182.88,3092.58
+202201,Regione Lazio,Trattenuta sindacale,IRPEF,210.35,926.25
+202410,INAIL,Stipendio base,IVA,1495.7,3707.38
+202310,Comune di Roma,Anticipo TFR,ADD_COM,1324.84,4583.52
+202510,INAIL,Indennita di funzione,INAIL,461.67,2693.25
+202408,INAIL,Buoni pasto,IRPEF,1263.5,7558.08
+202406,Ministero della Salute,Indennita di funzione,ADD_REG,204.31,1039.62
+202209,Ministero della Salute,Anticipo TFR,ADD_REG,1498.7,4861.55
+202304,Regione Lazio,Rimborso spese,ADD_REG,1015.24,4823.06
+202510,Ministero dell'Economia,Premio produttivita,ADD_COM,992.68,4786.33
+202207,Comune di Roma,Trattenuta sindacale,IRES,181.14,643.29
+202506,Comune di Milano,Trattenuta sindacale,ADD_COM,1350.7,6163.99
+202307,INAIL,Rimborso spese,IRAP,92.05,188.05
+202407,INAIL,Premio produttivita,ADD_REG,399.2,1132.22
+202401,Ministero della Salute,Premio produttivita,INPS,257.38,1055.35
+202302,INAIL,Stipendio base,ADD_REG,1176.31,3123.11
+202303,Ministero dell'Economia,Rimborso spese,INAIL,337.4,898.71
+202402,Agenzia delle Entrate,Stipendio base,INAIL,1370.43,7325.25
