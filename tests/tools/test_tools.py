@@ -159,10 +159,6 @@ def test_apply_lookup_imputation_vectorized_equivalence(
     assert legacy_df["capoluogo"].equals(new_df["capoluogo"])
 
 
-@pytest.mark.xfail(
-    reason="B1 — pattern field added by Step 6 (tools.check_format_pattern)",
-    strict=False,
-)
 def test_check_format_pattern_includes_pattern_field() -> None:
     """B1 closure: check_format_pattern must echo the regex back in its issue dict."""
     df = pd.DataFrame({"id": ["AB12", "Z9", "ABC123", "AB34"]})
@@ -174,14 +170,9 @@ def test_check_format_pattern_includes_pattern_field() -> None:
     assert issue.get("description") == "two letters + two digits"
 
 
-@pytest.mark.xfail(
-    reason="A3 — fix_currency_symbols_in_numeric lands in Step 6",
-    strict=False,
-    raises=ImportError,
-)
 def test_currency_symbol_auto_fix() -> None:
     """A3 closure: stripping currency symbols + whitespace must yield a clean numeric column."""
-    from tools import fix_currency_symbols_in_numeric  # type: ignore[attr-defined]
+    from tools import fix_currency_symbols_in_numeric
 
     df = pd.DataFrame({"importo": ["\u20ac 1234.56", "$ 99.99", "100.00", "\u00a3 1.00"]})
     fix_currency_symbols_in_numeric(df, "importo")
@@ -189,14 +180,9 @@ def test_currency_symbol_auto_fix() -> None:
     assert coerced.notna().all()
 
 
-@pytest.mark.xfail(
-    reason="A3 — fix_comma_decimal_format lands in Step 6",
-    strict=False,
-    raises=ImportError,
-)
 def test_comma_decimal_auto_fix() -> None:
     """A3 closure: comma-decimals must be canonicalised; canonical values pass through unchanged."""
-    from tools import fix_comma_decimal_format  # type: ignore[attr-defined]
+    from tools import fix_comma_decimal_format
 
     df = pd.DataFrame({"importo": ["1.234,56", "1234.56", "abc", "999,9"]})
     fix_comma_decimal_format(df, "importo")

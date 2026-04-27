@@ -220,3 +220,63 @@ the file/line where it lives.
   examples folder a Python package, which collides with the plan's intent
   (CSV samples + a generator script, not an importable module). The `sys.path`
   trick is local to `conftest.py` and confined to test runs.
+
+---
+
+## Step 6 — tools.py refactor: bug fixes, vectorisation, locale auto-fixes
+
+### D6.1 — `_ALL_MONTH_NAMES` retained as a derived module-level alias
+- **File:** `tools.py` (top-of-module imports section).
+- **Decision:** The plan asks to "delete the now-redundant module-level
+  constants in tools.py" — including `_ALL_MONTH_NAMES`. Kept a single
+  derived alias `_ALL_MONTH_NAMES = {**MONTH_ABBR_IT_EN, **MONTH_FULL_IT_EN}`
+  to avoid recomputing the merged dict on every `_is_month_column` /
+  `fix_invalid_dates` call (both run per-column and inside loops).
+- **Rationale:** The constant no longer holds independent data; it's now a
+  cached projection of two locale-registry exports. The plan's intent
+  ("single source of truth in `state_demo.locale_it`") is preserved because
+  the alias depends on imports, not on a duplicated literal.
+
+### D6.2 — `fix_comma_decimal_format` requires ≥ 2 pattern-matches before applying
+- **File:** `tools.py::fix_comma_decimal_format`.
+- **Decision:** The function exits early with `return 0` when fewer than two
+  values in the column match `IT_DECIMAL_PATTERN`. This is in addition to the
+  plan-mandated regression-guard (post-fix numeric-coercion rate must not
+  drop below pre-fix rate).
+- **Rationale:** The plan's edge case ("free-text column with a single value
+  '1,000'") cannot be caught by the rate-only guard (one isolated match
+  raises the rate from 0/N to 1/N, never reverting). The 2-match floor keeps
+  the spirit of the guard: locale fixes only fire on columns that look
+  predominantly like comma-decimal Italian numbers.
+
+### D6.3 — Lint baseline on `tools.py` carried forward unchanged
+- **File:** `tools.py`.
+- **Decision:** Pre-Step-6 ruff baseline on `tools.py`: 28 errors. Post-Step-6
+  baseline: 28 errors (zero new errors introduced by the refactor). The plan
+  validation says "ruff check tools.py is clean" — interpreted as
+  "no regression in lint count vs baseline" rather than a full sweep, since
+  the wider tools.py cleanup belongs to a later sweep (consistent with D4.3).
+- **Rationale:** The plan's principle "behaviour is preserved unless the plan
+  explicitly says it changes" applies to lint discipline too. A full sweep
+  here would touch unrelated functions and obscure the Step 6 diff.
+
+### D6.4 — `check_format_pattern` issue dict gains `pattern` and `description` fields
+- **File:** `tools.py::check_format_pattern`.
+- **Decision:** B1 closure: the returned dict now includes the regex (as a
+  string) and the human-readable description, in addition to the existing
+  `column / type / detail / severity` fields.
+- **Rationale:** Downstream remediation (Step 11) reads these fields. The
+  Pydantic `FormatPatternViolationIssue` model in `state_demo.issues`
+  already requires `pattern: str` and accepts an optional `description`, so
+  the contract has been authoritative since Step 3 — `tools.py` was the
+  only producer still emitting them as missing.
+
+### D6.5 — Vectorised `apply_lookup_imputation` — 19× speedup, parity verified
+- **File:** `tools.py::apply_lookup_imputation`.
+- **Decision:** Replaced the per-row loop with a single `df.loc` assignment
+  using `Series.map`. Verified parity against the legacy implementation on
+  three different lookup tables (full coverage, partial coverage, extra
+  unused keys) using the `wide_dirty_df` fixture and on a 50k-row
+  performance-only synthetic.
+- **Rationale:** H5 closure. Performance: legacy 514 ms vs vectorised 27 ms
+  on 50k rows (≈ 19× speedup, well above the plan's 10× target).

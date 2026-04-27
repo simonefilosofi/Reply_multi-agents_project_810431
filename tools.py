@@ -20,6 +20,17 @@ from state_demo.constants import (
 )
 from state_demo.fingerprint_schema import DatasetFingerprint
 from state_demo.helpers import missing_mask, non_empty_values
+from state_demo.locale_it import (
+    CURRENCY_SYMBOLS,
+    IT_DECIMAL_PATTERN,
+    IT_EN_MONTH_TRANSLATION,
+    MONTH_ABBR_IT_EN,
+    MONTH_FULL_IT_EN,
+    ND_PATTERNS,
+)
+
+_CURRENCY_SYMBOLS_REGEX = "[" + re.escape("".join(sorted(CURRENCY_SYMBOLS))) + "]"
+_ALL_MONTH_NAMES: dict[str, int] = {**MONTH_ABBR_IT_EN, **MONTH_FULL_IT_EN}
 
 # ── Schema: reserved words ─────────────────────────────────────────────────────
 RESERVED_WORDS = {
@@ -821,14 +832,13 @@ def apply_lookup_imputation(
     _pl = {p.lower() for p in PLACEHOLDERS} | {""}
     tgt_missing = df[col_target].isna() | df[col_target].astype(str).str.strip().str.lower().isin(_pl)
     src_present = df[col_source].notna() & ~df[col_source].astype(str).str.strip().str.lower().isin(_pl)
-    imputable = df.index[tgt_missing & src_present]
-    count = 0
-    for idx in imputable:
-        imputed_val = lookup.get(str(df.at[idx, col_source]))
-        if imputed_val is not None:
-            df.at[idx, col_target] = imputed_val
-            count += 1
-    return count
+    mask = tgt_missing & src_present
+    if not mask.any():
+        return 0
+    mapped = df.loc[mask, col_source].astype(str).map(lookup)
+    fillable = mapped.notna()
+    df.loc[mapped.index[fillable], col_target] = mapped[fillable]
+    return int(fillable.sum())
 
 
 # ── Constraints ───────────────────────────────────────────────────────────────
@@ -909,6 +919,8 @@ def check_format_pattern(
             f"format: {description}"
         ),
         "severity": severity,
+        "pattern": pattern,
+        "description": description,
     }]
 
 
@@ -925,7 +937,7 @@ def check_numeric_corruption_types(df: pd.DataFrame, col: str) -> list:
 
     issues = []
 
-    currency_count = int(bad.str.contains(r"[€$£¥]", regex=True).sum())
+    currency_count = int(bad.str.contains(_CURRENCY_SYMBOLS_REGEX, regex=True).sum())
     if currency_count > 0:
         issues.append({
             "column": col,
@@ -938,7 +950,7 @@ def check_numeric_corruption_types(df: pd.DataFrame, col: str) -> list:
         })
 
     comma_decimal_count = int(
-        bad.str.match(r"^\d{1,3}(\.\d{3})*(,\d+)?$").sum()
+        bad.str.match(IT_DECIMAL_PATTERN.pattern).sum()
     )
     if comma_decimal_count > 0:
         issues.append({
@@ -951,8 +963,7 @@ def check_numeric_corruption_types(df: pd.DataFrame, col: str) -> list:
             "severity": "high",
         })
 
-    nd_patterns = {"n.d.", "nd", "n/d", "n.a.", "na", "n/a", "#n/d", "#nd"}
-    nd_count = int(bad.str.lower().str.strip().isin(nd_patterns).sum())
+    nd_count = int(bad.str.lower().str.strip().isin(ND_PATTERNS).sum())
     if nd_count > 0:
         issues.append({
             "column": col,
@@ -995,29 +1006,6 @@ def check_float_precision(
             })
     return issues
 
-
-_MONTH_ABBR: dict[str, int] = {
-    # English
-    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
-    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
-    # Italian
-    "gen": 1, "mag": 5, "giu": 6, "lug": 7, "ago": 8,
-    "set": 9, "ott": 10, "dic": 12,
-}
-
-_MONTH_FULL_NAMES: dict[str, int] = {
-    # Italian
-    "gennaio": 1, "febbraio": 2, "marzo": 3, "aprile": 4,
-    "maggio": 5, "giugno": 6, "luglio": 7, "agosto": 8,
-    "settembre": 9, "ottobre": 10, "novembre": 11, "dicembre": 12,
-    # English
-    "january": 1, "february": 2, "march": 3, "april": 4,
-    "may": 5, "june": 6, "july": 7, "august": 8,
-    "september": 9, "october": 10, "november": 11, "december": 12,
-}
-
-# Combined lookup: abbreviations + full names
-_ALL_MONTH_NAMES: dict[str, int] = {**_MONTH_ABBR, **_MONTH_FULL_NAMES}
 
 # Ordered list of (format_label, compiled_regex) used for period detection
 _PERIOD_PATTERNS: list[tuple[str, re.Pattern]] = [
@@ -1067,7 +1055,7 @@ def _parse_period_value(v: str):
     if m:
         abbr = m.group(1).lower()
         year = int(m.group(2))
-        month = _MONTH_ABBR.get(abbr)
+        month = MONTH_ABBR_IT_EN.get(abbr)
         if month and 1900 <= year <= 2099:
             return f"{month:02d}-{year}"
         return None
@@ -1632,15 +1620,81 @@ def fix_mixed_type(df: pd.DataFrame, col: str) -> int:
     return int(df[col].isna().sum()) - before_na
 
 
-_IT_MONTH_MAP = {
-    "gen": "jan", "feb": "feb", "mar": "mar", "apr": "apr",
-    "mag": "may", "giu": "jun", "lug": "jul", "ago": "aug",
-    "set": "sep", "ott": "oct", "nov": "nov", "dic": "dec",
-    "gennaio": "january", "febbraio": "february", "marzo": "march",
-    "aprile": "april", "maggio": "may", "giugno": "june",
-    "luglio": "july", "agosto": "august", "settembre": "september",
-    "ottobre": "october", "novembre": "november", "dicembre": "december",
-}
+def fix_currency_symbols_in_numeric(df: pd.DataFrame, col: str) -> int:
+    """Strip currency symbols and surrounding whitespace from a numeric-intent column.
+
+    Reverts the change if the post-fix numeric-coercion success rate drops
+    below the pre-fix rate (regression-guard). Returns the net count of values
+    newly parseable as numeric after the fix.
+    """
+    if not _has_column(df, col):
+        return 0
+    nev_pre = non_empty_values(df[col])
+    if len(nev_pre) == 0:
+        return 0
+    pre_numeric = _coerce_numeric(nev_pre).notna()
+    pre_rate = float(pre_numeric.mean())
+    pre_count = int(pre_numeric.sum())
+
+    contains_symbol = (
+        df[col].astype(str).str.contains(_CURRENCY_SYMBOLS_REGEX, regex=True, na=False)
+    )
+    if not contains_symbol.any():
+        return 0
+    original = df[col].copy()
+    cleaned = (
+        df[col]
+        .astype(str)
+        .str.replace(_CURRENCY_SYMBOLS_REGEX, "", regex=True)
+        .str.strip()
+    )
+    df.loc[contains_symbol, col] = cleaned[contains_symbol]
+
+    post_numeric = _coerce_numeric(non_empty_values(df[col])).notna()
+    if float(post_numeric.mean()) < pre_rate:
+        df[col] = original
+        return 0
+    return int(post_numeric.sum()) - pre_count
+
+
+def fix_comma_decimal_format(df: pd.DataFrame, col: str) -> int:
+    """Convert Italian comma-decimal strings (e.g. '1.234,56') to canonical '1234.56'.
+
+    Only touches values that match IT_DECIMAL_PATTERN. Reverts the change if
+    the post-fix numeric-coercion success rate drops below the pre-fix rate
+    (regression-guard). Skips columns where fewer than two values match the
+    pattern, so isolated `1,000`-style values in free-text columns are left
+    untouched. Returns the net count of values newly parseable as numeric.
+    """
+    if not _has_column(df, col):
+        return 0
+    nev_pre = non_empty_values(df[col])
+    if len(nev_pre) == 0:
+        return 0
+    pre_numeric = _coerce_numeric(nev_pre).notna()
+    pre_rate = float(pre_numeric.mean())
+    pre_count = int(pre_numeric.sum())
+
+    matches = (
+        df[col].astype(str).str.match(IT_DECIMAL_PATTERN.pattern).fillna(False).astype(bool)
+    )
+    if int(matches.sum()) < 2:
+        return 0
+    original = df[col].copy()
+    converted = (
+        df[col]
+        .astype(str)
+        .str.replace(".", "", regex=False)
+        .str.replace(",", ".", regex=False)
+    )
+    df.loc[matches, col] = converted[matches]
+
+    post_numeric = _coerce_numeric(non_empty_values(df[col])).notna()
+    if float(post_numeric.mean()) < pre_rate:
+        df[col] = original
+        return 0
+    return int(post_numeric.sum()) - pre_count
+
 
 _EXPLICIT_DATE_FORMATS = [
     # ISO 8601 variants first — completely unambiguous, no dayfirst influence
@@ -1660,8 +1714,7 @@ _EXPLICIT_DATE_FORMATS = [
 def _translate_italian_months(series: pd.Series) -> pd.Series:
     """Replace Italian month names/abbreviations with English equivalents."""
     def _translate(val: str) -> str:
-        for it, en in _IT_MONTH_MAP.items():
-            # word-boundary replacement, case-insensitive
+        for it, en in IT_EN_MONTH_TRANSLATION.items():
             val = re.sub(rf"(?i)\b{re.escape(it)}\b", en, val)
         return val
     return series.astype(str).apply(_translate)
