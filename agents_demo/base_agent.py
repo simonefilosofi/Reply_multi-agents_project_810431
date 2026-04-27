@@ -1,116 +1,164 @@
-"""Base agent class providing the Think-Act-Observe-Reply protocol,
-LLM integration via OpenAI, and structured logging for all pipeline agents."""
+"""BaseAgent rewritten on PydanticAI for typed LLM I/O.
+
+Preserves the Think-Act-Observe-Reply contract that every subclass relies on
+while routing every LLM call through PydanticAI's typed Agent. Provider
+failover (Anthropic primary -> OpenAI secondary) is delegated to PydanticAI's
+FallbackModel; per-tier model identifiers come from state_demo.config.Settings.
+
+Each subclass also exposes a classmethod as_node() that the LangGraph
+compiler in agents_demo._graph turns into a node function with parallel-safe
+delta semantics for the agent_log / cross_agent_insights list fields.
+"""
+
+from __future__ import annotations
 
 import json
-import os
-from datetime import datetime
+import logging
+import warnings
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Any, TypeVar
 
-from openai import OpenAI
-from tenacity import retry, stop_after_attempt, wait_exponential
+from pydantic import BaseModel
+from pydantic_ai import Agent
+from pydantic_ai.exceptions import ModelHTTPError
 
+from agents_demo._llm_clients import build_agent
+from state_demo import settings
+from state_demo.config import ModelTier
+from state_demo.constants import ISSUE_TYPES
+from state_demo.helpers import non_empty_values
 from state_demo.pipeline_state import PipelineState
 
-FAST = "gpt-4o-mini"
-SMART = "gpt-4o-mini"
+logger = logging.getLogger(__name__)
+
+_T = TypeVar("_T", bound=BaseModel)
+
+SMART: ModelTier = "smart"
+FAST: ModelTier = "fast"
 
 
 class BaseAgent:
     name: str = "base"
-    model: str = FAST
-    INSTRUCTION: str = ""  # subclasses define their role and personality
+    MODEL_TIER: ModelTier = "smart"
+    INSTRUCTION: str = ""
+    NODE_PROMPT: str = ""
 
-    def __init__(self, state: PipelineState):
+    def __init__(self, state: PipelineState) -> None:
         self.state = state
-        self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         self.prompt: str = ""
+        self.model: str = settings.resolve_model(self.MODEL_TIER)
 
     def run(self, prompt: str = "") -> None:
-        """Execute the full Think-Act-Observe-Reply cycle for the given task prompt."""
         self.prompt = prompt
         self.think()
         self.act()
         self.observe()
         self.reply()
 
-    def think(self):
-        pass
+    def think(self) -> None:
+        return None
 
-    def act(self):
+    def act(self) -> None:
         raise NotImplementedError
 
-    def observe(self):
-        pass
+    def observe(self) -> None:
+        return None
 
-    def reply(self):
-        pass
+    def reply(self) -> None:
+        return None
 
-    def log(self, phase: str, message: str):
-        self.state.agent_log.append({
-            "agent": self.name,
-            "phase": phase,
-            "message": message,
-            "timestamp": datetime.now().isoformat(),
-        })
+    def log(self, phase: str, message: str) -> None:
+        self.state.agent_log.append(
+            {
+                "agent": self.name,
+                "phase": phase,
+                "message": message,
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+        )
 
-    @retry(stop=stop_after_attempt(3),
-           wait=wait_exponential(multiplier=2, min=4, max=30))
+    def _build_agent(self, output_type: Any) -> Agent:
+        return build_agent(
+            tier=self.MODEL_TIER,
+            output_type=output_type,
+            instructions=self.INSTRUCTION,
+            settings=settings,
+        )
+
     def call_llm(self, user: str, max_tokens: int = 4096) -> str:
-        """Call the LLM using INSTRUCTION as the system prompt."""
-        resp = self.client.chat.completions.create(
-            model=self.model,
-            max_tokens=max_tokens,
-            messages=[
-                {"role": "system", "content": self.INSTRUCTION},
-                {"role": "user", "content": user},
-            ],
-        )
-        return resp.choices[0].message.content
+        agent = self._build_agent(str)
+        try:
+            result = agent.run_sync(user, model_settings={"max_tokens": max_tokens})
+        except ModelHTTPError as exc:
+            logger.warning("LLM call failed for agent=%s: %s", self.name, exc)
+            raise
+        return result.output
 
-    def call_llm_json(self, user: str, max_tokens: int = 4096,
-                      required_keys: list = None):
-        """Call the LLM, parse the response as JSON, and optionally validate keys."""
+    def call_llm_json(
+        self,
+        user: str,
+        max_tokens: int = 4096,
+        required_keys: list[str] | None = None,
+        schema: type[_T] | None = None,
+    ) -> Any:
+        if schema is not None:
+            agent = self._build_agent(schema)
+            try:
+                result = agent.run_sync(user, model_settings={"max_tokens": max_tokens})
+            except ModelHTTPError as exc:
+                logger.warning("Typed LLM call failed for agent=%s: %s", self.name, exc)
+                raise
+            return result.output
+        if required_keys is not None:
+            warnings.warn(
+                "call_llm_json(required_keys=...) is deprecated; pass schema=... "
+                "(a Pydantic BaseModel subclass) instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         raw = self.call_llm(user, max_tokens).strip()
-        start = min(
-            (raw.find(c) for c in "{[" if raw.find(c) != -1), default=0,
-        )
+        if raw.startswith("```"):
+            raw = raw.split("```", 2)[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+            raw = raw.rsplit("```", 1)[0].strip()
+        start_candidates = [i for i in (raw.find(c) for c in "{[") if i != -1]
+        start = min(start_candidates) if start_candidates else 0
         end = max(raw.rfind("}"), raw.rfind("]")) + 1
         result = json.loads(raw[start:end])
         if required_keys:
+            if not isinstance(result, dict):
+                raise ValueError(
+                    f"Expected JSON object with keys {required_keys}, got {type(result).__name__}"
+                )
             missing = [k for k in required_keys if k not in result]
             if missing:
                 raise ValueError(
                     f"LLM JSON response missing required keys: {missing}. "
-                    f"Got keys: {list(result.keys()) if isinstance(result, dict) else type(result).__name__}"
+                    f"Got keys: {list(result.keys())}"
                 )
         return result
 
     def llm_enrich_issues(
         self,
-        issues: list,
-        df,
-        allowed_types: set,
-    ) -> list:
+        issues: list[dict[str, Any]],
+        df: Any,
+        allowed_types: set[str],
+    ) -> list[dict[str, Any]]:
         """Enrich deterministic issue findings with LLM analysis.
 
-        The LLM receives the deterministic findings (as confirmed anchors) and
-        column samples, then returns an enriched list with:
-        - richer, example-based detail fields for existing findings
-        - any additional issues clearly visible in the samples
-
-        All original issues are always preserved in the output regardless of
-        what the LLM returns. Falls back to original issues on any error.
+        Returns the original list on any failure or empty input. Always
+        preserves every original issue regardless of what the LLM emits.
         """
-        from state_demo.helpers import non_empty_values
-
         if not issues:
             return issues
 
-        # Samples: columns already flagged + up to 5 unflagged columns
         flagged_cols = {i.get("column", "") for i in issues if i.get("column")}
         unflagged = [c for c in df.columns if c not in flagged_cols][:5]
         sample_cols = list(flagged_cols) + unflagged
 
-        col_samples = {}
+        col_samples: dict[str, dict[str, Any]] = {}
         for col in sample_cols:
             if col not in df.columns:
                 continue
@@ -123,11 +171,7 @@ class BaseAgent:
             f"column='{i.get('column', '')}' | {i['detail']}"
             for i in issues
         )
-        from state_demo.constants import ISSUE_TYPES
-        types_text = "\n".join(
-            f"  {t}: {ISSUE_TYPES.get(t, '')}"
-            for t in sorted(allowed_types)
-        )
+        types_text = "\n".join(f"  {t}: {ISSUE_TYPES.get(t, '')}" for t in sorted(allowed_types))
         samples_text = "\n".join(
             f"  '{col}' (dtype={info['dtype']}): {info['sample']}"
             for col, info in col_samples.items()
@@ -141,62 +185,64 @@ class BaseAgent:
             f"Allowed issue types for this agent:\n{types_text}\n\n"
             "Instructions:\n"
             "1. Return ALL confirmed findings above, enriching 'detail' with specific "
-            "example values from the samples (e.g. \"602 non-numeric values such as "
-            "'6 unità', '2,0', 'N.D.' — should be integers\").\n"
-            "2. Add NEW issues you clearly see in the samples that are not already covered.\n"
+            "example values from the samples.\n"
+            "2. Add NEW issues you clearly see in the samples.\n"
             "3. Use ONLY the allowed types listed above.\n"
             "4. 'severity' must be exactly 'high', 'medium', or 'low'.\n"
-            "5. 'detail' must be specific: include example values, counts, and expected format.\n"
+            "5. 'detail' must be specific.\n"
             'Return JSON: {"issues": [{"type": "...", "column": "...", '
             '"detail": "...", "severity": "..."}]}'
         )
 
         try:
-            result = self.call_llm_json(user, max_tokens=2048,
-                                        required_keys=["issues"])
+            result = self.call_llm_json(user, max_tokens=2048, required_keys=["issues"])
             enriched = result.get("issues", [])
-
             valid_enriched = [
-                i for i in enriched
+                i
+                for i in enriched
                 if i.get("type") in allowed_types
                 and i.get("column", "") in df.columns
                 and i.get("severity") in ("high", "medium", "low")
                 and i.get("detail", "").strip()
             ]
-
-            # Always preserve original issues — LLM cannot remove them
-            enriched_keys = {
-                (i["type"], i.get("column", "")) for i in valid_enriched
-            }
+            enriched_keys = {(i["type"], i.get("column", "")) for i in valid_enriched}
             merged = list(valid_enriched)
             for issue in issues:
                 key = (issue["type"], issue.get("column", ""))
                 if key not in enriched_keys:
                     merged.append(issue)
-
             new_count = len(merged) - len(issues)
-            self.log("act",
-                     f"LLM enrichment: {len(issues)} deterministic → "
-                     f"{len(merged)} issues ({new_count:+d} new)")
+            self.log(
+                "act",
+                f"LLM enrichment: {len(issues)} deterministic -> "
+                f"{len(merged)} issues ({new_count:+d} new)",
+            )
             return merged
-
-        except Exception as e:
-            self.log("error", f"LLM enrichment failed, keeping deterministic issues: {e}")
+        except Exception as exc:
+            self.log(
+                "error",
+                f"LLM enrichment failed, keeping deterministic issues: {exc}",
+            )
             return issues
 
-    def summarize_issues(self, issues: list, summary_attr: str, noun: str):
-        """Ask the LLM to produce a 2-3 sentence summary of the given issues."""
-        issues_text = "\n".join(
-            f"- [{i['severity'].upper()}] {i['column']}: {i['detail']}"
-            for i in issues
-        ) or f"No {noun} issues found."
+    def summarize_issues(self, issues: list[dict[str, Any]], summary_attr: str, noun: str) -> None:
+        issues_text = (
+            "\n".join(f"- [{i['severity'].upper()}] {i['column']}: {i['detail']}" for i in issues)
+            or f"No {noun} issues found."
+        )
         try:
             summary = self.call_llm(
                 f"Task: {self.prompt}\n\n"
                 f"Summarize these {noun} issues in 2-3 sentences:\n\n{issues_text}"
             ).strip()
-        except Exception as e:
-            self.log("error", str(e))
+        except Exception as exc:
+            self.log("error", str(exc))
             summary = f"{len(issues)} {noun} issues found."
         setattr(self.state, summary_attr, summary)
         self.log("reply", summary)
+
+    @classmethod
+    def as_node(cls) -> Callable[..., dict[str, Any]]:
+        from agents_demo._graph import build_node_runner
+
+        return build_node_runner(cls)

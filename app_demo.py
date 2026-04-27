@@ -1,7 +1,8 @@
 """Streamlit dashboard for the multi-agent data quality pipeline.
 Supports multi-dataset upload, full pipeline execution through all four
 layers, and an enhanced dashboard with reliability scores, remediation
-details, visualizations, agent communication logs, and JSON export."""
+details, visualizations, agent communication logs, and JSON export.
+"""
 
 import json
 import os
@@ -11,18 +12,20 @@ import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 
-from state_demo.pipeline_state import PipelineState
-from agents_demo.ingestion_agent import IngestionAgent
-from agents_demo.profiler_agent import ProfilerAgent
-from agents_demo.schema_agent import SchemaAgent
-from agents_demo.completeness_agent import CompletenessAgent
-from agents_demo.duplicate_agent import DuplicateAgent
+from agents_demo._graph import build_pipeline_graph, state_from_dict
 from agents_demo.anomaly_agent import AnomalyAgent
+from agents_demo.completeness_agent import CompletenessAgent
 from agents_demo.consistency_agent import ConsistencyAgent
 from agents_demo.constraint_agent import ConstraintAgent
-from agents_demo.synthesis_agent import SynthesisAgent
+from agents_demo.duplicate_agent import DuplicateAgent
+from agents_demo.ingestion_agent import IngestionAgent
+from agents_demo.profiler_agent import ProfilerAgent
 from agents_demo.remediation_agent import RemediationAgent
 from agents_demo.report_agent import ReportAgent
+from agents_demo.schema_agent import SchemaAgent
+from agents_demo.synthesis_agent import SynthesisAgent
+from state_demo import settings
+from state_demo.pipeline_state import PipelineState
 
 load_dotenv()
 
@@ -32,37 +35,61 @@ st.title("Multi-Agent Data Quality Pipeline")
 # ── Pipeline step registry ─────────────────────────────────────────────────────
 # (AgentClass, internal_key, display_name, prompt)
 PIPELINE_STEPS = [
-    (IngestionAgent,    "ingestion",    "Ingestion",
-     "Load and ingest the dataset."),
-    (ProfilerAgent,     "profiler",     "Profiler",
-     "Classify all columns by semantic type and generate a dataset fingerprint."),
-    (SchemaAgent,       "schema",       "Schema",
-     "Validate column data types and naming conventions."),
-    (CompletenessAgent, "completeness", "Completeness",
-     "Detect missing, empty, and placeholder values across all columns."),
-    (DuplicateAgent,    "duplicate",    "Duplicates",
-     "Identify duplicate rows, redundant column pairs, and key-collision records."),
-    (AnomalyAgent,      "anomaly",      "Anomaly",
-     "Detect statistical outliers and rare categories."),
-    (ConsistencyAgent,  "consistency",  "Consistency",
-     "Check date format consistency, case consistency, and conditional completeness."),
-    (ConstraintAgent,   "constraint",   "Constraints",
-     "Enforce domain constraints, format patterns, and numeric corruption checks."),
-    (SynthesisAgent,    "synthesis",    "Synthesis",
-     "Synthesize all findings, identify cross-cutting patterns, compute reliability."),
-    (RemediationAgent,  "remediation",  "Remediation",
-     "Apply automated fixes and flag issues requiring human review."),
-    (ReportAgent,       "report",       "Report",
-     "Compile the final data quality report with visualizations."),
+    (IngestionAgent, "ingestion", "Ingestion", "Load and ingest the dataset."),
+    (
+        ProfilerAgent,
+        "profiler",
+        "Profiler",
+        "Classify all columns by semantic type and generate a dataset fingerprint.",
+    ),
+    (SchemaAgent, "schema", "Schema", "Validate column data types and naming conventions."),
+    (
+        CompletenessAgent,
+        "completeness",
+        "Completeness",
+        "Detect missing, empty, and placeholder values across all columns.",
+    ),
+    (
+        DuplicateAgent,
+        "duplicate",
+        "Duplicates",
+        "Identify duplicate rows, redundant column pairs, and key-collision records.",
+    ),
+    (AnomalyAgent, "anomaly", "Anomaly", "Detect statistical outliers and rare categories."),
+    (
+        ConsistencyAgent,
+        "consistency",
+        "Consistency",
+        "Check date format consistency, case consistency, and conditional completeness.",
+    ),
+    (
+        ConstraintAgent,
+        "constraint",
+        "Constraints",
+        "Enforce domain constraints, format patterns, and numeric corruption checks.",
+    ),
+    (
+        SynthesisAgent,
+        "synthesis",
+        "Synthesis",
+        "Synthesize all findings, identify cross-cutting patterns, compute reliability.",
+    ),
+    (
+        RemediationAgent,
+        "remediation",
+        "Remediation",
+        "Apply automated fixes and flag issues requiring human review.",
+    ),
+    (ReportAgent, "report", "Report", "Compile the final data quality report with visualizations."),
 ]
 
 _REPORT_ATTRS = {
-    "schema":       "schema_report",
+    "schema": "schema_report",
     "completeness": "completeness_report",
-    "duplicate":    "duplicate_report",
-    "anomaly":      "anomaly_report",
-    "consistency":  "consistency_report",
-    "constraint":   "constraint_report",
+    "duplicate": "duplicate_report",
+    "anomaly": "anomaly_report",
+    "consistency": "consistency_report",
+    "constraint": "constraint_report",
 }
 
 
@@ -81,9 +108,9 @@ def _step_info(state: PipelineState, key: str) -> str:
     if key == "synthesis":
         return f"reliability {state.reliability_score_before:.0f}/100 (pre-fix)"
     if key == "remediation":
-        auto   = sum(1 for f in state.fix_log if "auto"   in f.get("action", ""))
+        auto = sum(1 for f in state.fix_log if "auto" in f.get("action", ""))
         flagged = sum(1 for f in state.fix_log if f.get("action") == "flagged_for_review")
-        llm    = sum(1 for f in state.fix_log if f.get("action") == "auto_fixed_by_llm")
+        llm = sum(1 for f in state.fix_log if f.get("action") == "auto_fixed_by_llm")
         return f"{auto} fixed ({llm} by LLM), {flagged} flagged"
     if key == "report":
         return f"reliability {state.reliability_score_after:.0f}/100 (post-fix)"
@@ -104,7 +131,7 @@ def run_pipeline(file_obj):
     col_table, col_log = st.columns([2, 3])
 
     status_list = ["⏳ Pending"] * n
-    info_list   = ["—"] * n
+    info_list = ["—"] * n
 
     with col_table:
         st.caption("Agent Status")
@@ -117,19 +144,21 @@ def run_pipeline(file_obj):
     log_lines: list = []
 
     def _redraw_table():
-        df = pd.DataFrame({
-            "Agent":  [s[2] for s in PIPELINE_STEPS],
-            "Status": status_list,
-            "Info":   info_list,
-        })
+        df = pd.DataFrame(
+            {
+                "Agent": [s[2] for s in PIPELINE_STEPS],
+                "Status": status_list,
+                "Info": info_list,
+            }
+        )
         table_ph.dataframe(
             df,
             use_container_width=True,
             hide_index=True,
             column_config={
-                "Agent":  st.column_config.TextColumn("Agent",  width="small"),
+                "Agent": st.column_config.TextColumn("Agent", width="small"),
                 "Status": st.column_config.TextColumn("Status", width="medium"),
-                "Info":   st.column_config.TextColumn("Info",   width="large"),
+                "Info": st.column_config.TextColumn("Info", width="large"),
             },
         )
 
@@ -139,30 +168,46 @@ def run_pipeline(file_obj):
     _redraw_table()
     _redraw_log()
 
-    # ── Sequential agent execution ─────────────────────────────────────────────
-    for i, (AgentClass, key, display_name, prompt) in enumerate(PIPELINE_STEPS):
-        status_list[i] = "🔄 Running…"
-        _redraw_table()
+    graph = build_pipeline_graph(settings, with_checkpointer=False)
+    initial_state: dict = {"source_path": tmp_path}
+    key_to_index = {step[1]: idx for idx, step in enumerate(PIPELINE_STEPS)}
+    layer1_keys = {"schema", "completeness", "duplicate", "anomaly", "consistency", "constraint"}
+    seen_logs = 0
 
-        prev_len = len(state.agent_log)
-        AgentClass(state).run(prompt=prompt)
-        new_entries = state.agent_log[prev_len:]
+    for idx in range(len(PIPELINE_STEPS)):
+        if PIPELINE_STEPS[idx][1] in layer1_keys:
+            status_list[idx] = "🔄 Running (parallel)…"
+        else:
+            status_list[idx] = "🔄 Running…"
+    _redraw_table()
 
-        status_list[i] = "✅ Done"
-        info_list[i]   = _step_info(state, key)
-        _redraw_table()
-
-        # Append this agent's log block
-        sep = "─" * 56
-        log_lines += [sep, f"  {display_name}", sep]
-        for e in new_entries:
-            phase = e["phase"].upper()
-            msg   = e["message"]
+    final_state_dict: dict = {}
+    for chunk in graph.stream(initial_state, stream_mode="values"):
+        final_state_dict = chunk
+        snapshot = state_from_dict(chunk)
+        new_entries = snapshot.agent_log[seen_logs:]
+        seen_logs = len(snapshot.agent_log)
+        for entry in new_entries:
+            agent_key = entry.get("agent", "")
+            normalised = "synthesis" if "synthesis" in agent_key else agent_key
+            idx = key_to_index.get(normalised)
+            if idx is not None and status_list[idx] != "✅ Done":
+                status_list[idx] = "✅ Done"
+                info_list[idx] = _step_info(snapshot, normalised)
+            phase = entry["phase"].upper()
+            msg = entry["message"]
             if len(msg) > 320:
                 msg = msg[:317] + "…"
-            log_lines.append(f"  [{phase:<8}] {msg}")
-        log_lines.append("")
+            log_lines.append(f"  [{agent_key:<14}] [{phase:<8}] {msg}")
+        _redraw_table()
         _redraw_log()
+
+    state = state_from_dict(final_state_dict)
+    for idx in range(len(PIPELINE_STEPS)):
+        if status_list[idx].startswith("🔄"):
+            status_list[idx] = "✅ Done"
+            info_list[idx] = _step_info(state, PIPELINE_STEPS[idx][1])
+    _redraw_table()
 
     # ── Cleanup & chart extraction ─────────────────────────────────────────────
     os.unlink(tmp_path)
@@ -178,22 +223,23 @@ def run_pipeline(file_obj):
 
 # ── Results display ────────────────────────────────────────────────────────────
 
+
 def display_results(state, chart_images, dataset_name):
     st.header("Reliability Score")
     before = state.reliability_score_before
-    after  = state.reliability_score_after
-    delta  = after - before
+    after = state.reliability_score_after
+    delta = after - before
 
     col1, col2, col3 = st.columns(3)
     col1.metric("Before Remediation", f"{before}/100")
-    col2.metric("After Remediation",  f"{after}/100", delta=f"{delta:+.1f}")
-    col3.metric("Improvement",        f"{delta:+.1f} points")
+    col2.metric("After Remediation", f"{after}/100", delta=f"{delta:+.1f}")
+    col3.metric("Improvement", f"{delta:+.1f} points")
 
     st.header("Dataset Overview")
     col1, col2, col3 = st.columns(3)
-    col1.metric("Rows",    state.ingestion_meta.get("rows", "-"))
+    col1.metric("Rows", state.ingestion_meta.get("rows", "-"))
     col2.metric("Columns", state.ingestion_meta.get("columns", "-"))
-    col3.metric("Format",  state.source_format.upper())
+    col3.metric("Format", state.source_format.upper())
 
     st.dataframe(state.df_raw.head(10), use_container_width=True)
 
@@ -209,38 +255,36 @@ def display_results(state, chart_images, dataset_name):
     st.info(state.final_report.get("executive_summary", state.synthesis_summary))
 
     issues = state.prioritized_issues
-    high   = sum(1 for i in issues if i["severity"] == "high")
+    high = sum(1 for i in issues if i["severity"] == "high")
     medium = sum(1 for i in issues if i["severity"] == "medium")
-    low    = sum(1 for i in issues if i["severity"] == "low")
+    low = sum(1 for i in issues if i["severity"] == "low")
 
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total Issues", len(issues))
-    col2.metric("High",   high)
+    col2.metric("High", high)
     col3.metric("Medium", medium)
-    col4.metric("Low",    low)
+    col4.metric("Low", low)
 
     st.subheader("Prioritized Issues")
     if issues:
         st.dataframe(issues, use_container_width=True)
 
     st.header("Remediation Results")
-    fix_log       = state.fix_log
-    auto_fixed    = [f for f in fix_log if f["action"] == "auto_fixed"]
+    fix_log = state.fix_log
+    auto_fixed = [f for f in fix_log if f["action"] == "auto_fixed"]
     auto_fixed_llm = [f for f in fix_log if f["action"] == "auto_fixed_by_llm"]
-    flagged       = [f for f in fix_log if f["action"] == "flagged_for_review"]
+    flagged = [f for f in fix_log if f["action"] == "flagged_for_review"]
 
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Actions",     len(fix_log))
-    col2.metric("Auto-Fixed",        len(auto_fixed))
-    col3.metric("Fixed by LLM",      len(auto_fixed_llm))
+    col1.metric("Total Actions", len(fix_log))
+    col2.metric("Auto-Fixed", len(auto_fixed))
+    col3.metric("Fixed by LLM", len(auto_fixed_llm))
     col4.metric("Flagged for Review", len(flagged))
 
     if auto_fixed:
         st.subheader("Auto-Fixed Issues")
         st.dataframe(
-            pd.DataFrame(auto_fixed)[
-                ["issue_type", "column", "description", "rows_affected"]
-            ],
+            pd.DataFrame(auto_fixed)[["issue_type", "column", "description", "rows_affected"]],
             use_container_width=True,
         )
 
@@ -256,9 +300,7 @@ def display_results(state, chart_images, dataset_name):
     if flagged:
         st.subheader("Flagged for Review")
         st.dataframe(
-            pd.DataFrame(flagged)[
-                ["issue_type", "column", "description", "rows_affected"]
-            ],
+            pd.DataFrame(flagged)[["issue_type", "column", "description", "rows_affected"]],
             use_container_width=True,
         )
 
@@ -271,8 +313,7 @@ def display_results(state, chart_images, dataset_name):
         )
         for item in human_review:
             with st.expander(
-                f"[{item['issue']['severity'].upper()}] "
-                f"{item['column']} — {item['issue']['type']}"
+                f"[{item['issue']['severity'].upper()}] {item['column']} — {item['issue']['type']}"
             ):
                 st.markdown(f"**Issue:** {item['issue'].get('detail', '-')}")
                 st.markdown(f"**Reason:** {item['reason']}")
@@ -284,21 +325,21 @@ def display_results(state, chart_images, dataset_name):
 
     if state.df_cleaned is not None and not state.df_cleaned.empty:
         st.subheader("Cleaned Dataset Preview")
-        rows_raw   = len(state.df_raw)
+        rows_raw = len(state.df_raw)
         rows_clean = len(state.df_cleaned)
-        cols_raw   = len(state.df_raw.columns)
+        cols_raw = len(state.df_raw.columns)
         cols_clean = len(state.df_cleaned.columns)
         c1, c2 = st.columns(2)
-        c1.metric("Rows",    f"{rows_raw} → {rows_clean}",  delta=rows_clean - rows_raw)
+        c1.metric("Rows", f"{rows_raw} → {rows_clean}", delta=rows_clean - rows_raw)
         c2.metric("Columns", f"{cols_raw} → {cols_clean}", delta=cols_clean - cols_raw)
         st.dataframe(state.df_cleaned.head(10), use_container_width=True)
 
     st.header("Visualizations")
     chart_order = [
         ("issue_severity_distribution.png", "Issue Severity Distribution"),
-        ("issues_by_agent.png",             "Issues by Agent"),
-        ("completeness_heatmap.png",        "Completeness Heatmap"),
-        ("reliability_before_after.png",    "Reliability Before vs After"),
+        ("issues_by_agent.png", "Issues by Agent"),
+        ("completeness_heatmap.png", "Completeness Heatmap"),
+        ("reliability_before_after.png", "Reliability Before vs After"),
     ]
     col1, col2 = st.columns(2)
     for idx, (filename, caption) in enumerate(chart_order):
@@ -308,12 +349,12 @@ def display_results(state, chart_images, dataset_name):
 
     st.header("Issues by Agent")
     reports = {
-        "Schema":       (state.schema_report,       state.schema_summary),
-        "Completeness": (state.completeness_report,  state.completeness_summary),
-        "Duplicates":   (state.duplicate_report,     state.duplicate_summary),
-        "Anomalies":    (state.anomaly_report,        state.anomaly_summary),
-        "Consistency":  (state.consistency_report,   state.consistency_summary),
-        "Constraints":  (state.constraint_report,    state.constraint_summary),
+        "Schema": (state.schema_report, state.schema_summary),
+        "Completeness": (state.completeness_report, state.completeness_summary),
+        "Duplicates": (state.duplicate_report, state.duplicate_summary),
+        "Anomalies": (state.anomaly_report, state.anomaly_summary),
+        "Consistency": (state.consistency_report, state.consistency_summary),
+        "Constraints": (state.constraint_report, state.constraint_summary),
     }
     for name, (report, summary) in reports.items():
         count = report.get("total_issues", 0)
@@ -357,7 +398,7 @@ def display_results(state, chart_images, dataset_name):
     )
     if state.df_cleaned is not None and not state.df_cleaned.empty:
         cleaned_csv = state.df_cleaned.to_csv(index=False).encode("utf-8")
-        base_name   = dataset_name.rsplit(".", 1)[0]
+        base_name = dataset_name.rsplit(".", 1)[0]
         col2.download_button(
             label="Download Cleaned Dataset (CSV)",
             data=cleaned_csv,
@@ -375,6 +416,7 @@ def _serialize_report(report):
         if isinstance(obj, pd.DataFrame):
             return obj.to_dict(orient="records")
         return str(obj)
+
     return json.dumps(report, indent=2, default=default_handler)
 
 
@@ -407,9 +449,9 @@ if "pipeline_results" in st.session_state:
             with cols[idx]:
                 st.subheader(name)
                 before = state.reliability_score_before
-                after  = state.reliability_score_after
+                after = state.reliability_score_after
                 st.metric("Before", f"{before}/100")
-                st.metric("After",  f"{after}/100", delta=f"{after - before:+.1f}")
+                st.metric("After", f"{after}/100", delta=f"{after - before:+.1f}")
                 st.metric("Issues Found", len(state.prioritized_issues))
                 st.metric("Fixes Applied", len(state.fix_log))
 
