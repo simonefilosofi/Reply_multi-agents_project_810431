@@ -95,3 +95,66 @@ the file/line where it lives.
 - **Rationale:** A typo in an agent name now surfaces at type-check time
   rather than at run time, and `model_json_schema()` advertises the closed
   enum to any downstream consumer (PydanticAI structured outputs, the report).
+
+---
+
+## Step 4 — `constants.py` cleanup, threshold migration, locale registry
+
+### D4.1 — Subset-coverage assertion lives at module scope in `constants.py`
+- **File:** `state_demo/constants.py` (the two `assert` statements after
+  `GAP_DETECTION_ISSUE_TYPES`).
+- **Decision:** Keep the assertion at module scope as the plan literally
+  prescribes (`assert set(...) <= set(ISSUE_TYPES)`). Two asserts are emitted:
+  one over the union of per-agent subsets, one over `GAP_DETECTION_ISSUE_TYPES`.
+  The comparison direction is `set(ISSUE_TYPES) >= subset` to satisfy ruff
+  `SIM300` without needing a `# noqa`.
+- **Rationale:** A module-level assert fires at import time on every consumer
+  (every test, every demo run, every CI step), so subset drift cannot be
+  introduced silently. The pytest-only equivalent would only fire when the
+  test suite is invoked. The known caveat — `python -O` strips asserts — is
+  acceptable here because the pipeline is never deployed under `-O`, and the
+  test suite (added in Step 5) will repeat the check.
+
+### D4.2 — `ITALIAN_PLACEHOLDERS` is duplicated in `locale_it.py` rather than removed from `constants.PLACEHOLDERS`
+- **File:** `state_demo/locale_it.py` (`ITALIAN_PLACEHOLDERS`),
+  `state_demo/constants.py` (`PLACEHOLDERS` left untouched).
+- **Decision:** The 13 Italian-administrative placeholders (`sconosciuto`,
+  `non disponibile`, `da verificare`, `n.c.`, ...) are listed twice for the
+  duration of Step 4: once inline in `constants.PLACEHOLDERS` (the legacy
+  source still consumed by every detector) and once as the inspectable
+  `ITALIAN_PLACEHOLDERS` frozenset in `locale_it.py`. Step 6 will collapse the
+  duplication by composing `PLACEHOLDERS = BASE_PLACEHOLDERS | ITALIAN_PLACEHOLDERS`
+  when the consumers are migrated.
+- **Rationale:** Modifying `constants.PLACEHOLDERS` now would silently change
+  behaviour for every detector that imports it, violating the Step 4 boundary
+  ("no test or runtime behaviour has changed yet — consumers are migrated in
+  Step 6"). The temporary duplication is the smallest possible blast radius.
+
+### D4.3 — Pre-existing legacy lint baggage in `constants.py` and `anomaly_agent.py` is left alone
+- **File:** `state_demo/constants.py` (E501 on lines 23 and 73),
+  `agents_demo/anomaly_agent.py` (D101, D102, I001).
+- **Decision:** I rewrote only the lines the plan asked for and the docstring
+  I introduced (so the docstring is D205/D209-clean), but I did NOT sweep
+  the pre-existing `E501` long lines in `constants.py` or the
+  `D101`/`D102`/`I001` violations in `anomaly_agent.py`. Each agent file gets
+  its own broader pass in Step 9 when the typed-issue migration lands.
+- **Rationale:** "Behaviour is preserved unless the plan explicitly says it
+  changes" (CLAUDE.md). A lint sweep on every file the agent happens to touch
+  would inflate Step 4's diff far beyond what the plan describes and obscure
+  the actual locale-registry change behind reformat noise.
+
+### D4.4 — Open finding: `state_demo/scoring.py` still computes `mean ± 3*std` for the anomaly_freedom dimension
+- **File:** `state_demo/scoring.py:113` — currently
+  `((numeric - mean).abs() > 3 * std).sum()`.
+- **Decision:** Surface at Confirmation Gate 4 as an open finding, do not fix
+  in Step 4. Step 4's grep validation (`3-sigma` text) returns zero across
+  `state_demo/`, `agents_demo/`, and `tools.py`, but the scoring layer's
+  outlier-counting dimension is still standard-deviation-based, which is
+  semantically the same 3-sigma rule the audit's B5 finding warned against.
+  Detector and scorer therefore disagree about what "outlier" means for
+  right-skewed payroll quantities.
+- **Rationale:** `scoring.py` is not in the explicit modification list of any
+  step in `implementation_plan_v2.md`. The cleanest place to fix this is
+  alongside the tools.py outlier work in Step 6 (or as a small standalone
+  patch). Per the CLAUDE.md "bug discovered" protocol, the user decides
+  whether to address it now or schedule it.

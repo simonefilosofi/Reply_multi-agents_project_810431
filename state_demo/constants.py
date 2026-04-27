@@ -63,7 +63,7 @@ ISSUE_TYPES = {
     "duplicate_columns":           "two columns with identical or near-identical values",
     "duplicate_key":               "rows sharing a key value but differing elsewhere",
     # AnomalyAgent
-    "outliers":                    "statistical outliers (3-sigma rule)",
+    "outliers":                    "statistical outliers (3xIQR Tukey outer fence)",
     "rare_categories":             "categorical values appearing in <1% of rows",
     # ConsistencyAgent
     "format_inconsistency":        "mixed date or string formats within one column",
@@ -119,3 +119,22 @@ GAP_DETECTION_ISSUE_TYPES = {
     "special_month_code", "year_format_inconsistency",
     "ambiguous_year_format", "invalid_year_value",
 }
+
+_AGENT_PARTITION_UNION = (
+    SCHEMA_ISSUE_TYPES
+    | COMPLETENESS_ISSUE_TYPES
+    | DUPLICATE_ISSUE_TYPES
+    | ANOMALY_ISSUE_TYPES
+    | CONSISTENCY_ISSUE_TYPES
+    | CONSTRAINT_ISSUE_TYPES
+)
+
+assert set(ISSUE_TYPES) >= _AGENT_PARTITION_UNION, (
+    "Per-agent ISSUE_TYPES subsets reference unknown issue keys: "
+    f"{sorted(_AGENT_PARTITION_UNION - set(ISSUE_TYPES))}"
+)
+
+assert set(ISSUE_TYPES) >= GAP_DETECTION_ISSUE_TYPES, (
+    "GAP_DETECTION_ISSUE_TYPES references unknown issue keys: "
+    f"{sorted(GAP_DETECTION_ISSUE_TYPES - set(ISSUE_TYPES))}"
+)

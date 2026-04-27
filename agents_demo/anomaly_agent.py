@@ -1,5 +1,8 @@
-"""Layer 1 anomaly detection agent. Detects statistical outliers in numerical
-columns using the 3-sigma rule and rare categories in categorical columns."""
+"""Layer 1 anomaly detection agent.
+
+Detects statistical outliers in numerical columns using the 3xIQR Tukey outer
+fence and rare categories in categorical columns.
+"""
 
 from agents_demo.base_agent import BaseAgent, SMART
 from state_demo.constants import ANOMALY_ISSUE_TYPES
@@ -12,9 +15,10 @@ class AnomalyAgent(BaseAgent):
 
     INSTRUCTION = (
         "You are a statistical anomaly detection specialist. You detect numerical "
-        "outliers using the 3-sigma rule and identify rare categories appearing in "
-        "less than 1% of rows. You summarize anomaly findings in 2-3 sentences, "
-        "distinguishing between isolated outliers and systematic distributional issues."
+        "outliers using the 3xIQR Tukey outer fence and identify rare categories "
+        "appearing in less than 1% of rows. You summarize anomaly findings in 2-3 "
+        "sentences, distinguishing between isolated outliers and systematic "
+        "distributional issues."
     )
 
     def think(self):

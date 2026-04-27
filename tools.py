@@ -659,11 +659,11 @@ def detect_key_collisions(
 def detect_outliers(df: pd.DataFrame, numerical_cols: list) -> list:
     """Detect extreme values in numerical columns using the IQR fence rule.
 
-    Uses 3 × IQR (Tukey outer fence) rather than 3-sigma so that detection
-    is robust to skewed distributions and is not inflated by the very outliers
-    it is trying to find.  The 3-sigma rule assumes normality; for right-skewed
-    quantities (revenue, hours, prices) it routinely flags perfectly normal
-    high-end values.
+    Uses the 3xIQR Tukey outer fence so detection is robust to skewed
+    distributions and is not inflated by the very outliers it is trying to
+    find. Standard-deviation-based bounds assume normality and routinely flag
+    perfectly normal high-end values on right-skewed quantities such as
+    revenue, hours, or prices.
     """
     issues = []
     for col in numerical_cols:
@@ -1803,12 +1803,12 @@ def fill_missing_categorical(
 def cap_outliers(
     df: pd.DataFrame, col: str, raw_series: pd.Series
 ) -> tuple[float, float, int]:
-    """Clip outliers in col to the 3×IQR outer fence derived from raw_series.
+    """Clip outliers in col to the 3xIQR Tukey outer fence derived from raw_series.
 
-    Uses the interquartile range (Tukey outer fence = Q1 − 3×IQR, Q3 + 3×IQR)
-    instead of mean ± 3σ.  IQR-based bounds are resistant to the influence of
-    the very outliers being capped, which makes them appropriate for skewed
-    distributions such as revenue, hours, or prices.
+    Uses the interquartile range (Tukey outer fence = Q1 - 3xIQR, Q3 + 3xIQR).
+    IQR-based bounds are resistant to the influence of the very outliers being
+    capped, which makes them appropriate for skewed distributions such as
+    revenue, hours, or prices.
 
     Returns (lower, upper, count_capped). Returns (0, 0, 0) if not applicable.
     """
