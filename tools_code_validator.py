@@ -1,24 +1,265 @@
-"""Stateless utility functions for CodeValidatorAgent.
+"""Stateless utilities for CodeValidatorAgent (Layer 3.5).
 
-All functions here are pure: they receive data in and return results out.
-No LLM calls, no PipelineState access, no logging.
+After Step 12 the primary sandbox is a Docker container running the embedded
+``_RUNNER_SCRIPT`` with a restricted ``__builtins__`` whitelist and the
+defence options listed in the plan: ``network_mode='none'``, ``read_only``
+rootfs, all caps dropped, ``mem_limit`` / ``memswap_limit`` /
+``cpu_quota`` / ``pids_limit``, tmpfs at /tmp, and the ``nobody``
+(65534:65534) UID. ``run_in_subprocess_fallback`` runs the same runner in
+an isolated Python subprocess with ``resource.setrlimit`` for CPU and
+address-space on POSIX hosts; on Windows the rlimit calls are silently
+skipped and the AST guard plus restricted builtins remain the only
+defences. ``run_sandboxed`` is the dispatcher: it probes Docker once per
+process via ``client.ping()`` and degrades to the fallback with a single
+warning when Docker is unreachable. The Step 6 filter helpers, prompt
+builders, and post-fix safety guards are preserved unchanged.
 """
 
-import os
+from __future__ import annotations
+
+import contextlib
+import io
+import json
+import logging
+import socket
 import subprocess
 import sys
-import tempfile
 
 import numpy as np
 import pandas as pd
 
+from state_demo.config import Settings
 from state_demo.helpers import non_empty_values
 
-# ── Constants ──────────────────────────────────────────────────────────────────
+logger = logging.getLogger(__name__)
 
 CHANGE_THRESHOLD = 0.20
 TYPE_DRIFT_THRESHOLD = 0.10
 SANDBOX_TIMEOUT = 10
+
+
+_RUNNER_SCRIPT = """
+import sys
+import json
+import io
+import pandas as pd
+import numpy as np
+import re
+import math
+
+ALLOWED_BUILTINS = {
+    "len": len, "range": range, "enumerate": enumerate, "print": print,
+    "min": min, "max": max, "sum": sum, "abs": abs,
+    "int": int, "float": float, "str": str, "bool": bool,
+    "list": list, "dict": dict, "set": set, "tuple": tuple,
+    "isinstance": isinstance,
+    "Exception": Exception, "ValueError": ValueError,
+    "TypeError": TypeError, "KeyError": KeyError,
+}
+
+payload = json.loads(sys.stdin.read())
+df = pd.read_csv(io.StringIO(payload["csv"]), dtype=str, keep_default_na=False)
+col = payload["col"]
+code = payload["code"]
+namespace = {
+    "__builtins__": ALLOWED_BUILTINS,
+    "pd": pd, "np": np, "re": re, "math": math,
+}
+
+_user_stdout = io.StringIO()
+_real_stdout = sys.stdout
+sys.stdout = _user_stdout
+try:
+    exec(code, namespace)
+    if "fix" not in namespace or not callable(namespace["fix"]):
+        response = {"ok": False, "error": "no callable fix() defined"}
+    else:
+        namespace["fix"](df, col)
+        response = {"ok": True, "csv": df.to_csv(index=False)}
+except Exception as e:
+    response = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+finally:
+    sys.stdout = _real_stdout
+
+print(json.dumps(response))
+""".strip()
+
+
+_FALLBACK_PREAMBLE = """
+try:
+    import resource as _resource
+    _resource.setrlimit(_resource.RLIMIT_CPU, ({timeout_s}, {timeout_s}))
+    _resource.setrlimit(_resource.RLIMIT_AS, ({mem_bytes}, {mem_bytes}))
+    del _resource
+except (ImportError, ValueError, OSError):
+    pass
+
+import os as _os
+_os.environ.clear()
+del _os
+""".strip()
+
+
+def _parse_mem_to_bytes(mem_limit: str) -> int:
+    s = mem_limit.strip().lower().rstrip("b").rstrip()
+    units = {"g": 1024**3, "m": 1024**2, "k": 1024}
+    if s and s[-1] in units:
+        return int(s[:-1]) * units[s[-1]]
+    return int(s)
+
+
+_DOCKER_AVAILABLE: bool | None = None
+_FALLBACK_WARNED = False
+
+
+def _is_docker_available() -> bool:
+    global _DOCKER_AVAILABLE
+    if _DOCKER_AVAILABLE is not None:
+        return _DOCKER_AVAILABLE
+    try:
+        import docker
+
+        client = docker.from_env()
+        client.ping()
+        _DOCKER_AVAILABLE = True
+    except Exception:
+        _DOCKER_AVAILABLE = False
+    return _DOCKER_AVAILABLE
+
+
+def _reset_docker_probe() -> None:
+    """Test-only reset of the memoised Docker probe and fallback warning."""
+    global _DOCKER_AVAILABLE, _FALLBACK_WARNED
+    _DOCKER_AVAILABLE = None
+    _FALLBACK_WARNED = False
+
+
+def _maybe_warn_fallback() -> None:
+    global _FALLBACK_WARNED
+    if _FALLBACK_WARNED:
+        return
+    if sys.platform == "win32":
+        logger.warning(
+            "Docker unavailable; CodeValidator using subprocess fallback "
+            "(no rlimit on Windows -- AST guard + restricted builtins only)"
+        )
+    else:
+        logger.warning(
+            "Docker unavailable; CodeValidator using subprocess fallback "
+            "with RLIMIT_CPU and RLIMIT_AS"
+        )
+    _FALLBACK_WARNED = True
+
+
+def _parse_runner_output(stdout: str) -> tuple[bool, pd.DataFrame | str]:
+    cleaned = stdout.strip()
+    if not cleaned:
+        return False, "empty sandbox output"
+    last_line = cleaned.splitlines()[-1]
+    try:
+        response = json.loads(last_line)
+    except json.JSONDecodeError as exc:
+        return False, f"unparseable sandbox output: {exc}"
+    if response.get("ok"):
+        return True, pd.read_csv(io.StringIO(response["csv"]), dtype=str, keep_default_na=False)
+    return False, str(response.get("error", "fix failed"))
+
+
+def run_in_docker(
+    df: pd.DataFrame,
+    col: str,
+    code: str,
+    settings: Settings,
+) -> tuple[bool, pd.DataFrame | str]:
+    """Run a fix function inside an isolated Docker container."""
+    import docker
+
+    container = None
+    try:
+        client = docker.from_env()
+        payload = {"csv": df.to_csv(index=False), "code": code, "col": col}
+        container = client.containers.run(
+            image=settings.code_validator.docker_image,
+            command=["python", "-c", _RUNNER_SCRIPT],
+            stdin_open=True,
+            detach=True,
+            network_mode="none",
+            read_only=True,
+            cap_drop=["ALL"],
+            security_opt=["no-new-privileges"],
+            mem_limit=settings.code_validator.docker_mem_limit,
+            memswap_limit=settings.code_validator.docker_mem_limit,
+            cpu_quota=settings.code_validator.docker_cpu_quota,
+            pids_limit=64,
+            tmpfs={"/tmp": "size=64m,mode=1777"},
+            user="65534:65534",
+        )
+        sock = container.attach_socket(params={"stdin": 1, "stream": 1})
+        try:
+            sock._sock.sendall(json.dumps(payload).encode() + b"\n")
+            sock._sock.shutdown(socket.SHUT_WR)
+        finally:
+            sock.close()
+        result = container.wait(timeout=settings.code_validator.sandbox_timeout_s)
+        stdout = container.logs(stdout=True, stderr=False).decode()
+        stderr = container.logs(stdout=False, stderr=True).decode()
+        if result.get("StatusCode", 1) != 0:
+            return False, stderr.strip() or "non-zero container exit"
+        return _parse_runner_output(stdout)
+    except docker.errors.ContainerError as exc:
+        return False, str(exc)
+    except Exception as exc:
+        return False, f"{type(exc).__name__}: {exc}"
+    finally:
+        if container is not None:
+            with contextlib.suppress(Exception):
+                container.remove(force=True)
+
+
+def run_in_subprocess_fallback(
+    df: pd.DataFrame,
+    col: str,
+    code: str,
+    settings: Settings,
+) -> tuple[bool, pd.DataFrame | str]:
+    """Run the same runner script in an isolated Python subprocess.
+
+    On POSIX hosts this enforces RLIMIT_CPU and RLIMIT_AS via
+    ``resource.setrlimit``; on Windows the rlimit calls are skipped and the
+    AST guard plus restricted ``__builtins__`` whitelist remain the only
+    defences.
+    """
+    timeout_s = settings.code_validator.sandbox_timeout_s
+    mem_bytes = _parse_mem_to_bytes(settings.code_validator.docker_mem_limit)
+    full_script = (
+        _FALLBACK_PREAMBLE.format(timeout_s=timeout_s, mem_bytes=mem_bytes) + "\n" + _RUNNER_SCRIPT
+    )
+    payload = {"csv": df.to_csv(index=False), "code": code, "col": col}
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", full_script],
+            input=json.dumps(payload).encode(),
+            capture_output=True,
+            timeout=timeout_s,
+        )
+    except subprocess.TimeoutExpired:
+        return False, f"Subprocess timed out after {timeout_s}s"
+    if proc.returncode != 0:
+        return False, proc.stderr.decode().strip() or "non-zero subprocess exit"
+    return _parse_runner_output(proc.stdout.decode())
+
+
+def run_sandboxed(
+    df: pd.DataFrame,
+    col: str,
+    code: str,
+    settings: Settings,
+) -> tuple[bool, pd.DataFrame | str]:
+    """Dispatch sandboxed execution to Docker primary, subprocess fallback."""
+    if _is_docker_available():
+        return run_in_docker(df, col, code, settings)
+    _maybe_warn_fallback()
+    return run_in_subprocess_fallback(df, col, code, settings)
 
 
 # ── Filter helpers ─────────────────────────────────────────────────────────────
@@ -40,8 +281,6 @@ def eval_filter_expression(
             {"df": df, "col": col, "pd": pd, "np": np},
         )
         if isinstance(mask, pd.Series):
-            # Reindex to df.index so that a mask derived from a subset
-            # (e.g. after .dropna()) still aligns with the full DataFrame.
             mask = mask.reindex(df.index, fill_value=False)
         else:
             mask = pd.Series(mask, index=df.index)
@@ -94,76 +333,6 @@ def build_test_subsample(
         else normal_pool
     )
     return pd.concat([target_rows, normal_rows]).drop_duplicates().reset_index(drop=True)
-
-
-# ── Subprocess sandbox ─────────────────────────────────────────────────────────
-
-
-def run_in_sandbox(
-    df: pd.DataFrame,
-    col: str,
-    code: str,
-    runner_path: str,
-    sandbox_uid: int | None = None,
-) -> tuple[bool, pd.DataFrame | str]:
-    """Run LLM-generated fix code in an isolated subprocess.
-
-    Serialises df to a temp CSV, writes code to a temp .py file, invokes
-    sandbox_runner.py as a child process (optionally as sandbox_user), and
-    reads the result back from a temp output CSV.
-
-    Returns (success, result_df) on success or (False, error_message) on any
-    failure (non-zero exit code, timeout, unexpected exception).
-    """
-    inp_path = func_path = out_path = None
-    try:
-        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as f:
-            inp_path = f.name
-        with tempfile.NamedTemporaryFile(suffix=".py", delete=False) as f:
-            func_path = f.name
-        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as f:
-            out_path = f.name
-
-        df.to_csv(inp_path, index=False)
-        with open(func_path, "w") as f:
-            f.write(code)
-
-        run_kwargs: dict = dict(
-            args=[sys.executable, runner_path, inp_path, func_path, out_path, col],
-            timeout=SANDBOX_TIMEOUT,
-            capture_output=True,
-        )
-        if sandbox_uid is not None:
-            run_kwargs["user"] = sandbox_uid
-
-        proc = subprocess.run(**run_kwargs)
-
-        if proc.returncode != 0:
-            return False, proc.stderr.decode().strip()
-
-        return True, pd.read_csv(out_path, dtype=str)
-
-    except subprocess.TimeoutExpired:
-        return False, f"Subprocess timed out after {SANDBOX_TIMEOUT}s"
-    except Exception as e:
-        return False, str(e)
-    finally:
-        for path in [inp_path, func_path, out_path]:
-            if path:
-                try:
-                    os.remove(path)
-                except OSError:
-                    pass
-
-
-def resolve_sandbox_uid() -> int | None:
-    """Return the UID of sandbox_user, or None if not configured."""
-    try:
-        import pwd
-
-        return pwd.getpwnam("sandbox_user").pw_uid
-    except (KeyError, ImportError):
-        return None
 
 
 # ── Safety guards ──────────────────────────────────────────────────────────────

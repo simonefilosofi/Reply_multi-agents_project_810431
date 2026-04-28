@@ -2233,7 +2233,19 @@ def pick_duplicate_column_to_drop(col_a: str, col_b: str) -> str:
 import ast as _ast
 
 _ALLOWED_IMPORTS = {"pandas", "numpy", "re", "math"}
-_FORBIDDEN_CALLS = {"exec", "eval", "open", "compile", "__import__"}
+_FORBIDDEN_CALLS = {
+    "exec",
+    "eval",
+    "open",
+    "compile",
+    "__import__",
+    "globals",
+    "locals",
+    "vars",
+    "getattr",
+    "setattr",
+    "delattr",
+}
 _FORBIDDEN_ATTRS = {
     "remove",
     "rmdir",
@@ -2244,7 +2256,19 @@ _FORBIDDEN_ATTRS = {
     "call",
     "run",
     "Popen",
+    "__class__",
+    "__bases__",
+    "__subclasses__",
+    "__globals__",
+    "__builtins__",
+    "__dict__",
+    "__loader__",
+    "__spec__",
+    "__mro__",
+    "__init_subclass__",
 }
+_MAX_CODE_LENGTH = 4000
+_MAX_AST_NODES = 500
 
 
 def validate_generated_code(code: str) -> tuple[bool, str]:
@@ -2253,12 +2277,36 @@ def validate_generated_code(code: str) -> tuple[bool, str]:
     Checks for forbidden imports and dangerous calls before the code
     is passed to the subprocess sandbox.  Returns (is_valid, reason).
     """
+    if len(code) > _MAX_CODE_LENGTH:
+        return False, f"Code too long: {len(code)} > {_MAX_CODE_LENGTH} chars"
+
     try:
         tree = _ast.parse(code)
     except SyntaxError as e:
         return False, f"Syntax error: {e}"
 
-    for node in _ast.walk(tree):
+    nodes = list(_ast.walk(tree))
+    if len(nodes) > _MAX_AST_NODES:
+        return False, f"AST too large: {len(nodes)} > {_MAX_AST_NODES} nodes"
+
+    fix_funcs = [n for n in tree.body if isinstance(n, _ast.FunctionDef) and n.name == "fix"]
+    if len(fix_funcs) != 1:
+        return False, (
+            f"Expected exactly one top-level function named 'fix', found {len(fix_funcs)}"
+        )
+    fix_args = fix_funcs[0].args
+    sig_ok = (
+        [a.arg for a in fix_args.args] == ["df", "col"]
+        and fix_args.vararg is None
+        and fix_args.kwarg is None
+        and not fix_args.kwonlyargs
+        and not fix_args.posonlyargs
+        and not fix_args.defaults
+    )
+    if not sig_ok:
+        return False, "fix() must have signature (df, col) with no extra args or defaults"
+
+    for node in nodes:
         if isinstance(node, _ast.Import):
             for alias in node.names:
                 root = alias.name.split(".")[0]
@@ -2271,12 +2319,17 @@ def validate_generated_code(code: str) -> tuple[bool, str]:
                 return False, f"Forbidden import: {node.module}"
 
         if isinstance(node, _ast.Call):
-            if isinstance(node.func, _ast.Name):
-                if node.func.id in _FORBIDDEN_CALLS:
-                    return False, f"Forbidden call: {node.func.id}"
-            if isinstance(node.func, _ast.Attribute):
-                if node.func.attr in _FORBIDDEN_ATTRS:
-                    return False, f"Forbidden attribute call: .{node.func.attr}"
+            if isinstance(node.func, _ast.Name) and node.func.id in _FORBIDDEN_CALLS:
+                return False, f"Forbidden call: {node.func.id}"
+            if isinstance(node.func, _ast.Attribute) and node.func.attr in _FORBIDDEN_ATTRS:
+                return False, f"Forbidden attribute call: .{node.func.attr}"
+
+        if (
+            isinstance(node, _ast.Attribute)
+            and node.attr.startswith("__")
+            and node.attr.endswith("__")
+        ):
+            return False, f"Forbidden dunder attribute access: .{node.attr}"
 
     return True, "OK"
 

@@ -628,3 +628,109 @@ the file/line where it lives.
   in `tools.py`, `app_demo.py`, `state_demo/constants.py`,
   `state_demo/scoring.py`, and `tools_code_validator.py`.
 
+---
+
+## Step 12 — CodeValidatorAgent sandbox refactor
+
+### D12.1 — Docker availability is probed once per process via `_is_docker_available`
+- **File:** `tools_code_validator.py` (`_DOCKER_AVAILABLE`,
+  `_is_docker_available`, `_reset_docker_probe`).
+- **Decision:** `run_sandboxed` calls `_is_docker_available()`, which
+  attempts `docker.from_env().ping()` exactly once and memoises the
+  result in a module-level `_DOCKER_AVAILABLE: bool | None` flag. A
+  test-only `_reset_docker_probe()` hook clears the flag (and the
+  one-shot fallback warning) so suites that monkeypatch the probe
+  start from a known state.
+- **Rationale:** The plan literally says "probe Docker once per
+  process via `client.ping()` and degrade to the fallback with a
+  single warning when Docker is unreachable." Re-probing on every
+  fix call would add ~50 ms per invocation when Docker is down (the
+  ping timeout) and burn one connection attempt per gap issue. The
+  reset hook lives next to the probe so tests don't have to reach
+  into module internals.
+
+### D12.2 — Subprocess fallback is AST-guard-only on Windows
+- **File:** `tools_code_validator.py::_FALLBACK_PREAMBLE`,
+  `run_in_subprocess_fallback`.
+- **Decision:** The fallback preamble wraps the `resource.setrlimit`
+  calls in `try/except (ImportError, ValueError, OSError): pass`. On
+  Windows the `import resource` step raises `ImportError` and the
+  preamble silently degrades to AST-guard + restricted-builtins +
+  `subprocess.run(timeout=...)`. A one-shot `WARNING` log on the
+  `tools_code_validator` logger announces the degradation when the
+  dispatcher first picks the fallback path.
+- **Rationale:** CLAUDE.md's tech-stack row explicitly calls out
+  "POSIX-only resource limits" and the plan's tech matrix says the
+  fallback is "active when Docker is unreachable; POSIX-only
+  resource limits". Hard-failing on Windows would block every
+  Windows developer because Docker Desktop is not always running.
+  The warning is rate-limited to once per process via the
+  `_FALLBACK_WARNED` flag so the Streamlit log doesn't drown in
+  duplicate notices.
+
+### D12.3 — AST guard requires exactly one `fix(df, col)` top-level function
+- **File:** `tools.py::validate_generated_code`.
+- **Decision:** The validator now rejects any code whose top-level
+  body does not contain exactly one `FunctionDef` named `fix`, and
+  rejects that function unless its argument list is exactly
+  `[df, col]` with no `*args`, `**kwargs`, defaults, kw-only, or
+  pos-only arguments. Helper functions at any other name are still
+  allowed (test
+  `test_valid_fix_with_helper_function_accepted`).
+- **Rationale:** The `_RUNNER_SCRIPT` calls `namespace["fix"](df, col)`
+  unconditionally. Pre-Step-12 the AST guard accepted code that
+  defined `fix(df, col, mode="strict")` or two `fix` functions in a
+  row, both of which executed fine but produced fragile contracts
+  for the safety guards. Tightening the AST contract closes the gap
+  before sandbox execution. Helper functions remain permitted
+  because real LLM output frequently uses one.
+
+### D12.4 — Dunder-prefix attribute walk rejects `__class__.__bases__` gadget
+- **File:** `tools.py::validate_generated_code` (the
+  `isinstance(node, _ast.Attribute)` branch with the
+  `node.attr.startswith("__") and node.attr.endswith("__")`
+  predicate).
+- **Decision:** Beyond the explicit `_FORBIDDEN_ATTRS` set
+  (`__class__`, `__bases__`, `__subclasses__`, `__globals__`,
+  `__builtins__`, `__dict__`, `__loader__`, `__spec__`, `__mro__`,
+  `__init_subclass__`), the validator rejects *any* attribute whose
+  name starts and ends with `__`. Single-underscore private
+  attributes (e.g. `df[col]._values`) remain allowed.
+- **Rationale:** The classic Python sandbox-escape gadget is
+  `().__class__.__bases__[0].__subclasses__()`. Listing the dunders
+  by hand is brittle — new dunders are added with each Python
+  release. The blanket rule is one extra AST predicate and closes
+  the entire surface. Verified by
+  `test_class_bases_subclasses_gadget_rejected` and
+  `test_arbitrary_dunder_attribute_rejected`.
+
+### D12.5 — Code-length cap (4000 chars) and AST-node cap (500 nodes) enforced
+- **File:** `tools.py::validate_generated_code` (`_MAX_CODE_LENGTH`,
+  `_MAX_AST_NODES`).
+- **Decision:** Reject code longer than 4000 characters or with more
+  than 500 AST nodes after parsing. Both limits are checked before
+  any other walk so the sandbox never sees pathological inputs.
+- **Rationale:** A fix function for a single issue is ~5–20 lines.
+  4000 chars is ~5× the largest realistic fix and 500 nodes is well
+  above what the fix prompt produces. The caps protect against an
+  LLM jailbreak that drops a multi-kilobyte payload into the
+  validator and against quadratic-time AST walks. Specific values
+  are surfaced here because they are not in the plan literally.
+
+### D12.6 — Sandbox dispatch returns `tuple[bool, pd.DataFrame | str]` (preserved)
+- **File:** `tools_code_validator.py::run_sandboxed`,
+  `run_in_docker`, `run_in_subprocess_fallback`.
+- **Decision:** All three functions return the same shape: `(True,
+  fixed_df)` on success, `(False, error_str)` on any failure. The
+  agent narrows the union with `isinstance(result, pd.DataFrame)`
+  before reading `.values`. The Docker path swallows
+  `docker.errors.ContainerError` separately so the error string is
+  the container's own message, not the wrapping exception class
+  name.
+- **Rationale:** Keeping the return shape identical to the legacy
+  `run_in_sandbox` lets the agent's retry loop stay unchanged across
+  the refactor. The narrowing assertion is what closed the only new
+  mypy finding the refactor introduced
+  (`code_validator_agent.py:139` — `Item "str" of "Any | str" has
+  no attribute "values"`).
+
