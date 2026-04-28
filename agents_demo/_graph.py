@@ -64,7 +64,8 @@ class PipelineStateDict(TypedDict, total=False):
     anomaly_summary: str
     consistency_summary: str
     constraint_summary: str
-    prioritized_issues: list[dict[str, Any]]
+    prioritized_issues: list[Any]
+    deliberation_log: list[Any]
     synthesis_summary: str
     remediation_plan: list[dict[str, Any]]
     fix_log: list[dict[str, Any]]
@@ -104,6 +105,7 @@ def state_to_dict(state: PipelineState) -> PipelineStateDict:
         consistency_summary=state.consistency_summary,
         constraint_summary=state.constraint_summary,
         prioritized_issues=state.prioritized_issues,
+        deliberation_log=state.deliberation_log,
         synthesis_summary=state.synthesis_summary,
         remediation_plan=state.remediation_plan,
         fix_log=state.fix_log,

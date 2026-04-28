@@ -507,3 +507,99 @@ the file/line where it lives.
   `EnrichmentResponse` schema be reused by tests
   (`monkeypatch_llm["call_llm_json"] = EnrichmentResponse(issues=[...])`)
   and by the upcoming deliberation subgraph in Step 10.
+
+---
+
+## Step 10 — Synthesis broader conflict detection + deliberation
+
+### D10.1 — Deliberation subgraph factory inlined into `synthesis_agent.py`
+- **File:** `agents_demo/synthesis_agent.py` (`_DeliberationStateDict`,
+  `_specialist_a_node`, `_specialist_b_node`, `_tally_node`,
+  `_build_deliberation_subgraph`).
+- **Decision:** The LangGraph subgraph that orchestrates a single
+  deliberation pass lives as private module-level helpers inside
+  `synthesis_agent.py`, not in a new `agents_demo/_deliberation.py`
+  file. The subgraph compilation is wrapped in `@functools.cache`
+  keyed on the `(specialist_a_name, specialist_b_name)` tuple per the
+  plan, even though the structure is identical for every pair.
+- **Rationale:** The repository layout in `CLAUDE.md` does not list a
+  separate deliberation helper module, and the plan's "Files to
+  create" section only mentions `state_demo/deliberation.py`. Keeping
+  the subgraph factory in `synthesis_agent.py` honours the layout
+  contract while still satisfying the cache-per-pair requirement
+  literally.
+
+### D10.2 — Pattern-4 (outlier vs domain-negative) is the only contest routed to deliberation
+- **File:** `agents_demo/synthesis_agent.py`
+  (`_detect_profiler_schema_mixed_type`,
+  `_detect_profiler_schema_date_dispute`,
+  `_detect_duplicate_vs_lookup`,
+  `_detect_outlier_vs_domain_negative`).
+- **Decision:** Patterns 1, 2 and 3 are resolved deterministically:
+  pattern 1 logs a `cross_agent_insight` (existing behaviour), pattern
+  2 mutates `dataset_fingerprint` (date_columns -> categorical), and
+  pattern 3 drops the `duplicate_columns` issue and clears it from
+  `state.duplicate_report`. Only pattern 4 routes contested issues to
+  the deliberation subgraph.
+- **Rationale:** The plan describes deterministic actions for
+  patterns 1-3 ("review insight", "demote to categorical and log",
+  "keep both columns; suppress the duplicate-drop fix"). Pattern 4 is
+  the only one that explicitly says "route to deliberation". Routing
+  patterns 1-3 through the subgraph would inflate token cost without
+  adding signal because the resolution is already determined by the
+  pattern itself.
+
+### D10.3 — `state.prioritized_issues` migrated to `list[Issue]`
+- **File:** `state_demo/pipeline_state.py`,
+  `agents_demo/synthesis_agent.py`, `agents_demo/_graph.py`.
+- **Decision:** The `prioritized_issues` field is now typed as
+  `list[Issue]` (the discriminated union from
+  `state_demo.issues`). Downstream remediation and report agents
+  continue to use the dict-style accessors (`issue["type"]`,
+  `issue.get("column")`) exposed by `IssueBase`, so no behaviour
+  change reaches them in this step. The `_graph.PipelineStateDict`
+  schema relaxes the field to `list[Any]` to avoid forcing typed
+  Issues through LangGraph's TypedDict layer until the remediation
+  migration in Step 11.
+- **Rationale:** The plan says "Migrate to typed `Issue`. The
+  cross-agent convergence loop now operates on Pydantic models." The
+  bracket/`.get` shim on `IssueBase` (added in Step 9) was designed
+  to make this exact migration possible without touching the
+  remediation/report layer. Moving the type change in Step 10 keeps
+  the migration aligned with the layer being rewritten and lets the
+  synthesis severity recalibration mutate `issue.severity` directly
+  via attribute assignment instead of bracket-set, which `IssueBase`
+  does not support.
+
+### D10.4 — High-confidence threshold for "keep" severity upgrade is 0.7
+- **File:** `agents_demo/synthesis_agent.py`
+  (`SEVERITY_UPGRADE_CONFIDENCE = 0.7`).
+- **Decision:** When deliberation returns `final_decision="keep"`, the
+  severity is upgraded to `high` only if at least one specialist voted
+  `keep_issue=True` with `confidence >= 0.7`. Otherwise the original
+  severity is preserved.
+- **Rationale:** The plan says "Deliberation outcome 'keep' upgrades
+  severity if at least one specialist said `keep_issue=True` with
+  high-severity rationale." Translating "high-severity rationale" into
+  a numeric threshold avoids brittle string-matching on rationale
+  text. 0.7 is a conservative midpoint that requires more than a coin
+  flip but does not require near-certainty, mirroring the
+  conservatism of the existing severity-band thresholds in
+  `Settings.thresholds`.
+
+### D10.5 — Deliberation cap-overflow batch is a single supervisor JSON call
+- **File:** `agents_demo/synthesis_agent.py`
+  (`_batched_supervisor_deliberation`).
+- **Decision:** When more than `DELIBERATION_PAIR_CAP=5` contested
+  issues are produced in a single synthesis pass, the first 5 are
+  resolved through the LangGraph subgraph and the remaining contests
+  are batched into one `call_llm_json` call that returns a list of
+  `{"index", "final_decision", "rationale"}` decisions. Each entry is
+  recorded as a `DeliberationOutcome` with an empty `votes` list so
+  the deliberation log stays exhaustive.
+- **Rationale:** The plan says "remaining contests are batched into
+  one supervisor call". Reusing `call_llm_json` keeps the failover
+  policy (Anthropic primary, OpenAI fallback) consistent with the
+  per-issue calls. Empty `votes` is a deliberate marker that the
+  decision came from the batched path; tests can distinguish the two
+  paths by inspecting `len(outcome.votes)`.
