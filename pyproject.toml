@@ -78,7 +78,20 @@ extend-exclude = [
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "D"]
-ignore = ["D100", "D101", "D102", "D103", "D104", "D105", "D107", "D203", "D213"]
+ignore = [
+    "D100",
+    "D101",
+    "D102",
+    "D103",
+    "D104",
+    "D105",
+    "D107",
+    "D203",
+    "D205",
+    "D213",
+    "D400",
+    "D401",
+]
 
 [tool.ruff.lint.pydocstyle]
 convention = "pep257"

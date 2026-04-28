@@ -1,7 +1,8 @@
 """DerivedRecomputationStrategy -- after outlier capping has modified one or
-more base numeric columns, this strategy detects derived-named columns
-(profit, margin, net, total, balance, ...) that approximately satisfy
-``c == a - b`` in the *raw* data, where ``a`` was capped and ``b`` was
+more base numeric columns.
+
+This strategy detects derived-named columns (profit, margin, net, total, balance, ...)
+that approximately satisfy ``c == a - b`` in the *raw* data, where ``a`` was capped and ``b`` was
 NOT, and recomputes ``c = a_clean - b_clean`` so additive consistency is
 restored on the cleaned dataframe.
 
