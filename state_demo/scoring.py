@@ -2,10 +2,50 @@
 
 from collections.abc import Callable
 from itertools import combinations
+from typing import Any
 
 import pandas as pd
 
 from state_demo.helpers import missing_mask
+
+
+def build_rename_aware_resolve(state: Any, df: pd.DataFrame) -> Callable[[str], str | None]:
+    """Build a column-resolver that follows naming_convention renames in fix_log.
+
+    The synthesis baseline uses ``df_raw`` so resolution is identity. The
+    remediation, code-validator, and report snapshots use ``df_cleaned`` and
+    may need to follow a column rename. Returns a callable safe to pass as
+    ``resolve=`` to :func:`compute_reliability_score`.
+    """
+    rename_map = {
+        f["metadata"]["old"]: f["metadata"]["new"]
+        for f in state.fix_log
+        if f.get("issue_type") == "naming_convention"
+        and f.get("action") == "auto_fixed"
+        and "metadata" in f
+    }
+
+    def resolve(col: str) -> str | None:
+        if col in df.columns:
+            return col
+        renamed = rename_map.get(col)
+        return renamed if renamed and renamed in df.columns else None
+
+    return resolve
+
+
+def record_dimension_snapshot(state: Any, label: str, df: pd.DataFrame) -> None:
+    """Record the reliability dimensions at ``label`` into ``state.dimension_trajectory``.
+
+    No-ops on an empty DataFrame so the trajectory chart does not collect
+    degenerate 1.0-everywhere checkpoints when an upstream agent has not yet
+    produced cleaned data.
+    """
+    if df is None or df.empty:
+        return
+    resolve = build_rename_aware_resolve(state, df)
+    _, dimensions = compute_reliability_score(df, state, resolve=resolve)
+    state.dimension_trajectory[label] = dict(dimensions)
 
 
 def compute_reliability_score(

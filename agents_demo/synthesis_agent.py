@@ -162,6 +162,7 @@ class SynthesisAgent(BaseAgent):
     def observe(self) -> None:
         score, dimensions = compute_reliability_score(self.state.df_raw, self.state)
         self.state.reliability_score_before = score
+        self.state.dimension_trajectory["post_synthesis"] = dict(dimensions)
         issues = self.state.prioritized_issues
         high = sum(1 for i in issues if i.severity == "high")
         medium = sum(1 for i in issues if i.severity == "medium")

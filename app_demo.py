@@ -1,10 +1,13 @@
 """Streamlit dashboard for the multi-agent data quality pipeline.
-Supports multi-dataset upload, full pipeline execution through all four
-layers, and an enhanced dashboard with reliability scores, remediation
-details, visualizations, agent communication logs, and JSON export.
+Supports multi-dataset upload, full pipeline execution through all five
+layers (Step 13 surfaces Layer 3.5 CodeValidator as a visible step),
+and an enhanced dashboard with reliability scores, remediation details,
+the new dimension-trajectory and issue-resolution Sankey visualisations,
+deliberation log + LLM-generated fixes expanders, multi-dataset
+cross-insight comparison, agent communication logs, and JSON export
+routed through ``agents_demo.report_agent.serialize_report``.
 """
 
-import json
 import os
 import tempfile
 
@@ -14,6 +17,7 @@ from dotenv import load_dotenv
 
 from agents_demo._graph import build_pipeline_graph, state_from_dict
 from agents_demo.anomaly_agent import AnomalyAgent
+from agents_demo.code_validator_agent import CodeValidatorAgent
 from agents_demo.completeness_agent import CompletenessAgent
 from agents_demo.consistency_agent import ConsistencyAgent
 from agents_demo.constraint_agent import ConstraintAgent
@@ -21,7 +25,7 @@ from agents_demo.duplicate_agent import DuplicateAgent
 from agents_demo.ingestion_agent import IngestionAgent
 from agents_demo.profiler_agent import ProfilerAgent
 from agents_demo.remediation_agent import RemediationAgent
-from agents_demo.report_agent import ReportAgent
+from agents_demo.report_agent import ReportAgent, serialize_report
 from agents_demo.schema_agent import SchemaAgent
 from agents_demo.synthesis_agent import SynthesisAgent
 from state_demo import settings
@@ -80,6 +84,12 @@ PIPELINE_STEPS = [
         "Remediation",
         "Apply automated fixes and flag issues requiring human review.",
     ),
+    (
+        CodeValidatorAgent,
+        "code_validator",
+        "Code Validator",
+        "Generate and sandbox-execute LLM fix code for residual gap issues.",
+    ),
     (ReportAgent, "report", "Report", "Compile the final data quality report with visualizations."),
 ]
 
@@ -112,6 +122,12 @@ def _step_info(state: PipelineState, key: str) -> str:
         flagged = sum(1 for f in state.fix_log if f.get("action") == "flagged_for_review")
         llm = sum(1 for f in state.fix_log if f.get("action") == "auto_fixed_by_llm")
         return f"{auto} fixed ({llm} by LLM), {flagged} flagged"
+    if key == "code_validator":
+        llm = sum(1 for f in state.fix_log if f.get("action") == "auto_fixed_by_llm")
+        review = len(state.human_review_items)
+        if not state.gap_issues and llm == 0 and review == 0:
+            return "skipped (no gap issues)"
+        return f"{llm} LLM fix(es), {review} flagged for review"
     if key == "report":
         return f"reliability {state.reliability_score_after:.0f}/100 (post-fix)"
     return "—"
@@ -338,14 +354,63 @@ def display_results(state, chart_images, dataset_name):
     chart_order = [
         ("issue_severity_distribution.png", "Issue Severity Distribution"),
         ("issues_by_agent.png", "Issues by Agent"),
-        ("completeness_heatmap.png", "Completeness Heatmap"),
+        ("completeness_heatmap_before_after.png", "Completeness — Before vs After"),
         ("reliability_before_after.png", "Reliability Before vs After"),
+        ("reliability_trajectory.png", "Reliability Dimension Trajectory"),
+        ("issue_resolution_sankey.png", "Issue Resolution Flow"),
     ]
     col1, col2 = st.columns(2)
     for idx, (filename, caption) in enumerate(chart_order):
         target = col1 if idx % 2 == 0 else col2
         if filename in chart_images:
             target.image(chart_images[filename], caption=caption, use_container_width=True)
+
+    deliberation_log = state.final_report.get("deliberation_log", [])
+    if deliberation_log:
+        st.header("Deliberation Log")
+        st.caption(
+            "Specialist votes recorded by the synthesis supervisor when two "
+            "detector agents disagreed on a contested issue."
+        )
+        for idx, outcome in enumerate(deliberation_log, start=1):
+            issue = outcome.get("contested_issue", {})
+            label = (
+                f"#{idx} — {issue.get('type', 'unknown')} on "
+                f"{issue.get('column', '-')} → {outcome.get('final_decision', '-')}"
+            )
+            with st.expander(label):
+                st.markdown(f"**Rationale:** {outcome.get('rationale', '-')}")
+                votes = outcome.get("votes", [])
+                if votes:
+                    st.dataframe(pd.DataFrame(votes), use_container_width=True)
+                else:
+                    st.info("Decision made by the supervisor without specialist votes.")
+
+    validator_outcomes = state.final_report.get("validator_outcomes", [])
+    if validator_outcomes:
+        st.header("Generated Fixes (Code Validator)")
+        st.caption(
+            "Each entry is a fix function the LLM produced for a residual gap "
+            "issue, validated by the AST guard and executed in the sandbox."
+        )
+        for idx, outcome in enumerate(validator_outcomes, start=1):
+            label = (
+                f"#{idx} — {outcome.get('issue_type', '-')} on "
+                f"{outcome.get('column', '-')} "
+                f"({outcome.get('action', 'human_review')})"
+            )
+            with st.expander(label):
+                if outcome.get("action") == "auto_fixed_by_llm":
+                    st.markdown(f"**Rows affected:** {outcome.get('rows_affected', '-')}")
+                    st.markdown(f"**Attempts:** {outcome.get('attempts', '-')}")
+                    code = outcome.get("generated_code", "")
+                    if code:
+                        st.code(code, language="python")
+                else:
+                    st.markdown(f"**Reason:** {outcome.get('reason', '-')}")
+                    st.markdown(f"**Attempts:** {outcome.get('attempts', '-')}")
+                    if outcome.get("last_error"):
+                        st.markdown(f"**Last error:** `{outcome['last_error']}`")
 
     st.header("Issues by Agent")
     reports = {
@@ -388,7 +453,7 @@ def display_results(state, chart_images, dataset_name):
             st.info("No agent log entries.")
 
     st.header("Export")
-    report_json = _serialize_report(state.final_report)
+    report_json = serialize_report(state.final_report)
     col1, col2 = st.columns(2)
     col1.download_button(
         label="Download Report (JSON)",
@@ -405,19 +470,6 @@ def display_results(state, chart_images, dataset_name):
             file_name=f"{base_name}_cleaned.csv",
             mime="text/csv",
         )
-
-
-def _serialize_report(report):
-    def default_handler(obj):
-        if isinstance(obj, (pd.Timestamp, pd.Timedelta)):
-            return str(obj)
-        if hasattr(obj, "item"):
-            return obj.item()
-        if isinstance(obj, pd.DataFrame):
-            return obj.to_dict(orient="records")
-        return str(obj)
-
-    return json.dumps(report, indent=2, default=default_handler)
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
@@ -455,8 +507,34 @@ if "pipeline_results" in st.session_state:
                 st.metric("Issues Found", len(state.prioritized_issues))
                 st.metric("Fixes Applied", len(state.fix_log))
 
+        st.subheader("Cross-Dataset Insights")
+        column_sets = [set(state.df_raw.columns) for _, state, _ in results]
+        shared_columns = sorted(set.intersection(*column_sets)) if column_sets else []
+        issue_type_sets = [
+            {issue["type"] for issue in state.prioritized_issues} for _, state, _ in results
+        ]
+        shared_issue_types = sorted(set.intersection(*issue_type_sets)) if issue_type_sets else []
+        uplifts = [
+            state.reliability_score_after - state.reliability_score_before
+            for _, state, _ in results
+        ]
+        avg_uplift = sum(uplifts) / len(uplifts) if uplifts else 0.0
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric(
+            "Shared columns",
+            len(shared_columns),
+            help=", ".join(shared_columns) if shared_columns else "no overlap",
+        )
+        c2.metric(
+            "Shared issue types",
+            len(shared_issue_types),
+            help=", ".join(shared_issue_types) if shared_issue_types else "no overlap",
+        )
+        c3.metric("Average reliability uplift", f"{avg_uplift:+.1f} pts")
+
         tabs = st.tabs([name for name, _, _ in results])
-        for tab, (name, state, charts) in zip(tabs, results):
+        for tab, (name, state, charts) in zip(tabs, results, strict=True):
             with tab:
                 display_results(state, charts, name)
     else:

@@ -15,6 +15,13 @@ gap detector (each carries a ``filter`` pandas-boolean expression alongside
 the standard issue fields). They are NOT appended to ``prioritized_issues``
 because the typed contract on that list excludes the ``filter`` field; the
 code-validator node consumes them directly from this attribute (Step 12).
+
+Step 13 adds ``dimension_trajectory`` -- an insertion-ordered mapping from a
+checkpoint label (``post_layer1``, ``post_synthesis``, ``post_remediation``,
+``post_code_validator``) to the five reliability dimensions computed at that
+point in the pipeline. ReportAgent feeds the trajectory chart from this
+field; downstream consumers tolerate missing keys when a checkpoint was
+skipped (e.g., the code validator never ran).
 """
 
 from dataclasses import dataclass, field
@@ -72,4 +79,5 @@ class PipelineState:
 
     reliability_score_before: float = 0.0
     reliability_score_after: float = 0.0
+    dimension_trajectory: dict[str, dict[str, float]] = field(default_factory=dict)
     final_report: dict[str, Any] = field(default_factory=dict)

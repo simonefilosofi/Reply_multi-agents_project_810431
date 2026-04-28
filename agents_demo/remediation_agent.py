@@ -27,6 +27,7 @@ from agents_demo.remediation_strategies import STRATEGY_ORDER
 from state_demo.constants import GAP_DETECTION_ISSUE_TYPES, ISSUE_TYPES, SEVERITY_RANK
 from state_demo.helpers import non_empty_values
 from state_demo.issues import Issue
+from state_demo.scoring import record_dimension_snapshot
 
 
 class RemediationAgent(BaseAgent):
@@ -209,6 +210,7 @@ class RemediationAgent(BaseAgent):
     def observe(self) -> None:
         df_raw = self.state.df_raw
         df_clean = self.state.df_cleaned if self.state.df_cleaned is not None else df_raw
+        record_dimension_snapshot(self.state, "post_remediation", df_clean)
         rows_removed = len(df_raw) - len(df_clean)
         cols_renamed = sum(
             1

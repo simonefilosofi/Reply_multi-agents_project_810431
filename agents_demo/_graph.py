@@ -76,6 +76,7 @@ class PipelineStateDict(TypedDict, total=False):
     human_review_items: list[dict[str, Any]]
     reliability_score_before: float
     reliability_score_after: float
+    dimension_trajectory: dict[str, dict[str, float]]
     final_report: dict[str, Any]
     gap_issues: list[dict[str, Any]]
 
@@ -116,6 +117,7 @@ def state_to_dict(state: PipelineState) -> PipelineStateDict:
         human_review_items=state.human_review_items,
         reliability_score_before=state.reliability_score_before,
         reliability_score_after=state.reliability_score_after,
+        dimension_trajectory=dict(state.dimension_trajectory),
         final_report=state.final_report,
         gap_issues=list(state.gap_issues),
     )

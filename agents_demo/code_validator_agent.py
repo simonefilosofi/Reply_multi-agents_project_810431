@@ -28,6 +28,7 @@ import pandas as pd
 
 from agents_demo.base_agent import BaseAgent
 from state_demo import settings as global_settings
+from state_demo.scoring import record_dimension_snapshot
 from tools import validate_generated_code
 from tools_code_validator import (
     build_filter_prompt,
@@ -87,6 +88,8 @@ class CodeValidatorAgent(BaseAgent):
     def observe(self) -> None:
         applied = sum(1 for f in self.state.fix_log if f.get("action") == "auto_fixed_by_llm")
         flagged = len(self.state.human_review_items)
+        df_clean = self.state.df_cleaned if self.state.df_cleaned is not None else self.state.df_raw
+        record_dimension_snapshot(self.state, "post_code_validator", df_clean)
         self.log(
             "observe",
             f"CodeValidator complete -- {applied} LLM fix(es) applied, "

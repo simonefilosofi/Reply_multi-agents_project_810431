@@ -734,3 +734,103 @@ the file/line where it lives.
   (`code_validator_agent.py:139` — `Item "str" of "Any | str" has
   no attribute "values"`).
 
+---
+
+## Step 13 — ReportAgent enhancements + Streamlit polish
+
+### D13.1 — Three trajectory checkpoints, not five
+- **File:** `state_demo/pipeline_state.py` (`dimension_trajectory`),
+  `agents_demo/synthesis_agent.py::observe`,
+  `agents_demo/remediation_agent.py::observe`,
+  `agents_demo/code_validator_agent.py::observe`.
+- **Decision:** The plan enumerates five checkpoints (post-Profiler,
+  post-Layer1, post-Synthesis, post-Remediation, post-CodeValidator)
+  but only three actually carry distinct dimension scores in this
+  pipeline: `post_synthesis` (computed on `df_raw`, since profiler
+  and Layer-1 detectors do not mutate the dataframe),
+  `post_remediation` (on `df_cleaned` after the strategy registry
+  ran), and `post_code_validator` (on `df_cleaned` after the LLM
+  fix loop, recorded only when the validator branch fired). The
+  trajectory chart degrades to an "n/a" placeholder when fewer than
+  two checkpoints are present.
+- **Rationale:** Logging `post_profiler` and `post_layer1` would
+  produce two duplicate copies of the `post_synthesis` baseline
+  (same `df_raw`), which would clutter the chart without adding
+  signal. Three meaningful points is the minimum that makes the
+  trajectory visually informative without lying about what each
+  layer actually does.
+
+### D13.2 — `chart_issue_resolution_sankey` swallows kaleido failures
+- **File:** `tools.py::chart_issue_resolution_sankey`.
+- **Decision:** The Plotly Sankey is exported via
+  ``fig.write_image(path)`` (no explicit ``engine=`` arg, since
+  kaleido is already the only supported engine per Plotly 6.x).
+  Any exception from the export call (kaleido cache miss, sandboxed
+  CI without Chromium download, image-export disabled) returns
+  ``""`` rather than raising. The caller (`ReportAgent.act`) then
+  records the chart as "missing" in the visualisations list and
+  `app_demo.py` skips it gracefully when the file is absent from
+  `chart_images`.
+- **Rationale:** The plan's edge-case section explicitly says
+  Plotly's image export "requires `kaleido`" and adds it to
+  requirements.txt. Kaleido 1.x ships its own embedded Chrome
+  download on first use, which can fail in offline / restricted
+  environments. The chart is informational, not load-bearing — the
+  five other charts cover the full reliability story without it.
+  Surfacing a runtime error would block the entire report.
+
+### D13.3 — `serialize_report` lives in `agents_demo/report_agent.py`
+- **File:** `agents_demo/report_agent.py::serialize_report`,
+  `app_demo.py` (consumer).
+- **Decision:** The canonical JSON exporter lives next to the
+  `ReportAgent` that produces the report. Streamlit imports it as
+  `from agents_demo.report_agent import ReportAgent, serialize_report`.
+  The legacy `_serialize_report` in `app_demo.py` is removed. Pydantic
+  ``BaseModel`` instances (typed ``Issue`` discriminated-union
+  members, ``DeliberationOutcome`` records) are emitted via
+  ``model_dump()`` so the export advertises the structured fields
+  declared in `state_demo/issues.py` and `state_demo/deliberation.py`,
+  rather than the legacy `str(obj)` fallback that emitted the
+  Pydantic repr string.
+- **Rationale:** The plan says "JSON export uses Pydantic's
+  `.model_dump_json(...)` on `Issue` instances rather than the manual
+  `default_handler`. The `_serialize_report` helper is removed."
+  Co-locating the helper with the agent that owns the schema is the
+  cleanest interpretation of "removed" — Streamlit becomes a pure
+  consumer. The default handler is kept (rather than calling
+  `report.model_dump_json()` directly) because the report dict
+  embeds heterogeneous content (raw dicts from `agent_reports`,
+  pandas DataFrames in some downstream callers) that
+  `model_dump_json` would not handle without a wrapper schema.
+
+### D13.4 — `chart_completeness_heatmap_before_after` shows dropped columns as `--`
+- **File:** `tools.py::chart_completeness_heatmap_before_after`.
+- **Decision:** When a column from the "before" map is missing from
+  the "after" map (typically because the column was dropped during
+  remediation — sparse-column removal, duplicate-column drop), the
+  cell renders as a 0-filled square with the literal label `--`.
+  Columns that appear only in "after" are not rendered at all
+  (the chart's column axis is anchored on `before.keys()`).
+- **Rationale:** A column existing before remediation but not after
+  is a meaningful audit signal — the chart should show that the
+  column went away rather than silently dropping it from the axis.
+  Rendering as a 0 cell with `--` keeps the axis stable and the
+  heatmap visually honest. The opposite case (new column appearing
+  after remediation) is rare in practice — Step 11 strategies
+  rename columns rather than create them — and is left out to keep
+  the chart axis predictable.
+
+### D13.5 — `_completeness_by_column` recomputed inline rather than persisted on state
+- **File:** `agents_demo/report_agent.py::_completeness_by_column`.
+- **Decision:** The "after" completeness map fed into the new
+  before/after heatmap is recomputed by the report agent from
+  `df_cleaned` rather than persisted as a sibling of
+  `state.completeness_by_column`. The recomputation is one
+  `missing_mask` pass per column, dominated by I/O.
+- **Rationale:** Adding a `completeness_by_column_after` field to
+  `PipelineState` would either need every cleaning agent (remediation
+  + code validator) to update it on every mutation, or be filled in
+  late by the report agent — the same place we recompute it now.
+  Recomputation is cheap, has zero risk of staleness, and keeps the
+  state schema unchanged.
+

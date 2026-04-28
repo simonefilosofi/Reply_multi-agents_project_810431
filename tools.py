@@ -2382,3 +2382,212 @@ def chart_reliability_comparison(
     fig.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return path
+
+
+def chart_completeness_heatmap_before_after(
+    before: dict,
+    after: dict,
+    images_dir: str,
+) -> str:
+    """Two-row heatmap of per-column completeness rates: top=before, bottom=after.
+
+    Both rows share the RdYlGn colormap and the [0, 1] range. Columns missing
+    from ``after`` (typically dropped during remediation) appear as a 0 cell
+    with a ``--`` label so the audit trail stays visible. Returns the saved
+    PNG path; returns "" when ``before`` is empty.
+    """
+    if not before:
+        return ""
+    cols = list(before.keys())
+    display_names = [c[:18] + "..." if len(c) > 20 else c for c in cols]
+    before_vals = [before[c] for c in cols]
+    after_vals = [after.get(c, 0.0) if c in after else 0.0 for c in cols]
+    after_present = [c in after for c in cols]
+
+    fig, ax = plt.subplots(figsize=(max(8, len(cols) * 0.6), 3.5))
+    data = np.array([before_vals, after_vals])
+    im = ax.imshow(data, cmap="RdYlGn", aspect="auto", vmin=0, vmax=1)
+    ax.set_xticks(range(len(cols)))
+    ax.set_xticklabels(display_names, rotation=45, ha="right", fontsize=8)
+    ax.set_yticks([0, 1])
+    ax.set_yticklabels(["Before", "After"], fontsize=9)
+    plt.colorbar(im, ax=ax, label="Completeness Rate", shrink=0.8)
+    ax.set_title("Completeness Rate by Column — Before vs After Remediation")
+    for row_idx, (vals, present_flags) in enumerate(
+        [(before_vals, [True] * len(cols)), (after_vals, after_present)]
+    ):
+        for col_idx, (val, present) in enumerate(zip(vals, present_flags, strict=True)):
+            label = f"{val:.0%}" if present else "--"
+            color = "white" if val < 0.5 else "black"
+            ax.text(col_idx, row_idx, label, ha="center", va="center", fontsize=7, color=color)
+
+    path = f"{images_dir}/completeness_heatmap_before_after.png"
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+def chart_dimension_trajectory(
+    layer_dimensions: dict,
+    images_dir: str,
+) -> str:
+    """Line chart of each reliability dimension across pipeline checkpoints.
+
+    ``layer_dimensions`` is an insertion-ordered mapping like
+    ``{"post_synthesis": {...}, "post_remediation": {...},
+    "post_code_validator": {...}}``. With fewer than two checkpoints the
+    chart degrades to a deterministic "n/a" placeholder so the report still
+    has a stable filename.
+    """
+    path = f"{images_dir}/reliability_trajectory.png"
+    if len(layer_dimensions) < 2:
+        fig, ax = plt.subplots(figsize=(8, 4))
+        ax.text(
+            0.5,
+            0.5,
+            "Reliability trajectory not available\n(at least two pipeline checkpoints required)",
+            ha="center",
+            va="center",
+            fontsize=11,
+            color="#6c757d",
+        )
+        ax.set_axis_off()
+        fig.savefig(path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+        return path
+
+    checkpoint_labels = list(layer_dimensions.keys())
+    pretty_labels = [label.replace("_", " ").title() for label in checkpoint_labels]
+    dim_names = [
+        "schema_conformity",
+        "completeness",
+        "uniqueness",
+        "consistency",
+        "anomaly_freedom",
+    ]
+    dim_pretty = ["Schema", "Completeness", "Uniqueness", "Consistency", "Anomaly Freedom"]
+    palette = ["#1f77b4", "#2ca02c", "#9467bd", "#d62728", "#ff7f0e"]
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    x = np.arange(len(checkpoint_labels))
+    for dim_key, dim_label, color in zip(dim_names, dim_pretty, palette, strict=True):
+        ys = [layer_dimensions[label].get(dim_key) for label in checkpoint_labels]
+        if all(y is None for y in ys):
+            continue
+        ys_clean = [(y if y is not None else np.nan) for y in ys]
+        ax.plot(x, ys_clean, marker="o", linewidth=2, label=dim_label, color=color)
+    ax.set_xticks(x)
+    ax.set_xticklabels(pretty_labels, rotation=15, ha="right")
+    ax.set_ylabel("Dimension Score (0-1)")
+    ax.set_ylim(0, 1.05)
+    ax.set_title("Reliability Dimension Trajectory")
+    ax.grid(axis="y", linestyle="--", alpha=0.4)
+    ax.legend(loc="lower right", fontsize=9)
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+def chart_issue_resolution_sankey(
+    fix_log: list,
+    prioritized_issues: list,
+    images_dir: str,
+) -> str:
+    """Plotly Sankey of issue type → action taken → final state, exported as PNG.
+
+    Issue types are capped at the top 12 by total count; the remainder fold
+    into an ``other`` bucket. The right column collapses to two states:
+    ``resolved`` for any fix-log action that mutated the dataframe
+    (``auto_fixed`` / ``auto_fixed_by_llm``), ``pending`` for everything else
+    (``flagged_for_review``, ``human_review``, untouched issues). When
+    Plotly's static-image export is unavailable (kaleido cache miss in a
+    sandboxed CI), the function returns "" rather than raising.
+    """
+    import plotly.graph_objects as go
+
+    type_to_action: dict[str, dict[str, int]] = {}
+
+    def _bucket(issue_type: str, action: str) -> None:
+        type_to_action.setdefault(issue_type, {}).setdefault(action, 0)
+        type_to_action[issue_type][action] += 1
+
+    seen_keys: set[tuple[str, str]] = set()
+    for entry in fix_log:
+        issue_type = str(entry.get("issue_type", "unknown"))
+        action = str(entry.get("action", "unknown"))
+        column = str(entry.get("column", ""))
+        seen_keys.add((issue_type, column))
+        _bucket(issue_type, action)
+    for issue in prioritized_issues:
+        issue_type = str(issue["type"])
+        column = str(issue.get("column", "") or "")
+        if (issue_type, column) in seen_keys:
+            continue
+        _bucket(issue_type, "unaddressed")
+
+    if not type_to_action:
+        return ""
+
+    type_totals = sorted(
+        ((t, sum(actions.values())) for t, actions in type_to_action.items()),
+        key=lambda kv: kv[1],
+        reverse=True,
+    )
+    top_types = [t for t, _ in type_totals[:12]]
+    overflow = [t for t, _ in type_totals[12:]]
+    if overflow:
+        merged: dict[str, int] = {}
+        for t in overflow:
+            for action, count in type_to_action[t].items():
+                merged[action] = merged.get(action, 0) + count
+        type_to_action = {t: type_to_action[t] for t in top_types}
+        type_to_action["other"] = merged
+        kept_types = top_types + ["other"]
+    else:
+        kept_types = top_types
+
+    actions_seen = sorted({a for actions in type_to_action.values() for a in actions})
+    resolved_actions = {"auto_fixed", "auto_fixed_by_llm"}
+    final_states = ["resolved", "pending"]
+
+    nodes = kept_types + actions_seen + final_states
+    node_index = {name: idx for idx, name in enumerate(nodes)}
+    sources: list[int] = []
+    targets: list[int] = []
+    values: list[int] = []
+
+    for issue_type in kept_types:
+        for action, count in type_to_action[issue_type].items():
+            sources.append(node_index[issue_type])
+            targets.append(node_index[action])
+            values.append(count)
+    for action in actions_seen:
+        total = sum(type_to_action[issue_type].get(action, 0) for issue_type in kept_types)
+        if total == 0:
+            continue
+        final = "resolved" if action in resolved_actions else "pending"
+        sources.append(node_index[action])
+        targets.append(node_index[final])
+        values.append(total)
+
+    fig = go.Figure(
+        data=[
+            go.Sankey(
+                node={"label": [n.replace("_", " ").title() for n in nodes], "pad": 12},
+                link={"source": sources, "target": targets, "value": values},
+            )
+        ]
+    )
+    fig.update_layout(
+        title_text="Issue Resolution Flow",
+        font_size=11,
+        width=1100,
+        height=600,
+    )
+
+    path = f"{images_dir}/issue_resolution_sankey.png"
+    try:
+        fig.write_image(path)
+    except Exception:
+        return ""
+    return path
