@@ -9,6 +9,12 @@ and records each deliberation pass as a :class:`DeliberationOutcome` in
 ``deliberation_log``. The remediation and report agents continue to read
 issues through the dict-style accessors exposed by ``IssueBase`` until those
 layers are migrated in Steps 11-13.
+
+Step 11 adds ``gap_issues`` -- dicts produced by the post-remediation LLM
+gap detector (each carries a ``filter`` pandas-boolean expression alongside
+the standard issue fields). They are NOT appended to ``prioritized_issues``
+because the typed contract on that list excludes the ``filter`` field; the
+code-validator node consumes them directly from this attribute (Step 12).
 """
 
 from dataclasses import dataclass, field
@@ -60,6 +66,7 @@ class PipelineState:
     remediation_plan: list[dict[str, Any]] = field(default_factory=list)
     fix_log: list[dict[str, Any]] = field(default_factory=list)
     df_cleaned: pd.DataFrame | None = None
+    gap_issues: list[dict[str, Any]] = field(default_factory=list)
 
     human_review_items: list[dict[str, Any]] = field(default_factory=list)
 

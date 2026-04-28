@@ -7,9 +7,12 @@ annotations so parallel Layer-1 branches concatenate their ``agent_log`` and
 into a LangGraph node function returning only the deltas the agent produced.
 
 ``build_pipeline_graph`` compiles the full pipeline: Layer 0 ingestion and
-profiler, Layer 1 detectors fanned out in parallel from profiler and joined at
-synthesis, then remediation, an optional code-validator branch (wired but
-disabled until Step 12 populates ``gap_issues``), and the final report node.
+profiler, Layer 1 detectors fanned out in parallel from profiler and joined
+at synthesis, then remediation (which from Step 11 onward enqueues residual
+issues into ``state.gap_issues``), an optional code-validator branch that
+fires when ``gap_issues`` is non-empty AND the toggle is on (the validator
+node itself is refactored to read from ``state.gap_issues`` in Step 12),
+and the final report node.
 """
 
 from __future__ import annotations
@@ -114,6 +117,7 @@ def state_to_dict(state: PipelineState) -> PipelineStateDict:
         reliability_score_before=state.reliability_score_before,
         reliability_score_after=state.reliability_score_after,
         final_report=state.final_report,
+        gap_issues=list(state.gap_issues),
     )
 
 
