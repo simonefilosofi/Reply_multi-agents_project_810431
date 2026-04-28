@@ -1,16 +1,19 @@
 """Layer 1 duplicate detection agent. Identifies fully duplicate rows,
 duplicate column pairs flagged by the profiler, and key-collision rows
-that share key column values but differ in other columns.
+that share key column values but differ in other columns. Emits typed Issue
+instances into state.duplicate_report after Step 9.
 """
 
+from agents_demo._enrichment import enrich_with_llm
 from agents_demo.base_agent import SMART, BaseAgent
 from state_demo.constants import DUPLICATE_ISSUE_TYPES
+from state_demo.issues import AgentReport, parse_issues
 from tools import detect_duplicate_columns, detect_duplicate_rows, detect_key_collisions
 
 
 class DuplicateAgent(BaseAgent):
     name = "duplicate"
-    model = SMART
+    MODEL_TIER = SMART
 
     INSTRUCTION = (
         "You are a duplicate detection specialist. You identify fully duplicate "
@@ -31,9 +34,9 @@ class DuplicateAgent(BaseAgent):
         df = self.state.df_raw
         fp = self.state.dataset_fingerprint
 
-        issues = []
-        issues += detect_duplicate_rows(df)
-        issues += detect_duplicate_columns(df, fp.get("likely_duplicate_pairs", []))
+        raw: list[dict] = []
+        raw += detect_duplicate_rows(df)
+        raw += detect_duplicate_columns(df, fp.get("likely_duplicate_pairs", []))
 
         # Check id_columns first — violations there are primary key errors.
         # Then check suggested_key_columns for business-key collisions.
@@ -47,26 +50,24 @@ class DuplicateAgent(BaseAgent):
         collision_issues, skip_reason = detect_key_collisions(df, key_cols)
         if skip_reason:
             self.log("act", skip_reason)
-        # Upgrade severity for id_columns violations
         id_col_set = set(fp.get("id_columns", []))
         for issue in collision_issues:
             issue_cols = {c.strip() for c in issue["column"].split(",")}
             if issue_cols & id_col_set:
                 issue["severity"] = "high"
                 issue["detail"] = "PRIMARY KEY VIOLATION: " + issue["detail"]
-        issues += collision_issues
+        raw += collision_issues
 
-        issues = self.llm_enrich_issues(issues, df, DUPLICATE_ISSUE_TYPES)
-        self.state.duplicate_report = {
-            "issues": issues,
-            "total_issues": len(issues),
-        }
+        issues = parse_issues(raw, source=self.name, allowed_types=DUPLICATE_ISSUE_TYPES)
+        issues = enrich_with_llm(self, issues, df, DUPLICATE_ISSUE_TYPES)
+        report: AgentReport = {"issues": issues, "total_issues": len(issues)}
+        self.state.duplicate_report = report
 
     def observe(self):
         issues = self.state.duplicate_report["issues"]
-        row_dups = sum(1 for i in issues if i["type"] == "duplicate_rows")
-        col_dups = sum(1 for i in issues if i["type"] == "duplicate_columns")
-        key_dups = sum(1 for i in issues if i["type"] == "duplicate_key")
+        row_dups = sum(1 for i in issues if i.type == "duplicate_rows")
+        col_dups = sum(1 for i in issues if i.type == "duplicate_columns")
+        key_dups = sum(1 for i in issues if i.type == "duplicate_key")
         self.log(
             "observe",
             f"Found {len(issues)} duplicate issues: "

@@ -1,17 +1,20 @@
 """Layer 1 anomaly detection agent.
 
 Detects statistical outliers in numerical columns using the 3xIQR Tukey outer
-fence and rare categories in categorical columns.
+fence and rare categories in categorical columns. Emits typed Issue instances
+into state.anomaly_report after Step 9.
 """
 
+from agents_demo._enrichment import enrich_with_llm
 from agents_demo.base_agent import SMART, BaseAgent
 from state_demo.constants import ANOMALY_ISSUE_TYPES
+from state_demo.issues import AgentReport, parse_issues
 from tools import detect_outliers, detect_rare_categories
 
 
 class AnomalyAgent(BaseAgent):
     name = "anomaly"
-    model = SMART
+    MODEL_TIER = SMART
 
     INSTRUCTION = (
         "You are a statistical anomaly detection specialist. You detect numerical "
@@ -28,15 +31,14 @@ class AnomalyAgent(BaseAgent):
         df = self.state.df_raw
         fp = self.state.dataset_fingerprint
 
-        issues = []
-        issues += detect_outliers(df, fp.get("numerical_columns", []))
-        issues += detect_rare_categories(df, fp.get("categorical_columns", []))
+        raw: list[dict] = []
+        raw += detect_outliers(df, fp.get("numerical_columns", []))
+        raw += detect_rare_categories(df, fp.get("categorical_columns", []))
 
-        issues = self.llm_enrich_issues(issues, df, ANOMALY_ISSUE_TYPES)
-        self.state.anomaly_report = {
-            "issues": issues,
-            "total_issues": len(issues),
-        }
+        issues = parse_issues(raw, source=self.name, allowed_types=ANOMALY_ISSUE_TYPES)
+        issues = enrich_with_llm(self, issues, df, ANOMALY_ISSUE_TYPES)
+        report: AgentReport = {"issues": issues, "total_issues": len(issues)}
+        self.state.anomaly_report = report
 
     def observe(self):
         total = self.state.anomaly_report["total_issues"]

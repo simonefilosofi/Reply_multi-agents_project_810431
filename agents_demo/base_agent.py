@@ -26,8 +26,7 @@ from pydantic_ai.exceptions import ModelHTTPError
 from agents_demo._llm_clients import build_agent
 from state_demo import settings
 from state_demo.config import ModelTier
-from state_demo.constants import ISSUE_TYPES
-from state_demo.helpers import non_empty_values
+from state_demo.issues import Issue
 from state_demo.pipeline_state import PipelineState
 
 logger = logging.getLogger(__name__)
@@ -142,90 +141,28 @@ class BaseAgent:
 
     def llm_enrich_issues(
         self,
-        issues: list[dict[str, Any]],
+        issues: list[Issue],
         df: Any,
         allowed_types: set[str],
-    ) -> list[dict[str, Any]]:
-        """Enrich deterministic issue findings with LLM analysis.
+    ) -> list[Issue]:
+        """Thin alias to :func:`agents_demo._enrichment.enrich_with_llm`.
 
-        Returns the original list on any failure or empty input. Always
-        preserves every original issue regardless of what the LLM emits.
+        Detector agents call this to run the typed enrichment pass. The base
+        method is preserved so subclasses keep a single entry point; the heavy
+        lifting now lives in ``_enrichment.py`` so the schema (``EnrichmentResponse``)
+        and helpers can be reused outside this class. This shim is removed in
+        Step 11 once every caller is fully migrated.
         """
-        if not issues:
-            return issues
+        from agents_demo._enrichment import enrich_with_llm
 
-        flagged_cols = {i.get("column", "") for i in issues if i.get("column")}
-        unflagged = [c for c in df.columns if c not in flagged_cols][:5]
-        sample_cols = list(flagged_cols) + unflagged
+        return enrich_with_llm(self, issues, df, allowed_types)
 
-        col_samples: dict[str, dict[str, Any]] = {}
-        for col in sample_cols:
-            if col not in df.columns:
-                continue
-            nev = non_empty_values(df[col])
-            sample = list(nev.sample(min(20, len(nev)), random_state=42).astype(str))
-            col_samples[col] = {"dtype": str(df[col].dtype), "sample": sample}
-
-        findings_text = "\n".join(
-            f"- [{i['severity'].upper()}] type={i['type']} | "
-            f"column='{i.get('column', '')}' | {i['detail']}"
-            for i in issues
-        )
-        types_text = "\n".join(f"  {t}: {ISSUE_TYPES.get(t, '')}" for t in sorted(allowed_types))
-        samples_text = "\n".join(
-            f"  '{col}' (dtype={info['dtype']}): {info['sample']}"
-            for col, info in col_samples.items()
-        )
-
-        user = (
-            f"Dataset domain: {self.state.dataset_fingerprint.get('domain', 'unknown')}\n\n"
-            f"Column samples:\n{samples_text}\n\n"
-            f"Confirmed deterministic findings (you MUST include all of these):\n"
-            f"{findings_text}\n\n"
-            f"Allowed issue types for this agent:\n{types_text}\n\n"
-            "Instructions:\n"
-            "1. Return ALL confirmed findings above, enriching 'detail' with specific "
-            "example values from the samples.\n"
-            "2. Add NEW issues you clearly see in the samples.\n"
-            "3. Use ONLY the allowed types listed above.\n"
-            "4. 'severity' must be exactly 'high', 'medium', or 'low'.\n"
-            "5. 'detail' must be specific.\n"
-            'Return JSON: {"issues": [{"type": "...", "column": "...", '
-            '"detail": "...", "severity": "..."}]}'
-        )
-
-        try:
-            result = self.call_llm_json(user, max_tokens=2048, required_keys=["issues"])
-            enriched = result.get("issues", [])
-            valid_enriched = [
-                i
-                for i in enriched
-                if i.get("type") in allowed_types
-                and i.get("column", "") in df.columns
-                and i.get("severity") in ("high", "medium", "low")
-                and i.get("detail", "").strip()
-            ]
-            enriched_keys = {(i["type"], i.get("column", "")) for i in valid_enriched}
-            merged = list(valid_enriched)
-            for issue in issues:
-                key = (issue["type"], issue.get("column", ""))
-                if key not in enriched_keys:
-                    merged.append(issue)
-            new_count = len(merged) - len(issues)
-            self.log(
-                "act",
-                f"LLM enrichment: {len(issues)} deterministic -> "
-                f"{len(merged)} issues ({new_count:+d} new)",
-            )
-            return merged
-        except Exception as exc:
-            self.log(
-                "error",
-                f"LLM enrichment failed, keeping deterministic issues: {exc}",
-            )
-            return issues
-
-    def summarize_issues(self, issues: list[dict[str, Any]], summary_attr: str, noun: str) -> None:
+    def summarize_issues(
+        self,
+        issues: list[Issue] | list[dict[str, Any]],
+        summary_attr: str,
+        noun: str,
+    ) -> None:
         issues_text = (
             "\n".join(f"- [{i['severity'].upper()}] {i['column']}: {i['detail']}" for i in issues)
             or f"No {noun} issues found."

@@ -432,3 +432,78 @@ the file/line where it lives.
   `regex` from the enclosing for-loop. The `str.contains` form is also
   faster on large columns and removes the late-binding hazard entirely.
   No `# noqa` needed.
+
+---
+
+## Step 9 — Layer 1 detector agents + typed issue migration
+
+### D9.1 — `IssueBase` exposes Mapping-like accessors as a backward-compat bridge
+- **File:** `state_demo/issues.py` (`IssueBase.__getitem__`,
+  `__contains__`, `get`, `keys`).
+- **Decision:** Add four read-only accessors so existing consumers
+  (`SynthesisAgent`, `RemediationAgent`, `ReportAgent`) can keep using
+  `issue["column"]`, `issue.get("pattern", "")`, `key in issue`, and
+  `{**issue}` against typed `Issue` instances. `keys()` is required for
+  `{**issue}` because Pydantic v2 `BaseModel` is not a `Mapping`.
+- **Rationale:** The plan says "downstream consumers must be updated to
+  use the structured fields", but Steps 10 (synthesis) and 11
+  (remediation) are the explicit refactor steps for those consumers.
+  Forcing the migration here would balloon Step 9's diff into Steps
+  10-11 territory and break the gate boundaries. The accessors close
+  the gap without lying about types: validation enforcement still
+  happens at construction (B1: `pattern` cannot be missing), and the
+  structured fields (`column_a`, `column_b`, `key_columns`) are
+  available for the upcoming consumer migrations.
+
+### D9.2 — Multi-column `column` synthesis kept identical to Step 3 (`column = column_a`)
+- **File:** `state_demo/issues.py` (the three multi-column subclasses'
+  `_populate_column` validators).
+- **Decision:** When parsing a legacy dict whose `column` is the joined
+  form (`"col_a / col_b"` or `"col_a, col_b"`), the validator extracts
+  `column_a`/`column_b`/`key_columns` AND keeps `column` as it was. When
+  callers supply only the structured fields, `column` is filled from
+  `column_a` (or `key_columns[0]`) — same shape as D3.1.
+- **Rationale:** The existing `RemediationAgent` parses
+  `issue["column"].split("/")` for `duplicate_columns` and
+  `issue["column"].split(",")` for `duplicate_key`. Switching to a
+  canonical `"col_a / col_b"` string would have required touching
+  `RemediationAgent` in Step 9, again crossing the Step 11 boundary.
+  Parsing the legacy form on the way in lets `tools.py` keep emitting
+  it, while the structured fields remain available for Step 11's
+  consumer migration. Verified by `tests/state_demo/test_issues.py`
+  unchanged.
+
+### D9.3 — Several `Issue` subclass context fields relaxed to `| None = None`
+- **File:** `state_demo/issues.py` (`MissingValuesIssue.missing_count`,
+  `total`; `DateOrderIssue.violations`;
+  `LookupImputabilityIssue.coverage`, `n_imputable`).
+- **Decision:** Five context fields previously declared as required
+  scalars are now `int | None = None` / `float | None = None`. The
+  required structural fields stay required: `pattern` and `description`
+  on `FormatPatternViolationIssue` (B1), `column_a`/`column_b` on
+  `DuplicateColumnsIssue` and `DateOrderIssue`, `key_columns` on
+  `DuplicateKeyIssue`, `mapping_source` on
+  `LookupImputabilityIssue`.
+- **Rationale:** `tools.py` emits dicts that already carry these
+  numbers inside the `detail` string but not as separate keys. Treating
+  them as required would force either (a) updating every callsite in
+  `tools.py` (out of Step 9 scope) or (b) duplicating the parse on the
+  agent. Making them optional preserves the type-system value of the
+  structural fields while accepting that context numbers are best-
+  effort. Existing `test_issues.py` cases pass them explicitly so
+  round-trip behaviour is unchanged.
+
+### D9.4 — `_enrichment.py` is a new module rather than an in-place upgrade of `BaseAgent.llm_enrich_issues`
+- **File:** `agents_demo/_enrichment.py` (new), `agents_demo/base_agent.py`
+  (`llm_enrich_issues` becomes a thin alias).
+- **Decision:** The typed enrichment helper lives in a dedicated
+  module. `BaseAgent.llm_enrich_issues` stays as a one-line shim that
+  imports and calls `enrich_with_llm`, scheduled for removal in Step
+  11.
+- **Rationale:** The plan says "Replaces the inline enrichment logic
+  in `BaseAgent.llm_enrich_issues` with a typed version. The base
+  method becomes a thin alias for backward compatibility, then is
+  removed in Step 11." The standalone module also lets the
+  `EnrichmentResponse` schema be reused by tests
+  (`monkeypatch_llm["call_llm_json"] = EnrichmentResponse(issues=[...])`)
+  and by the upcoming deliberation subgraph in Step 10.

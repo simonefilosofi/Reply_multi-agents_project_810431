@@ -11,15 +11,24 @@ the ``pattern`` key cannot silently disappear between detection and
 remediation. ``DuplicateColumnsIssue``, ``DateOrderIssue`` and
 ``DuplicateKeyIssue`` likewise model multi-column issues with explicit fields
 instead of the legacy ``"col_a / col_b"`` joined string.
+
+``IssueBase`` exposes ``__getitem__``, ``__contains__`` and ``get`` so existing
+consumers that read fields with bracket / ``.get`` syntax continue to work after
+the migration in Step 9; downstream agents (synthesis, remediation, report) are
+moved off the dict idiom incrementally in Steps 10-13.
 """
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+import logging
+from collections.abc import Iterable
+from typing import Annotated, Any, Literal, TypedDict
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, model_validator
 
 from state_demo.agent_names import AgentName
+
+logger = logging.getLogger(__name__)
 
 Severity = Literal["high", "medium", "low"]
 
@@ -34,6 +43,22 @@ class IssueBase(BaseModel):
     severity: Severity
     source: AgentName | None = None
     rows_affected: int | None = None
+
+    def __getitem__(self, key: str) -> Any:
+        if key in type(self).model_fields:
+            return getattr(self, key)
+        raise KeyError(key)
+
+    def __contains__(self, key: object) -> bool:
+        return isinstance(key, str) and key in type(self).model_fields
+
+    def get(self, key: str, default: Any = None) -> Any:
+        if key in type(self).model_fields:
+            return getattr(self, key)
+        return default
+
+    def keys(self) -> list[str]:
+        return list(type(self).model_fields)
 
 
 class MixedTypeIssue(IssueBase):
@@ -63,8 +88,8 @@ class MissingValuesIssue(IssueBase):
     """Null or empty values in the column."""
 
     type: Literal["missing_values"] = "missing_values"
-    missing_count: int
-    total: int
+    missing_count: int | None = None
+    total: int | None = None
 
 
 class PlaceholderValuesIssue(IssueBase):
@@ -100,9 +125,23 @@ class DuplicateColumnsIssue(IssueBase):
     @model_validator(mode="before")
     @classmethod
     def _populate_column(cls, data: Any) -> Any:
-        if isinstance(data, dict) and "column" not in data and "column_a" in data:
-            return {**data, "column": data["column_a"]}
-        return data
+        if not isinstance(data, dict):
+            return data
+        result = {**data}
+        column_value = result.get("column")
+        if (
+            "column_a" not in result
+            and "column_b" not in result
+            and isinstance(column_value, str)
+            and "/" in column_value
+        ):
+            parts = [p.strip() for p in column_value.split("/")]
+            if len(parts) == 2 and all(parts):
+                result["column_a"] = parts[0]
+                result["column_b"] = parts[1]
+        if "column" not in result and "column_a" in result:
+            result["column"] = result["column_a"]
+        return result
 
 
 class DuplicateKeyIssue(IssueBase):
@@ -114,11 +153,19 @@ class DuplicateKeyIssue(IssueBase):
     @model_validator(mode="before")
     @classmethod
     def _populate_column(cls, data: Any) -> Any:
-        if isinstance(data, dict) and "column" not in data and "key_columns" in data:
-            keys = data["key_columns"]
+        if not isinstance(data, dict):
+            return data
+        result = {**data}
+        column_value = result.get("column")
+        if "key_columns" not in result and isinstance(column_value, str) and column_value:
+            keys = tuple(c.strip() for c in column_value.split(",") if c.strip())
+            if keys:
+                result["key_columns"] = keys
+        if "column" not in result and "key_columns" in result:
+            keys = result["key_columns"]
             if isinstance(keys, list | tuple) and keys:
-                return {**data, "column": str(keys[0])}
-        return data
+                result["column"] = str(keys[0])
+        return result
 
 
 class OutliersIssue(IssueBase):
@@ -159,14 +206,28 @@ class DateOrderIssue(IssueBase):
     type: Literal["date_order"] = "date_order"
     column_a: str
     column_b: str
-    violations: int
+    violations: int | None = None
 
     @model_validator(mode="before")
     @classmethod
     def _populate_column(cls, data: Any) -> Any:
-        if isinstance(data, dict) and "column" not in data and "column_a" in data:
-            return {**data, "column": data["column_a"]}
-        return data
+        if not isinstance(data, dict):
+            return data
+        result = {**data}
+        column_value = result.get("column")
+        if (
+            "column_a" not in result
+            and "column_b" not in result
+            and isinstance(column_value, str)
+            and "/" in column_value
+        ):
+            parts = [p.strip() for p in column_value.split("/")]
+            if len(parts) == 2 and all(parts):
+                result["column_a"] = parts[0]
+                result["column_b"] = parts[1]
+        if "column" not in result and "column_a" in result:
+            result["column"] = result["column_a"]
+        return result
 
 
 class ConditionalCompletenessIssue(IssueBase):
@@ -182,8 +243,8 @@ class LookupImputabilityIssue(IssueBase):
 
     type: Literal["lookup_imputability"] = "lookup_imputability"
     mapping_source: str
-    coverage: float
-    n_imputable: int
+    coverage: float | None = None
+    n_imputable: int | None = None
 
 
 class FloatPrecisionNoiseIssue(IssueBase):
@@ -363,3 +424,55 @@ ISSUE_SUBCLASSES: tuple[type[IssueBase], ...] = (
 def parse_issue(d: dict[str, Any]) -> Issue:
     """Validate a legacy dict against the discriminated union and return the typed instance."""
     return ISSUE_ADAPTER.validate_python(d)
+
+
+def parse_issues(
+    raw: Iterable[dict[str, Any]],
+    *,
+    source: AgentName | None = None,
+    allowed_types: set[str] | None = None,
+) -> list[Issue]:
+    """Validate an iterable of legacy issue dicts, dropping any that fail.
+
+    Each surviving dict is round-tripped through ``ISSUE_ADAPTER`` and tagged
+    with ``source`` when supplied. Dicts whose ``type`` is not in
+    ``allowed_types`` (when given) are skipped before validation. Validation
+    failures are logged and the offending entry is dropped, never raised.
+    """
+    out: list[Issue] = []
+    for raw_dict in raw:
+        if not isinstance(raw_dict, dict):
+            logger.warning("parse_issues: skipping non-dict entry %r", raw_dict)
+            continue
+        if allowed_types is not None and raw_dict.get("type") not in allowed_types:
+            logger.warning(
+                "parse_issues: dropping issue with disallowed type=%r (allowed=%s)",
+                raw_dict.get("type"),
+                sorted(allowed_types),
+            )
+            continue
+        payload: dict[str, Any] = dict(raw_dict)
+        if source is not None and payload.get("source") is None:
+            payload["source"] = source
+        try:
+            out.append(ISSUE_ADAPTER.validate_python(payload))
+        except ValidationError as exc:
+            logger.warning(
+                "parse_issues: dropping invalid issue type=%r column=%r: %s",
+                payload.get("type"),
+                payload.get("column"),
+                exc,
+            )
+    return out
+
+
+class AgentReport(TypedDict):
+    """Shape every Layer-1 detector writes to ``state.<x>_report``.
+
+    Storing typed ``Issue`` instances (not dicts) closes B1 structurally: the
+    discriminated union enforces required fields like
+    ``FormatPatternViolationIssue.pattern`` between detection and remediation.
+    """
+
+    issues: list[Issue]
+    total_issues: int

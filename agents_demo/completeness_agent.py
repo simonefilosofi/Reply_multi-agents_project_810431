@@ -1,15 +1,18 @@
 """Layer 1 completeness analysis agent. Detects missing values, empty strings,
-and common placeholder patterns across all columns.
+and common placeholder patterns across all columns. Emits typed Issue
+instances into state.completeness_report after Step 9.
 """
 
+from agents_demo._enrichment import enrich_with_llm
 from agents_demo.base_agent import SMART, BaseAgent
 from state_demo.constants import COMPLETENESS_ISSUE_TYPES
+from state_demo.issues import AgentReport, parse_issues
 from tools import check_placeholder_values, compute_completeness
 
 
 class CompletenessAgent(BaseAgent):
     name = "completeness"
-    model = SMART
+    MODEL_TIER = SMART
 
     INSTRUCTION = (
         "You are a data completeness analyst. You detect missing values, empty "
@@ -26,18 +29,15 @@ class CompletenessAgent(BaseAgent):
         fp = self.state.dataset_fingerprint
         sparse_cols = set(fp.get("sparse_columns", []))
 
-        issues, completeness_by_col, overall = compute_completeness(df, sparse_cols)
+        raw, completeness_by_col, overall = compute_completeness(df, sparse_cols)
+        raw.extend(check_placeholder_values(df))
 
-        placeholder_issues = check_placeholder_values(df)
-        issues.extend(placeholder_issues)
-
-        issues = self.llm_enrich_issues(issues, df, COMPLETENESS_ISSUE_TYPES)
+        issues = parse_issues(raw, source=self.name, allowed_types=COMPLETENESS_ISSUE_TYPES)
+        issues = enrich_with_llm(self, issues, df, COMPLETENESS_ISSUE_TYPES)
         self.state.completeness_by_column = completeness_by_col
         self.state.overall_completeness = overall
-        self.state.completeness_report = {
-            "issues": issues,
-            "total_issues": len(issues),
-        }
+        report: AgentReport = {"issues": issues, "total_issues": len(issues)}
+        self.state.completeness_report = report
 
     def observe(self):
         report = self.state.completeness_report
