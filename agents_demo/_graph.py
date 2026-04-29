@@ -85,7 +85,16 @@ _REDUCED_LIST_FIELDS: frozenset[str] = frozenset({"agent_log", "cross_agent_insi
 
 
 def state_to_dict(state: PipelineState) -> PipelineStateDict:
-    """Project a :class:`PipelineState` dataclass into a plain TypedDict."""
+    """Project a :class:`PipelineState` dataclass into a plain TypedDict.
+
+    Mutable list and dict fields are shallow-copied so that ``pre_dict`` and
+    ``post_dict`` snapshots taken either side of an agent run remain
+    independent. Without this, agents that mutate fields in place
+    (``state.fix_log.append(...)``, ``state.deliberation_log.append(...)``)
+    leave both snapshots aliasing the same already-mutated list, so the
+    diff in ``build_node_runner`` reports no change and the update is
+    silently dropped from the LangGraph stream.
+    """
     return PipelineStateDict(
         source_path=state.source_path,
         source_format=state.source_format,
@@ -108,13 +117,13 @@ def state_to_dict(state: PipelineState) -> PipelineStateDict:
         anomaly_summary=state.anomaly_summary,
         consistency_summary=state.consistency_summary,
         constraint_summary=state.constraint_summary,
-        prioritized_issues=state.prioritized_issues,
-        deliberation_log=state.deliberation_log,
+        prioritized_issues=list(state.prioritized_issues),
+        deliberation_log=list(state.deliberation_log),
         synthesis_summary=state.synthesis_summary,
-        remediation_plan=state.remediation_plan,
-        fix_log=state.fix_log,
+        remediation_plan=list(state.remediation_plan),
+        fix_log=list(state.fix_log),
         df_cleaned=state.df_cleaned,
-        human_review_items=state.human_review_items,
+        human_review_items=list(state.human_review_items),
         reliability_score_before=state.reliability_score_before,
         reliability_score_after=state.reliability_score_after,
         dimension_trajectory=dict(state.dimension_trajectory),

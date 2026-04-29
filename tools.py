@@ -254,13 +254,36 @@ def statistical_fingerprint(df: pd.DataFrame) -> dict:
 # ── Schema ─────────────────────────────────────────────────────────────────────
 
 
+_DE_FACTO_NUMERIC_THRESHOLD = 0.50
+
+
+def _numeric_or_recoverable_rate(nev: pd.Series) -> float:
+    if len(nev) == 0:
+        return 0.0
+    s = nev.astype(str)
+    numeric_ok = _coerce_numeric(nev).notna()
+    currency_match = s.str.contains(_CURRENCY_SYMBOLS_REGEX, regex=True, na=False)
+    comma_match = s.str.match(IT_DECIMAL_PATTERN.pattern).fillna(False).astype(bool)
+    return float((numeric_ok | currency_match | comma_match).mean())
+
+
 def check_type_issues(
     df: pd.DataFrame,
     numerical_cols: list,
     date_cols: list,
 ) -> list:
-    """Check for type mismatches in numerical and date columns."""
+    """Check for type mismatches in numerical and date columns.
+
+    Also flags ``mixed_type`` for columns the profiler did NOT classify as
+    numeric but whose non-empty values are at least
+    ``_DE_FACTO_NUMERIC_THRESHOLD`` numeric-or-recoverable (i.e. parse as
+    numbers, contain a currency symbol, or match the Italian comma-decimal
+    pattern). This makes downstream currency/comma remediation robust to
+    profiler misclassifications on real-world data.
+    """
     issues = []
+    declared_numeric = {col for col in numerical_cols if _has_column(df, col)}
+    declared_date = {col for col in date_cols if _has_column(df, col)}
 
     for col in numerical_cols:
         if not _has_column(df, col):
@@ -283,6 +306,32 @@ def check_type_issues(
                     "severity": severity,
                 }
             )
+
+    for col in df.columns:
+        if col in declared_numeric or col in declared_date:
+            continue
+        nev = non_empty_values(df[col])
+        if len(nev) == 0:
+            continue
+        rate = _numeric_or_recoverable_rate(nev)
+        if rate < _DE_FACTO_NUMERIC_THRESHOLD:
+            continue
+        non_numeric = int(_coerce_numeric(nev).isna().sum())
+        if non_numeric == 0:
+            continue
+        pct = non_numeric / len(nev)
+        severity = _severity_from_rate(pct)
+        issues.append(
+            {
+                "column": col,
+                "type": "mixed_type",
+                "detail": (
+                    f"De-facto numeric column ({rate:.0%} numeric-or-recoverable): "
+                    f"{non_numeric} values ({pct:.0%}) need parsing"
+                ),
+                "severity": severity,
+            }
+        )
 
     for col in date_cols:
         if not _has_column(df, col):

@@ -964,3 +964,34 @@ the file/line where it lives.
   guard, which is outside Step 14 scope. Logged for a future
   cleanup pass.
 
+
+
+---
+
+## Post-Step-14 — D5: in-place mutation diff bug + runner observability
+
+### D-Post14.1 — Shallow-copy mutable list/dict fields in state_to_dict
+- **File:** `agents_demo/_graph.py:87-127` (`state_to_dict`).
+- **Decision:** Wrap every mutable list/dict field in a defensive
+  shallow copy when projecting `PipelineState` to `PipelineStateDict`
+  (`fix_log`, `human_review_items`, `deliberation_log`,
+  `prioritized_issues`, `remediation_plan`, `gap_issues`).
+  `agent_log` and `cross_agent_insights` were already wrapped because
+  they have `operator.add` reducers; `dimension_trajectory` was
+  already wrapped via `dict(...)`. This decision standardises the
+  treatment for the rest.
+- **Rationale:** `build_node_runner` snapshots `pre_dict` before the
+  agent runs and `post_dict` after, then diffs field-by-field with
+  `_values_equal`. When a field was stored by reference, agent
+  in-place mutations (e.g. `self.state.fix_log.append(entry)`) caused
+  both snapshots to alias the same already-mutated list, so the diff
+  reported no change and the field was silently dropped from the
+  LangGraph stream update. The result was `final_chunk` carrying
+  empty `fix_log`/`human_review_items` even though remediation
+  applied dozens of fixes. Verified: lean-mode run on
+  `dirty_noipa_sample.csv` now reports `fix_log_count: 18`,
+  `fix_actions: {auto_fixed: 10, flagged_for_review: 8}` (was `{}`).
+  All 282 tests still pass. The runner script `scripts/run_dataset.py`
+  was extended to expose `fix_log_count`, `fix_types`,
+  `gap_issues_count`, and `dimension_trajectory_checkpoints` so the
+  newly-visible state is actually displayed.

@@ -17,6 +17,7 @@ from tools import (
     apply_lookup_imputation,
     check_format_pattern,
     check_naming_conventions,
+    check_type_issues,
     compute_completeness,
     detect_duplicate_rows,
     detect_outliers,
@@ -338,3 +339,59 @@ def test_apply_lookup_imputation_no_imputable_rows_returns_zero() -> None:
     df = pd.DataFrame({"src": ["RM", "MI"], "tgt": ["Roma", "Milano"]})
     n = apply_lookup_imputation(df, "src", "tgt", {"RM": "Roma", "MI": "Milano"})
     assert n == 0
+
+
+def test_check_type_issues_flags_de_facto_numeric_with_currency_symbols() -> None:
+    df = pd.DataFrame(
+        {
+            "spesa": [
+                "100.5",
+                "200.0",
+                "€25667.3",
+                "182.12 EUR",
+                "300.0",
+                "400.0",
+                "500.0",
+                "600.0",
+            ]
+        }
+    )
+    issues = check_type_issues(df, numerical_cols=[], date_cols=[])
+    spesa_issues = [i for i in issues if i["column"] == "spesa"]
+    assert len(spesa_issues) == 1
+    assert spesa_issues[0]["type"] == "mixed_type"
+    assert "De-facto numeric" in spesa_issues[0]["detail"]
+
+
+def test_check_type_issues_flags_de_facto_numeric_with_comma_decimals() -> None:
+    df = pd.DataFrame(
+        {
+            "imposta": ["1.234,56", "2.345,67", "100", "200", "8659,000000000062", "300"],
+        }
+    )
+    issues = check_type_issues(df, numerical_cols=[], date_cols=[])
+    assert any(i["type"] == "mixed_type" for i in issues)
+
+
+def test_check_type_issues_does_not_flag_free_text_column() -> None:
+    df = pd.DataFrame(
+        {
+            "descrizione": [
+                "Stipendio €",
+                "Premio annuale",
+                "Indennità di trasferta",
+                "Rimborso viaggio",
+                "Bonus produttività",
+                "Maternità",
+            ]
+        }
+    )
+    issues = check_type_issues(df, numerical_cols=[], date_cols=[])
+    assert not any(i["column"] == "descrizione" for i in issues)
+
+
+def test_check_type_issues_no_double_count_for_declared_numeric_column() -> None:
+    df = pd.DataFrame({"imposta": ["100", "200", "€300", "400"]})
+    issues = check_type_issues(df, numerical_cols=["imposta"], date_cols=[])
+    imposta_issues = [i for i in issues if i["column"] == "imposta"]
+    assert len(imposta_issues) == 1

@@ -163,18 +163,31 @@ class BaseAgent:
         summary_attr: str,
         noun: str,
     ) -> None:
-        issues_text = (
-            "\n".join(f"- [{i['severity'].upper()}] {i['column']}: {i['detail']}" for i in issues)
-            or f"No {noun} issues found."
+        if not issues:
+            summary = f"No {noun} issues found."
+            setattr(self.state, summary_attr, summary)
+            self.log("reply", summary)
+            return
+
+        severity_counts: dict[str, int] = {"high": 0, "medium": 0, "low": 0}
+        for issue in issues:
+            severity = issue["severity"]
+            if severity in severity_counts:
+                severity_counts[severity] += 1
+        severity_text = ", ".join(
+            f"{count} {label}" for label, count in severity_counts.items() if count
         )
-        try:
-            summary = self.call_llm(
-                f"Task: {self.prompt}\n\n"
-                f"Summarize these {noun} issues in 2-3 sentences:\n\n{issues_text}"
-            ).strip()
-        except Exception as exc:
-            self.log("error", str(exc))
-            summary = f"{len(issues)} {noun} issues found."
+        example_cols: list[str] = []
+        for issue in issues:
+            col = issue.get("column", "") if isinstance(issue, dict) else issue["column"]
+            if col and col not in example_cols:
+                example_cols.append(col)
+            if len(example_cols) == 3:
+                break
+        examples_text = (
+            "; affected: " + ", ".join(repr(c) for c in example_cols) if example_cols else ""
+        )
+        summary = f"{len(issues)} {noun} issue(s) found ({severity_text}){examples_text}."
         setattr(self.state, summary_attr, summary)
         self.log("reply", summary)
 
