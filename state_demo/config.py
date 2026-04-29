@@ -28,11 +28,11 @@ class ModelSettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    default_provider: ProviderName = "anthropic"
-    smart_model: str = "anthropic:claude-sonnet-4-6"
-    fast_model: str = "anthropic:claude-haiku-4-5-20251001"
-    fallback_smart_model: str = "openai:gpt-5.4"
-    fallback_fast_model: str = "openai:gpt-5.4-mini"
+    default_provider: ProviderName = "openai"
+    smart_model: str = "openai:gpt-4o-mini"
+    fast_model: str = "openai:gpt-4o-mini"
+    fallback_smart_model: str = "anthropic:claude-sonnet-4-6"
+    fallback_fast_model: str = "anthropic:claude-haiku-4-5-20251001"
 
 
 class CompletenessThresholds(BaseModel):
