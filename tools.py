@@ -162,7 +162,6 @@ def compute_column_stats(df: pd.DataFrame) -> str:
 
 def _looks_like_yyyymm(int_series: pd.Series) -> bool:
     """Return True if the majority of integer values look like YYYYMM period codes."""
-    years = int_series // 100
     months = int_series % 100
     valid = (int_series >= 190001) & (int_series <= 209912) & (months >= 1) & (months <= 12)
     return valid.mean() > 0.90
@@ -230,13 +229,13 @@ def statistical_fingerprint(df: pd.DataFrame) -> dict:
         col_lower = col.lower().strip()
         col_tokens = set(col_lower.split("_"))
         id_indicators = {"codice", "matricola", "fiscal", "cf"}
-        if (
+        is_id_like = (
             col_lower in ("_id", "id")
             or col_lower.endswith("_id")
             or bool(col_tokens & id_indicators)
-        ):
-            if col not in id_cols:
-                id_cols.append(col)
+        )
+        if is_id_like and col not in id_cols:
+            id_cols.append(col)
 
     return {
         "domain": "generic",
@@ -665,7 +664,7 @@ def detect_duplicate_columns(df: pd.DataFrame, likely_pairs: list) -> list:
             )
             if len(shorter) >= 5 and shorter in longer:
                 if _jaccard(col_a, col_b) < 0.20:
-                    continue  # substring name match but different value domains (code vs description)
+                    continue
                 already_flagged.add(key)
                 issues.append(
                     {
@@ -765,7 +764,7 @@ def detect_outliers(df: pd.DataFrame, numerical_cols: list) -> list:
                     "column": col,
                     "type": "outliers",
                     "detail": (
-                        f"{outliers} values outside the 3×IQR outer fence "
+                        f"{outliers} values outside the 3xIQR outer fence "
                         f"[{lower:.2f}, {upper:.2f}]"
                     ),
                     "severity": "medium",
@@ -1323,12 +1322,7 @@ def _is_month_column(df: pd.DataFrame, col: str) -> bool:
             pass
     if resolved / len(raw) < 0.80:
         return False
-    # A genuine month column must have at least one value ≤ 4 (Jan–Apr).
-    # Columns whose minimum valid integer is ≥ 5 are likely code columns
-    # whose value range happens to overlap with month numbers.
-    if valid_int_vals and min(valid_int_vals) > 4:
-        return False
-    return True
+    return not (valid_int_vals and min(valid_int_vals) > 4)
 
 
 def check_month_column(df: pd.DataFrame, cols: list) -> list:
@@ -2114,7 +2108,7 @@ def chart_severity_distribution(issues: list, images_dir: str) -> str:
 
     fig, ax = plt.subplots(figsize=(6, 4))
     bars = ax.bar([s.capitalize() for s in severities], counts, color=colors)
-    for bar, count in zip(bars, counts):
+    for bar, count in zip(bars, counts, strict=True):
         if count > 0:
             ax.text(
                 bar.get_x() + bar.get_width() / 2,
@@ -2230,7 +2224,7 @@ def pick_duplicate_column_to_drop(col_a: str, col_b: str) -> str:
 
 # ── Code validation ────────────────────────────────────────────────────────────
 
-import ast as _ast
+import ast as _ast  # noqa: E402
 
 _ALLOWED_IMPORTS = {"pandas", "numpy", "re", "math"}
 _FORBIDDEN_CALLS = {
@@ -2542,7 +2536,7 @@ def chart_issue_resolution_sankey(
                 merged[action] = merged.get(action, 0) + count
         type_to_action = {t: type_to_action[t] for t in top_types}
         type_to_action["other"] = merged
-        kept_types = top_types + ["other"]
+        kept_types = [*top_types, "other"]
     else:
         kept_types = top_types
 

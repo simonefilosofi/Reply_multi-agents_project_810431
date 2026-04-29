@@ -107,7 +107,7 @@ def _step_info(state: PipelineState, key: str) -> str:
     """Return a short info string for the status table after an agent completes."""
     if key == "ingestion":
         m = state.ingestion_meta
-        return f"{m.get('rows', '?')} rows × {m.get('columns', '?')} cols"
+        return f"{m.get('rows', '?')} rows x {m.get('columns', '?')} cols"
     if key == "profiler":
         domain = state.dataset_fingerprint.get("domain", "?")
         return domain[:45] + ("…" if len(domain) > 45 else "")
@@ -480,15 +480,14 @@ uploaded_files = st.file_uploader(
     accept_multiple_files=True,
 )
 
-if uploaded_files:
-    if st.button("Run Analysis", type="primary"):
-        results = []
-        for file_obj in uploaded_files:
-            st.divider()
-            st.subheader(f"📂 {file_obj.name}")
-            state, chart_images = run_pipeline(file_obj)
-            results.append((file_obj.name, state, chart_images))
-        st.session_state["pipeline_results"] = results
+if uploaded_files and st.button("Run Analysis", type="primary"):
+    results = []
+    for file_obj in uploaded_files:
+        st.divider()
+        st.subheader(f"📂 {file_obj.name}")
+        state, chart_images = run_pipeline(file_obj)
+        results.append((file_obj.name, state, chart_images))
+    st.session_state["pipeline_results"] = results
 
 if "pipeline_results" in st.session_state:
     results = st.session_state["pipeline_results"]

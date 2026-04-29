@@ -103,9 +103,8 @@ def compute_reliability_score(
 
     naming_issue_count = 0
     for issue in state.schema_report.get("issues", []):
-        if issue["type"] == "naming_convention":
-            if issue["column"] in df.columns:
-                naming_issue_count += 1
+        if issue["type"] == "naming_convention" and issue["column"] in df.columns:
+            naming_issue_count += 1
 
     schema_dim = max(0.0, (total_cols - type_issue_count - naming_issue_count) / max(total_cols, 1))
 

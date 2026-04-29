@@ -102,7 +102,9 @@ ISSUE_TYPES = {
     "case_inconsistency": "same values in different cases (e.g. RM vs rm)",
     "date_order": "end date earlier than start date in the same row",
     "conditional_completeness": "column B missing when column A has a value",
-    "lookup_imputability": "missing values can be inferred from a related column via a learned mapping",
+    "lookup_imputability": (
+        "missing values can be inferred from a related column via a learned mapping"
+    ),
     # ConstraintAgent
     "float_precision_noise": "floating-point noise (1.000000001 instead of 1.0)",
     "format_pattern_violation": "values not matching the expected regex pattern",
