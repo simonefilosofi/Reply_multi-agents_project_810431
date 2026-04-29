@@ -191,3 +191,150 @@ def test_comma_decimal_auto_fix() -> None:
     assert out[1] == "1234.56"
     assert out[2] == "abc"
     assert out[3] == "999.9"
+
+
+def test_check_numeric_corruption_types_classifies_three_subtypes() -> None:
+    from tools import check_numeric_corruption_types
+
+    df = pd.DataFrame(
+        {
+            "importo": [
+                "€ 100",
+                "$ 50",
+                "1.234,56",
+                "999,9",
+                "N.D.",
+                "n.c.",
+                "42",
+                "100.0",
+            ]
+        }
+    )
+    issues = check_numeric_corruption_types(df, "importo")
+    types = {i["type"] for i in issues}
+    assert "currency_symbol_in_numeric" in types
+    assert "comma_decimal_format" in types
+    assert "nd_placeholder_in_numeric" in types
+
+
+def test_check_numeric_corruption_types_returns_empty_on_clean_column() -> None:
+    from tools import check_numeric_corruption_types
+
+    df = pd.DataFrame({"importo": ["100", "200.5", "300"]})
+    assert check_numeric_corruption_types(df, "importo") == []
+
+
+def test_check_numeric_corruption_types_unknown_column_returns_empty() -> None:
+    from tools import check_numeric_corruption_types
+
+    df = pd.DataFrame({"a": [1, 2, 3]})
+    assert check_numeric_corruption_types(df, "missing_column") == []
+
+
+def test_check_month_column_flags_text_names_and_special_codes() -> None:
+    from tools import check_month_column
+
+    values: list[Any] = list(range(1, 13)) * 10
+    values[0] = "March"
+    values[1] = "September"
+    values[2] = -1
+    values[3] = 13
+    values[4] = 99
+    df = pd.DataFrame({"month": values})
+    issues = check_month_column(df, ["month"])
+    types = {i["type"] for i in issues}
+    assert "month_format_inconsistency" in types
+    assert "special_month_code" in types
+
+
+def test_check_year_column_flags_dirty_two_digit_and_invalid() -> None:
+    from tools import check_year_column
+
+    base = [str(y) for y in range(1990, 2024)]
+    dirty = [*base, "2024.", "2024.", "12", "99", "1800", "2200"]
+    df = pd.DataFrame({"year": dirty})
+    issues = check_year_column(df, ["year"])
+    types = {i["type"] for i in issues}
+    assert "year_format_inconsistency" in types
+    assert "ambiguous_year_format" in types
+    assert "invalid_year_value" in types
+
+
+def test_check_year_column_skips_short_columns() -> None:
+    from tools import check_year_column
+
+    df = pd.DataFrame({"year": ["2020", "2021"]})
+    assert check_year_column(df, ["year"]) == []
+
+
+def test_check_period_formats_flags_mixed_formats() -> None:
+    from tools import check_period_formats
+
+    values = ["202401", "2024-02", "mar-2024", "04/2024", "Rata 2024", "garbage"]
+    values *= 30
+    df = pd.DataFrame({"rata": values})
+    issues = check_period_formats(df, ["rata"])
+    assert any(i["type"] == "period_format_inconsistency" for i in issues)
+
+
+def test_fix_invalid_dates_yyyymm_period_codes() -> None:
+    from tools import fix_invalid_dates
+
+    df = pd.DataFrame({"period": ["202401", "202402", "202403", "202404", "202405", "garbage"]})
+    method, count = fix_invalid_dates(df, "period")
+    assert method == "YYYYMM_validated"
+    assert count == 5
+
+
+def test_fix_invalid_dates_italian_month_names() -> None:
+    from tools import fix_invalid_dates
+
+    values = [
+        "11 giu 2024",
+        "12 lug 2024",
+        "13 ago 2024",
+        "14 set 2024",
+        "15 ott 2024",
+    ]
+    df = pd.DataFrame({"d": values})
+    method, count = fix_invalid_dates(df, "d")
+    assert count >= 3
+    assert method != ""
+
+
+def test_fix_invalid_dates_unknown_column_returns_empty() -> None:
+    from tools import fix_invalid_dates
+
+    df = pd.DataFrame({"a": [1, 2, 3]})
+    method, count = fix_invalid_dates(df, "missing")
+    assert method == ""
+    assert count == 0
+
+
+def test_fix_special_month_codes_nulls_codes_in_place() -> None:
+    from tools import fix_special_month_codes
+
+    df = pd.DataFrame({"month": [1, 2, -1, 0, 13, 99, 7, 8]})
+    n = fix_special_month_codes(df, "month")
+    assert n == 4
+    assert df["month"].isna().sum() == 4
+
+
+def test_fix_special_month_codes_unknown_column_returns_zero() -> None:
+    from tools import fix_special_month_codes
+
+    df = pd.DataFrame({"a": [1, 2, 3]})
+    assert fix_special_month_codes(df, "missing") == 0
+
+
+def test_apply_lookup_imputation_no_columns_returns_zero() -> None:
+    df = pd.DataFrame({"a": [1, 2], "b": [None, None]})
+    assert apply_lookup_imputation(df, "missing", "b", {"x": "y"}) == 0
+    assert apply_lookup_imputation(df, "a", "missing", {"1": "y"}) == 0
+    assert apply_lookup_imputation(df, "a", "b", {}) == 0
+
+
+def test_apply_lookup_imputation_no_imputable_rows_returns_zero() -> None:
+    df = pd.DataFrame({"src": ["RM", "MI"], "tgt": ["Roma", "Milano"]})
+    n = apply_lookup_imputation(df, "src", "tgt", {"RM": "Roma", "MI": "Milano"})
+    assert n == 0

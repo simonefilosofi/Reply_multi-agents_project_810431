@@ -834,3 +834,133 @@ the file/line where it lives.
   Recomputation is cheap, has zero risk of staleness, and keeps the
   state schema unchanged.
 
+### D14.1 — `make ci` chains `lint type test cov` (not just `lint type test`)
+- **File:** `Makefile::ci`.
+- **Decision:** The `ci` target runs `lint type test cov` rather than
+  the plan's literal `lint type test`. `test` runs the fast suite
+  (excluding `docker`/`slow` markers); `cov` runs the same suite with
+  coverage instrumentation and the term-missing report. Both are
+  needed in CI: the fast pass surfaces test failures quickly even when
+  the coverage instrumentation has overhead, and the coverage pass
+  enforces the plan's >= 80 % / >= 70 % thresholds.
+- **Rationale:** The plan's validation criteria require `make ci` to
+  be green AND coverage >= thresholds. Running coverage only in `cov`
+  (a separate manual target) would leave a hole in CI. User picked
+  this option explicitly at the 14.C gate.
+
+### D14.2 — `make cov` filters `not docker and not slow` markers
+- **File:** `Makefile::cov`.
+- **Decision:** The `cov` target adds `-m "not docker and not slow"`
+  to the pytest invocation, matching the `test` target. Without this
+  filter, the docker-marked tests run during `cov` and fail in
+  environments without a Docker daemon (most CI runners and any
+  Windows host without Docker Desktop).
+- **Rationale:** The Docker-marked tests are exercised separately on
+  hosts where the daemon is available; including them by default in
+  the coverage pass would mean `make ci` fails on Windows for an
+  environmental reason, not a correctness one. The coverage gates
+  remain >= 80 % on `tools.py` and >= 70 % overall even with these
+  tests skipped (verified: 80.4 % / 81.9 %).
+
+### D14.3 — `make cov` uses explicit `--cov=<module>` list
+- **File:** `Makefile::cov`.
+- **Decision:** The `cov` target uses
+  `--cov=state_demo --cov=agents_demo --cov=tools --cov=tools_code_validator`
+  rather than the bare `--cov` form (which relies on
+  `[tool.coverage.run].source` in `pyproject.toml` for module
+  discovery).
+- **Rationale:** On Windows + numpy 2.x, the bare `--cov` invocation
+  fails with `ImportError: numpy: cannot load module more than once
+  per process` during conftest loading. The explicit-module form
+  bypasses the issue cleanly. The module list duplicates
+  `[tool.coverage.run].source` but the duplication is small and
+  Windows compatibility is the priority.
+
+### D14.4 — Smoke test fingerprint stub uses `type` (not `kind`) for constraint dicts
+- **File:** `scripts/smoke_test.py::_fingerprint_for_dirty_noipa`.
+- **Decision:** The mocked-mode fingerprint stub for
+  `dirty_noipa_sample.csv` declares `column_constraints` with the
+  `type` discriminator (`type: "no_negatives"`,
+  `type: "format_pattern"`) and a `description` field, matching the
+  schema `agents_demo/constraint_agent.py` actually reads. The
+  fingerprint also explicitly sets `likely_duplicate_pairs: []` and
+  `suggested_key_columns: []` because `DatasetFingerprint` requires
+  them.
+- **Rationale:** An earlier draft used `kind`/`min`/`rationale` keys,
+  which made the constraint agent silently skip every constraint and
+  caused the B1 regression check (`format_pattern_violation` carries
+  `pattern` field) to never fire. With the corrected schema the B1
+  assertion is deterministic on the dirty fixture and was promoted
+  from a soft "informational" note to a hard assertion in the same
+  step.
+
+### D14.5 — Smoke test exercises `lookup_imputability` + deliberation via `wide_dirty` synth-stub
+- **File:** `scripts/smoke_test.py::run_wide_dirty_assertions`.
+- **Decision:** The two hand-off requirements that need a 30-column
+  shape (`lookup_imputability` detection + `outlier vs
+  domain_negative` deliberation) are exercised against the
+  `build_wide_dirty_df` synthetic fixture, not against
+  `dirty_noipa_sample.csv` (which is a 6-column slice). The test
+  seeds the relevant detector reports directly into a fresh
+  `PipelineState` and runs only the `SynthesisAgent`, mirroring the
+  pattern already used in `tests/integration/test_deliberation_e2e.py`.
+- **Rationale:** Running the full LangGraph pipeline on a wide
+  synthetic dataset just to satisfy these two assertions would
+  multiply smoke-test runtime by an order of magnitude and add a
+  third CSV fixture to the repo. The synthesis-stub pattern reaches
+  the same code paths in <1 s and keeps the smoke test shipping with
+  two CSVs as the plan specified.
+
+### D14.6 — README keeps "Proprietary" license placeholder pending user decision
+- **File:** `README.md::License`, `pyproject.toml::license`.
+- **Decision:** The README's license section reads
+  `Proprietary. License terms TBD -- to be finalised before public
+  release.` `pyproject.toml` keeps
+  `license = { text = "Proprietary" }`.
+- **Rationale:** Plan says "user to decide". MIT or Apache-2.0 are
+  the obvious candidates for an academic / hand-off project but the
+  pick is the user's. The TBD note flags the open item without
+  blocking step 14.
+
+### D14.7 — README omits LLM model identifiers per user instruction
+- **File:** `README.md::Configuration`.
+- **Decision:** The README refers to the "primary LLM provider" and
+  "secondary fallback provider" rather than naming specific model
+  identifiers. The literal env-var names (`ANTHROPIC_API_KEY`,
+  `OPENAI_API_KEY`) are kept because they are the variable names the
+  code reads. Two filename links to `CLAUDE.md` (the project's
+  operating contract) are kept; renaming that file is out of scope.
+- **Rationale:** User directive at the 14.E gate ("do not mention
+  Claude at all for now"). Pinned model identifiers continue to live
+  in `state_demo/config.py::Settings.models`; that remains the
+  single source of truth.
+
+### D14.8 — Pre-existing ruff/mypy errors in `tools.py` left unfixed
+- **File:** `tools.py` (13 ruff errors, ~95 mypy errors), several
+  agent modules (~16 mypy errors total in pre-existing code).
+- **Decision:** Step 14 does not touch `tools.py` to clear the
+  pre-existing ruff/mypy errors (3x SIM102, 2x RUF001, RUF003,
+  RUF005, F841, B905, E501x2, E402, plus extensive mypy
+  `type-arg`/`no-untyped-def` violations). My new files
+  (`scripts/smoke_test.py`, `tests/tools/test_charts.py`,
+  `tests/tools/test_tools.py`) are clean under both linters.
+- **Rationale:** CLAUDE.md "Never Modify Without Permission" trumps
+  the cosmetic gate. The errors are pre-existing legacy code that
+  the 14-step refactor did not target -- every function-level
+  refactor (Steps 6, 11, 12) added type hints to the touched
+  functions but did not retro-annotate the surrounding code. A
+  separate cleanup pass on `tools.py` is the right scope. Surfaced
+  at Gate 14 for user decision.
+
+### D14.9 — Pre-existing `RuntimeWarning` in `check_year_column` left as-is
+- **File:** `tools.py:1422-1423`.
+- **Decision:** The `if in_range / len(int_vals) < 0.80:` line emits
+  a `RuntimeWarning: invalid value encountered in scalar divide`
+  when `int_vals` is empty (numpy returns `nan` for `0/0`, the
+  comparison evaluates `False`, and the function correctly skips).
+  No fix applied.
+- **Rationale:** The behaviour is correct; the warning is cosmetic.
+  Fixing it would mean adding an `if len(int_vals) == 0: continue`
+  guard, which is outside Step 14 scope. Logged for a future
+  cleanup pass.
+
