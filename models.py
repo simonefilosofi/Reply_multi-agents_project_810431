@@ -1,7 +1,8 @@
+"""Pydantic models for the resolved baseline, the per-column semantic payload, validation reports, and intermediate agent outputs shared across the LangGraph pipeline."""
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any
+from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, Field
 
@@ -12,6 +13,28 @@ class Casing(str, Enum):
     as_is = "as-is"
 
 
+class EnumFormat(BaseModel):
+    type: Literal["enum"] = "enum"
+    values: list[Any]
+
+
+class RegexFormat(BaseModel):
+    type: Literal["regex"] = "regex"
+    pattern: str
+
+
+class RangeFormat(BaseModel):
+    type: Literal["range"] = "range"
+    min: float | None = None
+    max: float | None = None
+
+
+FormatSpec = Annotated[
+    Union[EnumFormat, RegexFormat, RangeFormat],
+    Field(discriminator="type"),
+]
+
+
 class ColumnPayload(BaseModel):
     column_name: str
     domain: str
@@ -20,21 +43,45 @@ class ColumnPayload(BaseModel):
     placeholders: list[Any] = Field(default_factory=list)
     related_columns: list[str] = Field(default_factory=list)
     target_casing: Casing = Casing.as_is
+    canonical_hint: str | None = None
 
 
 class ColumnSchema(BaseModel):
     column_name: str
     dtype: str
-    format_pattern: str | None = None
+    format: FormatSpec | None = None
+    case_convention: str | None = None
+    is_nullable: bool = True
+    canonical_id: str | None = None
+
+
+class DatasetSchema(BaseModel):
+    description: str = ""
+    periodicity: str | None = None
+    columns: dict[str, ColumnSchema] = Field(default_factory=dict)
 
 
 class DomainBaseline(BaseModel):
-    domain: str
-    columns: list[ColumnSchema] = Field(default_factory=list)
+    description: str = ""
+    datasets: dict[str, DatasetSchema] = Field(default_factory=dict)
+
+
+class GlobalConventions(BaseModel):
+    naming_convention: str | None = None
+    naming_regex: str | None = None
+    encoding: str | None = None
+    csv_separator: str | None = None
+    decimal_separator: str | None = None
+    filename_convention_monthly: str | None = None
+    filename_convention_annual: str | None = None
+    k_anonymity_floor_for_person_counts: int | None = None
 
 
 class BaselineFile(BaseModel):
-    domains: list[DomainBaseline] = Field(default_factory=list)
+    domains: dict[str, DomainBaseline] = Field(default_factory=dict)
+    shared_definitions: dict[str, ColumnSchema] = Field(default_factory=dict)
+    global_conventions: GlobalConventions = Field(default_factory=GlobalConventions)
+    observations: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class DuplicateResolution(BaseModel):

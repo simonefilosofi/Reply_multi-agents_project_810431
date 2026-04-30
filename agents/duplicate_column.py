@@ -131,7 +131,11 @@ def _llm_pick(chain, system: str, group: list[str], domain: str, baseline_column
 def _baseline_columns_for_domain(state: PipelineState) -> list[str]:
     if state.baseline is None or not state.detected_domain:
         return []
-    for d in state.baseline.domains:
-        if d.domain == state.detected_domain:
-            return [c.column_name for c in d.columns]
-    return []
+    domain = state.baseline.domains.get(state.detected_domain)
+    if domain is None:
+        return []
+    seen: dict[str, None] = {}
+    for dataset in domain.datasets.values():
+        for col_name in dataset.columns.keys():
+            seen.setdefault(col_name, None)
+    return list(seen.keys())

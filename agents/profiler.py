@@ -1,4 +1,4 @@
-"""Determines the dataset's domain and primary language from the baseline context."""
+"""Identifies the dataset's NoiPA domain, the most-likely dataset within that domain, and the primary language by sending a hierarchical signature map of the resolved baseline plus the input columns and sample values to the LLM. Implements the Profiler agent node."""
 from __future__ import annotations
 
 import json
@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from models import BaselineFile
 from state import PipelineState
+from tools.baseline_accessors import domain_signatures
 from utils.prompts import load_prompt
 
 
@@ -47,7 +48,7 @@ def _load_baseline(state: PipelineState) -> BaselineFile:
 def _build_user_payload(state: PipelineState, baseline: BaselineFile) -> dict:
     df = state.dataset
     return {
-        "baseline_domains": [d.domain for d in baseline.domains],
+        "baseline_signatures": domain_signatures(baseline),
         "column_names": list(df.columns),
         "sample_values": {
             col: df[col].dropna().head(5).tolist()

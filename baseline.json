@@ -1,3 +1,2599 @@
 {
-  "domains": []
+  "domains": {
+    "Amministrati": {
+      "description": "Demographic data on persons administered by NoiPA — counts segmented by geography, age, sex, and access/payment modality.",
+      "datasets": {
+        "EntryAmministrati": {
+          "description": "Count of administered persons by municipality of work, age bracket, and sex.",
+          "periodicity": null,
+          "columns": {
+            "comune_della_sede": {
+              "column_name": "comune_della_sede",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú0-9'\\- \\.]{3,40}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "comune_della_sede"
+            },
+            "eta_min": {
+              "column_name": "eta_min",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  18,
+                  25,
+                  35,
+                  45,
+                  55,
+                  65
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "eta_min"
+            },
+            "eta_max": {
+              "column_name": "eta_max",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  24,
+                  34,
+                  44,
+                  54,
+                  64
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": true,
+              "canonical_id": "eta_max"
+            },
+            "sesso": {
+              "column_name": "sesso",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "F",
+                  "M"
+                ]
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "sesso"
+            },
+            "numero": {
+              "column_name": "numero",
+              "dtype": "integer",
+              "format": {
+                "type": "range",
+                "min": 6.0,
+                "max": null
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": null
+            }
+          }
+        },
+        "EntryResidenti": {
+          "description": "Count of administered persons by province of residence, administration, age bracket, and sex.",
+          "periodicity": null,
+          "columns": {
+            "provincia_di_residenza": {
+              "column_name": "provincia_di_residenza",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú'\\- ]{4,30}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "provincia_di_residenza"
+            },
+            "amministrazione": {
+              "column_name": "amministrazione",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú0-9'\\- \\.]{4,110}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "amministrazione_pa"
+            },
+            "eta_min": {
+              "column_name": "eta_min",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  18,
+                  25,
+                  35,
+                  45,
+                  55,
+                  65
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "eta_min"
+            },
+            "eta_max": {
+              "column_name": "eta_max",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  24,
+                  34,
+                  44,
+                  54,
+                  64
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": true,
+              "canonical_id": "eta_max"
+            },
+            "sesso": {
+              "column_name": "sesso",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "F",
+                  "M"
+                ]
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "sesso"
+            },
+            "numero": {
+              "column_name": "numero",
+              "dtype": "integer",
+              "format": {
+                "type": "range",
+                "min": 6.0,
+                "max": null
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": null
+            }
+          }
+        },
+        "EntryPendolarismo": {
+          "description": "Commuting patterns of administered persons — counts by province/municipality of work, administering body, and home-to-work distance bucket.",
+          "periodicity": null,
+          "columns": {
+            "provincia_della_sede": {
+              "column_name": "provincia_della_sede",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú'\\- ]{4,30}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "provincia_della_sede"
+            },
+            "comune_della_sede": {
+              "column_name": "comune_della_sede",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú0-9'\\- \\.]{3,40}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "comune_della_sede"
+            },
+            "stesso_comune": {
+              "column_name": "stesso_comune",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "SI",
+                  "NO"
+                ]
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": null
+            },
+            "ente": {
+              "column_name": "ente",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú0-9'\\- \\.]{4,110}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "amministrazione_pa"
+            },
+            "numero_amministrati": {
+              "column_name": "numero_amministrati",
+              "dtype": "integer",
+              "format": {
+                "type": "range",
+                "min": 6.0,
+                "max": null
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": null
+            },
+            "distance_min_KM": {
+              "column_name": "distance_min_KM",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  5,
+                  10,
+                  20,
+                  50,
+                  100,
+                  200,
+                  600
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": true,
+              "canonical_id": null
+            },
+            "distance_max_KM": {
+              "column_name": "distance_max_KM",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  5,
+                  10,
+                  20,
+                  50,
+                  100,
+                  200,
+                  600
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": true,
+              "canonical_id": null
+            }
+          }
+        },
+        "EntryAccessoAmministrati": {
+          "description": "Access events to the NoiPA platform by region of residence, administration, age, sex, and authentication method.",
+          "periodicity": null,
+          "columns": {
+            "regione_residenza_domicilio": {
+              "column_name": "regione_residenza_domicilio",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "ABRUZZO",
+                  "BASILICATA",
+                  "CALABRIA",
+                  "CAMPANIA",
+                  "EMILIA ROMAGNA",
+                  "ESTERO",
+                  "FRIULI-VENEZIA GIULIA",
+                  "LAZIO",
+                  "LIGURIA",
+                  "LOMBARDIA",
+                  "MARCHE",
+                  "MOLISE",
+                  "PIEMONTE",
+                  "PUGLIA",
+                  "SARDEGNA",
+                  "SICILIA",
+                  "TOSCANA",
+                  "TRENTINO ALTO ADIGE",
+                  "UMBRIA",
+                  "VALLE D'AOSTA",
+                  "VENETO"
+                ]
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "regione_italiana_estesa"
+            },
+            "amministrazione_appartenenza": {
+              "column_name": "amministrazione_appartenenza",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú0-9'\\- \\.]{4,110}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "amministrazione_pa"
+            },
+            "sesso": {
+              "column_name": "sesso",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "F",
+                  "M"
+                ]
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "sesso"
+            },
+            "eta_min": {
+              "column_name": "eta_min",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  18,
+                  25,
+                  35,
+                  45,
+                  55,
+                  65
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "eta_min"
+            },
+            "eta_max": {
+              "column_name": "eta_max",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  24,
+                  34,
+                  44,
+                  54,
+                  64
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": true,
+              "canonical_id": "eta_max"
+            },
+            "modalita_autenticazione": {
+              "column_name": "modalita_autenticazione",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "CIE",
+                  "CNS",
+                  "FEDERATION",
+                  "SPID"
+                ]
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": null
+            },
+            "numero_occorrenze": {
+              "column_name": "numero_occorrenze",
+              "dtype": "integer",
+              "format": {
+                "type": "range",
+                "min": 2.0,
+                "max": null
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": null
+            }
+          }
+        },
+        "EntryAccreditoStipendi": {
+          "description": "Salary credit/payment events by municipality of work, administration, age, sex, and payment method.",
+          "periodicity": null,
+          "columns": {
+            "comune_della_sede": {
+              "column_name": "comune_della_sede",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú0-9'\\- \\.]{3,40}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "comune_della_sede"
+            },
+            "amministrazione": {
+              "column_name": "amministrazione",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú0-9'\\- \\.]{4,110}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "amministrazione_pa"
+            },
+            "eta_min": {
+              "column_name": "eta_min",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  18,
+                  25,
+                  35,
+                  45,
+                  55,
+                  65
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "eta_min"
+            },
+            "eta_max": {
+              "column_name": "eta_max",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  24,
+                  34,
+                  44,
+                  54,
+                  64
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": true,
+              "canonical_id": "eta_max"
+            },
+            "sesso": {
+              "column_name": "sesso",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "F",
+                  "M"
+                ]
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "sesso"
+            },
+            "modalita_pagamento": {
+              "column_name": "modalita_pagamento",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "Contanti c/o Tesoreria",
+                  "Contanti posta",
+                  "Conto corrente bancario",
+                  "Conto corrente postale",
+                  "Libretto postale"
+                ]
+              },
+              "case_convention": "Title",
+              "is_nullable": false,
+              "canonical_id": null
+            },
+            "numero": {
+              "column_name": "numero",
+              "dtype": "integer",
+              "format": {
+                "type": "range",
+                "min": 6.0,
+                "max": null
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": null
+            }
+          }
+        }
+      }
+    },
+    "Amministrazioni": {
+      "description": "Organizational-structure data on the Public Administration entities served by NoiPA — counts of organizational units and working relationships, segmented by workplace location, administration, and employee demographics.",
+      "datasets": {
+        "EntryStrutturaOrganizzativa": {
+          "description": "For each combination of workplace municipality, administration, and employee demographics, reports the number of distinct organizational units and the number of working relationships (employment contracts) that fall under them.",
+          "periodicity": null,
+          "columns": {
+            "comune_della_sede": {
+              "column_name": "comune_della_sede",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú0-9'\\- \\.]{3,40}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "comune_della_sede"
+            },
+            "amministrazione": {
+              "column_name": "amministrazione",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú0-9'\\- \\.]{4,110}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "amministrazione_pa"
+            },
+            "eta_min": {
+              "column_name": "eta_min",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  18,
+                  25,
+                  35,
+                  45,
+                  55,
+                  65
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "eta_min"
+            },
+            "eta_max": {
+              "column_name": "eta_max",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  24,
+                  34,
+                  44,
+                  54,
+                  64
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": true,
+              "canonical_id": "eta_max"
+            },
+            "sesso": {
+              "column_name": "sesso",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "F",
+                  "M"
+                ]
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "sesso"
+            },
+            "numero_unita_organizzative": {
+              "column_name": "numero_unita_organizzative",
+              "dtype": "integer",
+              "format": {
+                "type": "range",
+                "min": 1.0,
+                "max": null
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": null
+            },
+            "numero_rapporti_lavoro": {
+              "column_name": "numero_rapporti_lavoro",
+              "dtype": "integer",
+              "format": {
+                "type": "range",
+                "min": 6.0,
+                "max": null
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": null
+            }
+          }
+        }
+      }
+    },
+    "Rapporti_di_lavoro": {
+      "description": "Working-relationship data on the employment contracts that bind administered persons to Public Administration entities — counts of contracts segmented by workplace province, employing administration, demographics, contractual classification, and the lifecycle reason that originated or terminated each relationship.",
+      "datasets": {
+        "EntryContrattiGestiti": {
+          "description": "Headcount of active employment contracts ('rapporti gestiti') by workplace province, administration, employee demographics, and contractual classification (collective-bargaining sector + role grade).",
+          "periodicity": null,
+          "columns": {
+            "provincia_della_sede": {
+              "column_name": "provincia_della_sede",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú'\\- ]{4,30}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "provincia_della_sede"
+            },
+            "amministrazione": {
+              "column_name": "amministrazione",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú0-9'\\- \\.]{4,110}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "amministrazione_pa"
+            },
+            "eta_min": {
+              "column_name": "eta_min",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  18,
+                  25,
+                  35,
+                  45,
+                  55,
+                  65
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "eta_min"
+            },
+            "eta_max": {
+              "column_name": "eta_max",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  24,
+                  34,
+                  44,
+                  54,
+                  64
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": true,
+              "canonical_id": "eta_max"
+            },
+            "sesso": {
+              "column_name": "sesso",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "F",
+                  "M"
+                ]
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "sesso"
+            },
+            "comparto": {
+              "column_name": "comparto",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "ALTRO PERSONALE",
+                  "AREA DIRIGENZIALE FUNZIONI CENTRALI",
+                  "AREA DIRIGENZIALE FUNZIONI LOCALI",
+                  "AREA DIRIGENZIALE ISTRUZIONE E RICERCA",
+                  "AREA DIRIGENZIALE PRESIDENZA DEL CONSIGLIO DEI MINISTRI",
+                  "AREA DIRIGENZIALE SANITA'",
+                  "AUTORITA' INDIPENDENTI",
+                  "COMPARTO FUNZIONI CENTRALI",
+                  "COMPARTO FUNZIONI LOCALI",
+                  "COMPARTO ISTRUZIONE e RICERCA",
+                  "COMPARTO PRESIDENZA DEL CONSIGLIO DEI MINISTRI",
+                  "COMPARTO SANITA'",
+                  "ENTI PUBBLICI ECONOMICI - DIRIGENZA",
+                  "ENTI PUBBLICI ECONOMICI - PERSONALE",
+                  "PERSONALE ADDETTO SISTEMAZIONE IDRAULICA FORESTALE E AGRARIA",
+                  "PERSONALE CARRIERA SPECIALE DIPLOMATICA",
+                  "PERSONALE CARRIERA SPECIALE PREFETTIZIA",
+                  "PERSONALE DELLA MAGISTRATURA",
+                  "PERSONALE DI COLLABORAZIONE",
+                  "PERSONALE DIFESA  SICUREZZA E SOCCORSO PUBBLICO",
+                  "PERSONALE NON CONTRATTUALIZZATO",
+                  "PERSONALE REGIONI AUTONOME",
+                  "SANITA' MEDICINA GENERALE",
+                  "SANITA' MEDICINA SPECIALISTICA"
+                ]
+              },
+              "case_convention": "UPPER_with_lowercase_conjunctions",
+              "is_nullable": false,
+              "canonical_id": "comparto"
+            },
+            "inquadramento": {
+              "column_name": "inquadramento",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú0-9'\\.\\-\\/ ]{6,40}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "inquadramento"
+            },
+            "numero": {
+              "column_name": "numero",
+              "dtype": "integer",
+              "format": {
+                "type": "range",
+                "min": 6.0,
+                "max": null
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": null
+            }
+          }
+        },
+        "EntryInquadramenti": {
+          "description": "Headcount of active employment contracts grouped only by their contractual classification (collective-bargaining sector + role grade), province, and employing administration — no demographic dimensions.",
+          "periodicity": null,
+          "columns": {
+            "provincia_della_sede": {
+              "column_name": "provincia_della_sede",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú'\\- ]{4,30}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "provincia_della_sede"
+            },
+            "amministrazione": {
+              "column_name": "amministrazione",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú0-9'\\- \\.]{4,110}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "amministrazione_pa"
+            },
+            "comparto": {
+              "column_name": "comparto",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "ALTRO PERSONALE",
+                  "AREA DIRIGENZIALE FUNZIONI CENTRALI",
+                  "AREA DIRIGENZIALE FUNZIONI LOCALI",
+                  "AREA DIRIGENZIALE ISTRUZIONE E RICERCA",
+                  "AREA DIRIGENZIALE PRESIDENZA DEL CONSIGLIO DEI MINISTRI",
+                  "AREA DIRIGENZIALE SANITA'",
+                  "AUTORITA' INDIPENDENTI",
+                  "COMPARTO FUNZIONI CENTRALI",
+                  "COMPARTO FUNZIONI LOCALI",
+                  "COMPARTO ISTRUZIONE e RICERCA",
+                  "COMPARTO PRESIDENZA DEL CONSIGLIO DEI MINISTRI",
+                  "COMPARTO SANITA'",
+                  "ENTI PUBBLICI ECONOMICI - DIRIGENZA",
+                  "ENTI PUBBLICI ECONOMICI - PERSONALE",
+                  "PERSONALE ADDETTO SISTEMAZIONE IDRAULICA FORESTALE E AGRARIA",
+                  "PERSONALE CARRIERA SPECIALE DIPLOMATICA",
+                  "PERSONALE CARRIERA SPECIALE PREFETTIZIA",
+                  "PERSONALE DELLA MAGISTRATURA",
+                  "PERSONALE DI COLLABORAZIONE",
+                  "PERSONALE DIFESA  SICUREZZA E SOCCORSO PUBBLICO",
+                  "PERSONALE NON CONTRATTUALIZZATO",
+                  "PERSONALE REGIONI AUTONOME",
+                  "SANITA' MEDICINA GENERALE",
+                  "SANITA' MEDICINA SPECIALISTICA"
+                ]
+              },
+              "case_convention": "UPPER_with_lowercase_conjunctions",
+              "is_nullable": false,
+              "canonical_id": "comparto"
+            },
+            "inquadramento": {
+              "column_name": "inquadramento",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú0-9'\\.\\-\\/ ]{6,40}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "inquadramento"
+            },
+            "numero": {
+              "column_name": "numero",
+              "dtype": "integer",
+              "format": {
+                "type": "range",
+                "min": 6.0,
+                "max": null
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": null
+            }
+          }
+        },
+        "EntryMotivoAssunzione": {
+          "description": "Counts of employment-relationship 'starts' (hirings, transfers in, reinstatements, etc.) by workplace province, administration, employee demographics, and the legal/administrative reason that originated the relationship.",
+          "periodicity": null,
+          "columns": {
+            "provincia_della_sede": {
+              "column_name": "provincia_della_sede",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú'\\- ]{4,30}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "provincia_della_sede"
+            },
+            "amministrazione": {
+              "column_name": "amministrazione",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú0-9'\\- \\.]{4,110}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "amministrazione_pa"
+            },
+            "eta_min": {
+              "column_name": "eta_min",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  18,
+                  25,
+                  35,
+                  45,
+                  55,
+                  65
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "eta_min"
+            },
+            "eta_max": {
+              "column_name": "eta_max",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  24,
+                  34,
+                  44,
+                  54,
+                  64
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": true,
+              "canonical_id": "eta_max"
+            },
+            "sesso": {
+              "column_name": "sesso",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "F",
+                  "M"
+                ]
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "sesso"
+            },
+            "motivo_assunzione": {
+              "column_name": "motivo_assunzione",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "ALTRE CAUSE",
+                  "ALTRO MOTIVO",
+                  "APPLICAZIONE CONTRATTUALE",
+                  "ASS. DI M. DI CONT. ASS. PER SOST.",
+                  "ASS.UFF.COLLOCAMENTO ART.35 C.2",
+                  "ASSEGNAZIONE TEMPORANEA",
+                  "ASSEGNAZIONE TEMPORANEA IN",
+                  "ASSUNZIONE DI SPECIALISTI PER SOST.",
+                  "ASSUNZIONE LEGGE 56/87 ART. 22",
+                  "ASSUNZIONE OBBLIGATORIA",
+                  "ASSUNZIONE PER CHIAMATA DIRETTA",
+                  "ASSUNZIONE PER INCARICO",
+                  "AVVIAMENTO DISABILI 68/99 ART. 1",
+                  "AVVISO PUBBLICO",
+                  "CARICHE ELETTIVE",
+                  "COLLOCAMENTO A RIPOSO LIMITI DI ETA",
+                  "COMANDO IN",
+                  "COMANDO OUT",
+                  "CONCORSO",
+                  "CONCORSO PUBBLICO",
+                  "CONCORSO RISERVATO",
+                  "CONVENZIONE UNIVERSITARIA",
+                  "DA ENTE SOPPRESSO",
+                  "DECESSO",
+                  "DECRETO",
+                  "DIMISSIONI VOLONTARIE/RECESSO DIP.",
+                  "DISPENSA INABILITA' ASSOLUTA PERM.",
+                  "DISTACCO IN",
+                  "FUORI RUOLO",
+                  "INCARICO DIRIGENZIALE",
+                  "LIMITI DI ETA'",
+                  "MOBILITA'",
+                  "MOBILITA' INTERCOMPARTIMENTALE",
+                  "MOBILITA' INTERREGIONALE",
+                  "MOBILITA' INTERSCAMBIO",
+                  "MOBILITA' REGIONALE",
+                  "NOMINA",
+                  "PASSAGGIO A DIRIGENTE",
+                  "PASSAGGIO AD ALTRA AMMINISTRAZIONE",
+                  "PASSAGGIO ALTRA AMM.NE PER COMANDO",
+                  "PROGETTO LAVORI SOCIALMENTE UTILI",
+                  "PROROGA DEL CONTRATTO",
+                  "PROROGA INCARICO",
+                  "RIAMMISSIONE IN SERVIZIO",
+                  "RINNOVO CONTRATTUALE",
+                  "RISOLUZIONE VOLONTARIA",
+                  "SELEZIONE INTERNA",
+                  "STABILIZZAZIONE DA L.S.U.",
+                  "STABILIZZAZIONE DA T. DETERMINATO",
+                  "TERMINE INCARICO",
+                  "TRASF.TO TRA UFFICI STESSO ENTE",
+                  "TRASFERIMENTO FRA ENTI",
+                  "TRASFERIMENTO INTERREGIONALE",
+                  "TRASFORMAZIONE EX ART 12",
+                  "TRASFORMAZIONE RAPPORTO DI LAVORO"
+                ]
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": null
+            },
+            "numero": {
+              "column_name": "numero",
+              "dtype": "integer",
+              "format": {
+                "type": "range",
+                "min": 6.0,
+                "max": null
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": null
+            }
+          }
+        },
+        "EntryMotivoCessazione": {
+          "description": "Counts of employment-relationship 'ends' (retirements, dismissals, transfers out, deaths, etc.) by workplace province, administration, employee demographics, and the legal/administrative reason that terminated the relationship.",
+          "periodicity": null,
+          "columns": {
+            "provincia_della_sede": {
+              "column_name": "provincia_della_sede",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú'\\- ]{4,30}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "provincia_della_sede"
+            },
+            "amministrazione": {
+              "column_name": "amministrazione",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú0-9'\\- \\.]{4,110}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "amministrazione_pa"
+            },
+            "eta_min": {
+              "column_name": "eta_min",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  18,
+                  25,
+                  35,
+                  45,
+                  55,
+                  65
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "eta_min"
+            },
+            "eta_max": {
+              "column_name": "eta_max",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  24,
+                  34,
+                  44,
+                  54,
+                  64
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": true,
+              "canonical_id": "eta_max"
+            },
+            "sesso": {
+              "column_name": "sesso",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "F",
+                  "M"
+                ]
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "sesso"
+            },
+            "motivo_cessazione": {
+              "column_name": "motivo_cessazione",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "ALTRO MOTIVO",
+                  "ANNULLO GIURIDICO",
+                  "CAMBIO COMPARTO/CONTRATTO",
+                  "CESSAZIONE DI DIRITTO PER ASSUNZIONE IN ALTRO IMPIEGO PUBBLICO",
+                  "CESSAZIONE PER MORTE",
+                  "COLLOCAMENTO ANTICIPATO (DLGS 503/92)",
+                  "DECADENZA DALL'IMPIEGO PER ACCETTAZIONE INCARICO A TEMPO DETERMINATO",
+                  "DECESSO",
+                  "DESTITUZIONE",
+                  "DESTITUZIONE DI DIRITTO DAL SERVIZIO",
+                  "DISPENSA DAL SERVIZIO PER INABILITA' ASSOLUTA PERMANENTE AD OGNI PROFICUO LAVORO",
+                  "DISPENSA DAL SERVIZIO PER INABILITA' PERMANENTE ALLE MANSIONI",
+                  "FINE INCARICO",
+                  "FINE INCARICO DIRIGENZIALE (DLGS 165/01- ART.19 6)",
+                  "LICENZIAMENTO",
+                  "LIMITI DI ETA'",
+                  "LIMITI DI SERVIZIO",
+                  "MOBILITA'",
+                  "PASSAGGIO AD ALTRA AMMINISTRAZIONE",
+                  "PASSAGGIO ALTRA AMMINISTRAZIONE PER COMANDO",
+                  "RECESSO O MANCATO SUPERAMENTO PERIODO DI PROVA",
+                  "RINUNCIA ALLA SUPPLENZA DOPO LA PRESA DI SERVIZIO",
+                  "RISOLUZIONE DEL RAPPORTO DI LAVORO PER ALTRE CAUSE",
+                  "RISOLUZIONE DEL RAPPORTO DI LAVORO PER ANNULLAMENTO PROCEDURA DI RECLUTAMENTO PRESUPPOSTA",
+                  "RISOLUZIONE DEL RAPPORTO DI LAVORO PER COMPIUTO LIMITE DI ASSENZA PER MALATTIA",
+                  "SOSPESO - ASPETT. PER PERCORSO FIT - DL73"
+                ]
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": null
+            },
+            "numero": {
+              "column_name": "numero",
+              "dtype": "integer",
+              "format": {
+                "type": "range",
+                "min": 6.0,
+                "max": null
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": null
+            }
+          }
+        }
+      }
+    },
+    "Trattamento_economico": {
+      "description": "Financial and tax-treatment data on the salary disbursements managed by NoiPA — payslip-level fiscal and social-security withholdings, family allowances and deductions, income-bracket distributions, accounted absences (which affect compensation), trade-union and personal-loan deductions, and the annual Certificazione Unica tax-certification totals. This is the largest and most heterogeneous domain in the registry, segmented by geography, administration, demographics, contractual classification, and various financial dimensions.",
+      "datasets": {
+        "EntryCertificazioniUniche": {
+          "description": "Annual Certificazione Unica (CU) tax-certification totals — yearly aggregate income, withholdings, deductions, and complementary-pension contributions for administered persons, segmented by employing administration, demographics, and region of residence. Indexed by tax year (e.g. 2022, 2023, 2024) rather than by month.",
+          "periodicity": "annual",
+          "columns": {
+            "amministrazione": {
+              "column_name": "amministrazione",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú0-9'\\- \\.]{4,110}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "amministrazione_pa"
+            },
+            "eta_min": {
+              "column_name": "eta_min",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  18,
+                  25,
+                  35,
+                  45,
+                  55,
+                  65
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "eta_min"
+            },
+            "eta_max": {
+              "column_name": "eta_max",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  24,
+                  34,
+                  44,
+                  54,
+                  64
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": true,
+              "canonical_id": "eta_max"
+            },
+            "sesso": {
+              "column_name": "sesso",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "F",
+                  "M"
+                ]
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "sesso"
+            },
+            "anno": {
+              "column_name": "anno",
+              "dtype": "integer",
+              "format": {
+                "type": "range",
+                "min": 2000.0,
+                "max": 2099.0
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "anno_fiscale"
+            },
+            "regione_di_residenza": {
+              "column_name": "regione_di_residenza",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "ABRUZZO",
+                  "BASILICATA",
+                  "CALABRIA",
+                  "CAMPANIA",
+                  "EMILIA ROMAGNA",
+                  "ESTERO",
+                  "FRIULI-VENEZIA GIULIA",
+                  "LAZIO",
+                  "LIGURIA",
+                  "LOMBARDIA",
+                  "MARCHE",
+                  "MOLISE",
+                  "PIEMONTE",
+                  "PUGLIA",
+                  "SARDEGNA",
+                  "SICILIA",
+                  "TOSCANA",
+                  "TRENTINO ALTO ADIGE",
+                  "UMBRIA",
+                  "VALLE D'AOSTA",
+                  "VENETO"
+                ]
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "regione_italiana_estesa"
+            },
+            "imponibili_previdenziali": {
+              "column_name": "imponibili_previdenziali",
+              "dtype": "float",
+              "format": {
+                "type": "regex",
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,2})?$"
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "euro_amount"
+            },
+            "reddito_relativo_anno_corrente": {
+              "column_name": "reddito_relativo_anno_corrente",
+              "dtype": "float",
+              "format": {
+                "type": "regex",
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,2})?$"
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "euro_amount"
+            },
+            "reddito_relativo_anni_precedenti": {
+              "column_name": "reddito_relativo_anni_precedenti",
+              "dtype": "float",
+              "format": {
+                "type": "regex",
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,2})?$"
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "euro_amount"
+            },
+            "ritenute_comunali": {
+              "column_name": "ritenute_comunali",
+              "dtype": "float",
+              "format": {
+                "type": "regex",
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,2})?$"
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "euro_amount"
+            },
+            "ritenute_regionali": {
+              "column_name": "ritenute_regionali",
+              "dtype": "float",
+              "format": {
+                "type": "regex",
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,2})?$"
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "euro_amount"
+            },
+            "ritenute_irpef_anno_corrente": {
+              "column_name": "ritenute_irpef_anno_corrente",
+              "dtype": "float",
+              "format": {
+                "type": "regex",
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,2})?$"
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "euro_amount"
+            },
+            "ritenute_irpef_anno_precedente": {
+              "column_name": "ritenute_irpef_anno_precedente",
+              "dtype": "float",
+              "format": {
+                "type": "regex",
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,2})?$"
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "euro_amount"
+            },
+            "totale_detrazioni": {
+              "column_name": "totale_detrazioni",
+              "dtype": "float",
+              "format": {
+                "type": "regex",
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,2})?$"
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "euro_amount"
+            },
+            "previdenza_complementare": {
+              "column_name": "previdenza_complementare",
+              "dtype": "float",
+              "format": {
+                "type": "regex",
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,2})?$"
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "euro_amount"
+            },
+            "numero_amministrati": {
+              "column_name": "numero_amministrati",
+              "dtype": "integer",
+              "format": {
+                "type": "range",
+                "min": 6.0,
+                "max": null
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": null
+            }
+          }
+        },
+        "EntryAmministratiPerFasciaDiReddito": {
+          "description": "Headcount of administered persons distributed across IRPEF income brackets, segmented by collective-bargaining sector, region of residence, demographics, and the maximum marginal IRPEF tax rate applied. Pre-aggregated structure means the count column ('numerosita') does NOT follow the k-anonymity floor of 6.",
+          "periodicity": null,
+          "columns": {
+            "comparto": {
+              "column_name": "comparto",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "ALTRO PERSONALE",
+                  "AREA DIRIGENZIALE FUNZIONI CENTRALI",
+                  "AREA DIRIGENZIALE FUNZIONI LOCALI",
+                  "AREA DIRIGENZIALE ISTRUZIONE E RICERCA",
+                  "AREA DIRIGENZIALE PRESIDENZA DEL CONSIGLIO DEI MINISTRI",
+                  "AREA DIRIGENZIALE SANITA'",
+                  "AUTORITA' INDIPENDENTI",
+                  "COMPARTO FUNZIONI CENTRALI",
+                  "COMPARTO FUNZIONI LOCALI",
+                  "COMPARTO ISTRUZIONE e RICERCA",
+                  "COMPARTO PRESIDENZA DEL CONSIGLIO DEI MINISTRI",
+                  "COMPARTO SANITA'",
+                  "ENTI PUBBLICI ECONOMICI - DIRIGENZA",
+                  "ENTI PUBBLICI ECONOMICI - PERSONALE",
+                  "PERSONALE ADDETTO SISTEMAZIONE IDRAULICA FORESTALE E AGRARIA",
+                  "PERSONALE CARRIERA SPECIALE DIPLOMATICA",
+                  "PERSONALE CARRIERA SPECIALE PREFETTIZIA",
+                  "PERSONALE DELLA MAGISTRATURA",
+                  "PERSONALE DI COLLABORAZIONE",
+                  "PERSONALE DIFESA  SICUREZZA E SOCCORSO PUBBLICO",
+                  "PERSONALE NON CONTRATTUALIZZATO",
+                  "PERSONALE REGIONI AUTONOME",
+                  "SANITA' MEDICINA GENERALE",
+                  "SANITA' MEDICINA SPECIALISTICA"
+                ]
+              },
+              "case_convention": "UPPER_with_lowercase_conjunctions",
+              "is_nullable": false,
+              "canonical_id": "comparto"
+            },
+            "regione_residenza": {
+              "column_name": "regione_residenza",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "ABRUZZO",
+                  "BASILICATA",
+                  "CALABRIA",
+                  "CAMPANIA",
+                  "EMILIA ROMAGNA",
+                  "ESTERO",
+                  "FRIULI-VENEZIA GIULIA",
+                  "LAZIO",
+                  "LIGURIA",
+                  "LOMBARDIA",
+                  "MARCHE",
+                  "MOLISE",
+                  "PIEMONTE",
+                  "PUGLIA",
+                  "SARDEGNA",
+                  "SICILIA",
+                  "TOSCANA",
+                  "TRENTINO ALTO ADIGE",
+                  "UMBRIA",
+                  "VALLE D'AOSTA",
+                  "VENETO"
+                ]
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "regione_italiana_estesa"
+            },
+            "sesso": {
+              "column_name": "sesso",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "F",
+                  "M"
+                ]
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "sesso"
+            },
+            "eta_min": {
+              "column_name": "eta_min",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  18,
+                  25,
+                  35,
+                  45,
+                  55,
+                  65
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "eta_min"
+            },
+            "eta_max": {
+              "column_name": "eta_max",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  24,
+                  34,
+                  44,
+                  54,
+                  64
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": true,
+              "canonical_id": "eta_max"
+            },
+            "aliquota_max": {
+              "column_name": "aliquota_max",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  23,
+                  35,
+                  43
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": null
+            },
+            "fascia_reddito_min": {
+              "column_name": "fascia_reddito_min",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "Oltre i 28000",
+                  "Oltre i 50000"
+                ]
+              },
+              "case_convention": "Title",
+              "is_nullable": true,
+              "canonical_id": null
+            },
+            "fascia_reddito_max": {
+              "column_name": "fascia_reddito_max",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "Fino a 28000",
+                  "Fino a 50000"
+                ]
+              },
+              "case_convention": "Title",
+              "is_nullable": true,
+              "canonical_id": null
+            },
+            "numerosita": {
+              "column_name": "numerosita",
+              "dtype": "integer",
+              "format": {
+                "type": "range",
+                "min": 1.0,
+                "max": null
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": null
+            }
+          }
+        },
+        "EntryAssegniFamiliari": {
+          "description": "Total family-allowance ('assegni familiari') disbursements by workplace province and employing administration. Notably narrow scope — only 6 distinct administrations represented — and uses pre-2022-rename ministry naming (e.g. 'MINISTERO DELL\\'ISTRUZIONE' rather than 'MINISTERO DELL\\'ISTRUZIONE E DEL MERITO') because the data is from late 2022.",
+          "periodicity": null,
+          "columns": {
+            "provincia_della_sede": {
+              "column_name": "provincia_della_sede",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú'\\- ]{4,30}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "provincia_della_sede"
+            },
+            "amministrazione": {
+              "column_name": "amministrazione",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú0-9'\\- \\.]{4,110}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "amministrazione_pa"
+            },
+            "numero": {
+              "column_name": "numero",
+              "dtype": "integer",
+              "format": {
+                "type": "range",
+                "min": 6.0,
+                "max": null
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": null
+            },
+            "importo": {
+              "column_name": "importo",
+              "dtype": "float",
+              "format": {
+                "type": "regex",
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,2})?$"
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "euro_amount"
+            }
+          }
+        },
+        "EntryAssenzeContabilizzate": {
+          "description": "Counts of accounted absences ('assenze contabilizzate') segmented by workplace municipality, employing administration, employee demographics, type of absence, and granularity (days vs hours). Largest dataset in the registry by row count.",
+          "periodicity": null,
+          "columns": {
+            "comune_della_sede": {
+              "column_name": "comune_della_sede",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú0-9'\\- \\.]{3,40}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "comune_della_sede"
+            },
+            "amministrazione": {
+              "column_name": "amministrazione",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú0-9'\\- \\.]{4,110}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "amministrazione_pa"
+            },
+            "eta_min": {
+              "column_name": "eta_min",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  18,
+                  25,
+                  35,
+                  45,
+                  55,
+                  65
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "eta_min"
+            },
+            "eta_max": {
+              "column_name": "eta_max",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  24,
+                  34,
+                  44,
+                  54,
+                  64
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": true,
+              "canonical_id": "eta_max"
+            },
+            "sesso": {
+              "column_name": "sesso",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "F",
+                  "M"
+                ]
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "sesso"
+            },
+            "motivazione_assenza": {
+              "column_name": "motivazione_assenza",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "ALTRE RIDUZIONI (assenze giornaliere)",
+                  "ALTRE RIDUZIONI (assenze orarie)",
+                  "ASPETTATIVE (assenze giornaliere)",
+                  "CONGEDI (assenze giornaliere)",
+                  "CONGEDI (assenze orarie)",
+                  "MALATTIE (assenze giornaliere)",
+                  "PERMESSI (assenze giornaliere)",
+                  "PERMESSI (assenze orarie)",
+                  "RIDUZIONI (assenze giornaliere)",
+                  "RIDUZIONI (assenze orarie)",
+                  "SCIOPERI (assenze giornaliere)",
+                  "SCIOPERI (assenze orarie)",
+                  "SERVIZI ALL'ESTERO (assenze giornaliere)",
+                  "SOSPENSIONI (assenze giornaliere)"
+                ]
+              },
+              "case_convention": "UPPER_with_lowercase_parenthesised_qualifier",
+              "is_nullable": false,
+              "canonical_id": null
+            },
+            "granularita_assenza": {
+              "column_name": "granularita_assenza",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "GG",
+                  "HH"
+                ]
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": null
+            },
+            "numero": {
+              "column_name": "numero",
+              "dtype": "integer",
+              "format": {
+                "type": "range",
+                "min": 6.0,
+                "max": null
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": null
+            }
+          }
+        },
+        "EntryCedolinoRitenuteFiscali": {
+          "description": "Per-payslip fiscal withholdings (IRPEF income tax) totals by workplace municipality, employing administration, and employee demographics. Reports both the taxable base and the IRPEF withheld, alongside the count of payslips contributing to the totals.",
+          "periodicity": null,
+          "columns": {
+            "comune_della_sede": {
+              "column_name": "comune_della_sede",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú0-9'\\- \\.]{3,40}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "comune_della_sede"
+            },
+            "amministrazione": {
+              "column_name": "amministrazione",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú0-9'\\- \\.]{4,110}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "amministrazione_pa"
+            },
+            "eta_min": {
+              "column_name": "eta_min",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  18,
+                  25,
+                  35,
+                  45,
+                  55,
+                  65
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "eta_min"
+            },
+            "eta_max": {
+              "column_name": "eta_max",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  24,
+                  34,
+                  44,
+                  54,
+                  64
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": true,
+              "canonical_id": "eta_max"
+            },
+            "sesso": {
+              "column_name": "sesso",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "F",
+                  "M"
+                ]
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "sesso"
+            },
+            "imponibile_fiscale": {
+              "column_name": "imponibile_fiscale",
+              "dtype": "float",
+              "format": {
+                "type": "regex",
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,2})?$"
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "euro_amount"
+            },
+            "importo_IRPEF": {
+              "column_name": "importo_IRPEF",
+              "dtype": "float",
+              "format": {
+                "type": "regex",
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,2})?$"
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "euro_amount"
+            },
+            "numero_cedolini": {
+              "column_name": "numero_cedolini",
+              "dtype": "integer",
+              "format": {
+                "type": "range",
+                "min": 6.0,
+                "max": null
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": null
+            }
+          }
+        },
+        "EntryCedolinoRitenutePrevidenziali": {
+          "description": "Per-payslip social-security/pension withholdings broken out by fund/scheme (INPS, INPDAP, CPDEL, ENPALS, INADEL, TFR, etc.), workplace municipality, administration, and demographics. Reports both worker and employer contributions; one or the other is legitimately zero for many schemes (e.g. employer-only DISOCCUPAZIONE, worker-only FONDO CREDITO).",
+          "periodicity": null,
+          "columns": {
+            "comune_della_sede": {
+              "column_name": "comune_della_sede",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú0-9'\\- \\.]{3,40}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "comune_della_sede"
+            },
+            "amministrazione": {
+              "column_name": "amministrazione",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú0-9'\\- \\.]{4,110}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "amministrazione_pa"
+            },
+            "eta_min": {
+              "column_name": "eta_min",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  18,
+                  25,
+                  35,
+                  45,
+                  55,
+                  65
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "eta_min"
+            },
+            "eta_max": {
+              "column_name": "eta_max",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  24,
+                  34,
+                  44,
+                  54,
+                  64
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": true,
+              "canonical_id": "eta_max"
+            },
+            "sesso": {
+              "column_name": "sesso",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "F",
+                  "M"
+                ]
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "sesso"
+            },
+            "ritenuta_previdenziale": {
+              "column_name": "ritenuta_previdenziale",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "ADDIZ. PENSION.",
+                  "C.P.U.G.",
+                  "CASSA GRADUATI - 2023",
+                  "CASSA SOTTUFFICIALI AM - 2023",
+                  "CASSA SOTTUFFICIALI EI",
+                  "CASSA SOTTUFFICIALI EI - 2023",
+                  "CASSA SOTTUFFICIALI MM - 2023",
+                  "CASSA UFFICIALI AM - 2023",
+                  "CASSA UFFICIALI EI - 2023",
+                  "CASSA UFFICIALI GDF",
+                  "CASSA UFFICIALI MM - 2023",
+                  "CPDEL",
+                  "DISOCCUPAZIONE",
+                  "ENPALS",
+                  "ENPDEP",
+                  "FAP EX INPGI CON DISOCC.",
+                  "FAP INPS P.E.",
+                  "FERROVIE",
+                  "FIP ENPDEP",
+                  "FONDO CREDITO",
+                  "FONDO PENSIONE-OTI-ZONA MONT",
+                  "FONDO PENSIONE-OTI-ZONA ORD",
+                  "FONDO PENSIONE-OTI-ZONA SVANT",
+                  "FONDO PREVIDENZA GDF",
+                  "GES.SEP.MAG.NO ES.AL.CAS.26 03",
+                  "GES.SEP.MAG.NOESC.SI FOR26 03%",
+                  "GESTIONE SEPARATA INPS 24%",
+                  "INADEL",
+                  "INADEL -  TFR 6 91",
+                  "INADEL TFR",
+                  "INAIL 0 72%",
+                  "INPDAP",
+                  "INPDAP 118%",
+                  "INPDAP F.POL.EX RETR.",
+                  "INPS",
+                  "INPS CON ASPI GAR. E INT.SALAR",
+                  "INPS CON ASPI GARANZIA",
+                  "INPS MAG. ESCL. + ASPI-MAL-MAT",
+                  "INPS-CUAF-IND-NASPI-INT-INAIL",
+                  "MAGGIORAZIONE FONDO CREDITO",
+                  "MAGGIORAZIONE INPDAP",
+                  "MAGGIORAZIONE INPDAP F.POL.EX RETR.",
+                  "OP.PREV.  IIS",
+                  "OPERA DI PREVIDENZA",
+                  "TFR"
+                ]
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": null
+            },
+            "importo_lavoratore": {
+              "column_name": "importo_lavoratore",
+              "dtype": "float",
+              "format": {
+                "type": "regex",
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,2})?$"
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "euro_amount"
+            },
+            "importo_datore": {
+              "column_name": "importo_datore",
+              "dtype": "float",
+              "format": {
+                "type": "regex",
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,2})?$"
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "euro_amount"
+            },
+            "numero_cedolini": {
+              "column_name": "numero_cedolini",
+              "dtype": "integer",
+              "format": {
+                "type": "range",
+                "min": 6.0,
+                "max": null
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": null
+            }
+          }
+        },
+        "EntryDetrazioniFamiliari": {
+          "description": "Counts of family-tax-deduction beneficiaries ('detrazioni per carichi di famiglia') by workplace municipality, employing administration, organisational unit, and category of dependant (spouse, children, other family members).",
+          "periodicity": null,
+          "columns": {
+            "comune_della_sede": {
+              "column_name": "comune_della_sede",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú0-9'\\- \\.]{3,40}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "comune_della_sede"
+            },
+            "amministrazione": {
+              "column_name": "amministrazione",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú0-9'\\- \\.]{4,110}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "amministrazione_pa"
+            },
+            "unita_organizzativa": {
+              "column_name": "unita_organizzativa",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú0-9'\\.\\-\\/ ]{3,140}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": null
+            },
+            "detrazioni_coniuge": {
+              "column_name": "detrazioni_coniuge",
+              "dtype": "integer",
+              "format": {
+                "type": "range",
+                "min": 0.0,
+                "max": null
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": null
+            },
+            "detrazioni_figli": {
+              "column_name": "detrazioni_figli",
+              "dtype": "integer",
+              "format": {
+                "type": "range",
+                "min": 0.0,
+                "max": null
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": null
+            },
+            "detrazioni_altri_familiari": {
+              "column_name": "detrazioni_altri_familiari",
+              "dtype": "integer",
+              "format": {
+                "type": "range",
+                "min": 0.0,
+                "max": null
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": null
+            },
+            "numero_amministrati": {
+              "column_name": "numero_amministrati",
+              "dtype": "integer",
+              "format": {
+                "type": "range",
+                "min": 6.0,
+                "max": null
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": null
+            }
+          }
+        },
+        "EntryRitenutePrestiti": {
+          "description": "Withholdings made on salary for personal-loan repayments — NoiPA acts as withholding agent. Segmented by employee province of residence, employing administration, demographics, and collective-bargaining sector. Schema-identical to EntryRitenuteSindacali.",
+          "periodicity": null,
+          "columns": {
+            "provincia_di_residenza": {
+              "column_name": "provincia_di_residenza",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú'\\- ]{4,30}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "provincia_di_residenza"
+            },
+            "amministrazione": {
+              "column_name": "amministrazione",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú0-9'\\- \\.]{4,110}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "amministrazione_pa"
+            },
+            "eta_min": {
+              "column_name": "eta_min",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  18,
+                  25,
+                  35,
+                  45,
+                  55,
+                  65
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "eta_min"
+            },
+            "eta_max": {
+              "column_name": "eta_max",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  24,
+                  34,
+                  44,
+                  54,
+                  64
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": true,
+              "canonical_id": "eta_max"
+            },
+            "sesso": {
+              "column_name": "sesso",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "F",
+                  "M"
+                ]
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "sesso"
+            },
+            "comparto": {
+              "column_name": "comparto",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "ALTRO PERSONALE",
+                  "AREA DIRIGENZIALE FUNZIONI CENTRALI",
+                  "AREA DIRIGENZIALE FUNZIONI LOCALI",
+                  "AREA DIRIGENZIALE ISTRUZIONE E RICERCA",
+                  "AREA DIRIGENZIALE PRESIDENZA DEL CONSIGLIO DEI MINISTRI",
+                  "AREA DIRIGENZIALE SANITA'",
+                  "AUTORITA' INDIPENDENTI",
+                  "COMPARTO FUNZIONI CENTRALI",
+                  "COMPARTO FUNZIONI LOCALI",
+                  "COMPARTO ISTRUZIONE e RICERCA",
+                  "COMPARTO PRESIDENZA DEL CONSIGLIO DEI MINISTRI",
+                  "COMPARTO SANITA'",
+                  "ENTI PUBBLICI ECONOMICI - DIRIGENZA",
+                  "ENTI PUBBLICI ECONOMICI - PERSONALE",
+                  "PERSONALE ADDETTO SISTEMAZIONE IDRAULICA FORESTALE E AGRARIA",
+                  "PERSONALE CARRIERA SPECIALE DIPLOMATICA",
+                  "PERSONALE CARRIERA SPECIALE PREFETTIZIA",
+                  "PERSONALE DELLA MAGISTRATURA",
+                  "PERSONALE DI COLLABORAZIONE",
+                  "PERSONALE DIFESA  SICUREZZA E SOCCORSO PUBBLICO",
+                  "PERSONALE NON CONTRATTUALIZZATO",
+                  "PERSONALE REGIONI AUTONOME",
+                  "SANITA' MEDICINA GENERALE",
+                  "SANITA' MEDICINA SPECIALISTICA"
+                ]
+              },
+              "case_convention": "UPPER_with_lowercase_conjunctions",
+              "is_nullable": false,
+              "canonical_id": "comparto"
+            },
+            "importo_ritenute": {
+              "column_name": "importo_ritenute",
+              "dtype": "float",
+              "format": {
+                "type": "regex",
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,2})?$"
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "euro_amount"
+            },
+            "numero_ritenute": {
+              "column_name": "numero_ritenute",
+              "dtype": "integer",
+              "format": {
+                "type": "range",
+                "min": 6.0,
+                "max": null
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": null
+            }
+          }
+        },
+        "EntryRitenuteSindacali": {
+          "description": "Withholdings made on salary for trade-union dues ('ritenute sindacali'). Segmented by employee province of residence, employing administration, demographics, and collective-bargaining sector. Schema-identical to EntryRitenutePrestiti.",
+          "periodicity": null,
+          "columns": {
+            "provincia_di_residenza": {
+              "column_name": "provincia_di_residenza",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú'\\- ]{4,30}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "provincia_di_residenza"
+            },
+            "amministrazione": {
+              "column_name": "amministrazione",
+              "dtype": "string",
+              "format": {
+                "type": "regex",
+                "pattern": "^[A-ZÀ-Ú0-9'\\- \\.]{4,110}$"
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "amministrazione_pa"
+            },
+            "eta_min": {
+              "column_name": "eta_min",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  18,
+                  25,
+                  35,
+                  45,
+                  55,
+                  65
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "eta_min"
+            },
+            "eta_max": {
+              "column_name": "eta_max",
+              "dtype": "integer",
+              "format": {
+                "type": "enum",
+                "values": [
+                  24,
+                  34,
+                  44,
+                  54,
+                  64
+                ]
+              },
+              "case_convention": null,
+              "is_nullable": true,
+              "canonical_id": "eta_max"
+            },
+            "sesso": {
+              "column_name": "sesso",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "F",
+                  "M"
+                ]
+              },
+              "case_convention": "UPPER",
+              "is_nullable": false,
+              "canonical_id": "sesso"
+            },
+            "comparto": {
+              "column_name": "comparto",
+              "dtype": "string",
+              "format": {
+                "type": "enum",
+                "values": [
+                  "ALTRO PERSONALE",
+                  "AREA DIRIGENZIALE FUNZIONI CENTRALI",
+                  "AREA DIRIGENZIALE FUNZIONI LOCALI",
+                  "AREA DIRIGENZIALE ISTRUZIONE E RICERCA",
+                  "AREA DIRIGENZIALE PRESIDENZA DEL CONSIGLIO DEI MINISTRI",
+                  "AREA DIRIGENZIALE SANITA'",
+                  "AUTORITA' INDIPENDENTI",
+                  "COMPARTO FUNZIONI CENTRALI",
+                  "COMPARTO FUNZIONI LOCALI",
+                  "COMPARTO ISTRUZIONE e RICERCA",
+                  "COMPARTO PRESIDENZA DEL CONSIGLIO DEI MINISTRI",
+                  "COMPARTO SANITA'",
+                  "ENTI PUBBLICI ECONOMICI - DIRIGENZA",
+                  "ENTI PUBBLICI ECONOMICI - PERSONALE",
+                  "PERSONALE ADDETTO SISTEMAZIONE IDRAULICA FORESTALE E AGRARIA",
+                  "PERSONALE CARRIERA SPECIALE DIPLOMATICA",
+                  "PERSONALE CARRIERA SPECIALE PREFETTIZIA",
+                  "PERSONALE DELLA MAGISTRATURA",
+                  "PERSONALE DI COLLABORAZIONE",
+                  "PERSONALE DIFESA  SICUREZZA E SOCCORSO PUBBLICO",
+                  "PERSONALE NON CONTRATTUALIZZATO",
+                  "PERSONALE REGIONI AUTONOME",
+                  "SANITA' MEDICINA GENERALE",
+                  "SANITA' MEDICINA SPECIALISTICA"
+                ]
+              },
+              "case_convention": "UPPER_with_lowercase_conjunctions",
+              "is_nullable": false,
+              "canonical_id": "comparto"
+            },
+            "importo_ritenute": {
+              "column_name": "importo_ritenute",
+              "dtype": "float",
+              "format": {
+                "type": "regex",
+                "pattern": "^-?[0-9]+(\\.[0-9]{1,2})?$"
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": "euro_amount"
+            },
+            "numero_ritenute": {
+              "column_name": "numero_ritenute",
+              "dtype": "integer",
+              "format": {
+                "type": "range",
+                "min": 6.0,
+                "max": null
+              },
+              "case_convention": null,
+              "is_nullable": false,
+              "canonical_id": null
+            }
+          }
+        }
+      }
+    }
+  },
+  "shared_definitions": {
+    "sesso": {
+      "column_name": "sesso",
+      "dtype": "string",
+      "format": {
+        "type": "enum",
+        "values": [
+          "F",
+          "M"
+        ]
+      },
+      "case_convention": "UPPER",
+      "is_nullable": false,
+      "canonical_id": "sesso"
+    },
+    "eta_min": {
+      "column_name": "eta_min",
+      "dtype": "integer",
+      "format": {
+        "type": "enum",
+        "values": [
+          18,
+          25,
+          35,
+          45,
+          55,
+          65
+        ]
+      },
+      "case_convention": null,
+      "is_nullable": false,
+      "canonical_id": "eta_min"
+    },
+    "eta_max": {
+      "column_name": "eta_max",
+      "dtype": "integer",
+      "format": {
+        "type": "enum",
+        "values": [
+          24,
+          34,
+          44,
+          54,
+          64
+        ]
+      },
+      "case_convention": null,
+      "is_nullable": true,
+      "canonical_id": "eta_max"
+    },
+    "comune_della_sede": {
+      "column_name": "comune_della_sede",
+      "dtype": "string",
+      "format": {
+        "type": "regex",
+        "pattern": "^[A-ZÀ-Ú0-9'\\- \\.]{3,40}$"
+      },
+      "case_convention": "UPPER",
+      "is_nullable": false,
+      "canonical_id": "comune_della_sede"
+    },
+    "amministrazione_pa": {
+      "column_name": "amministrazione_pa",
+      "dtype": "string",
+      "format": {
+        "type": "regex",
+        "pattern": "^[A-ZÀ-Ú0-9'\\- \\.]{4,110}$"
+      },
+      "case_convention": "UPPER",
+      "is_nullable": false,
+      "canonical_id": "amministrazione_pa"
+    },
+    "provincia_della_sede": {
+      "column_name": "provincia_della_sede",
+      "dtype": "string",
+      "format": {
+        "type": "regex",
+        "pattern": "^[A-ZÀ-Ú'\\- ]{4,30}$"
+      },
+      "case_convention": "UPPER",
+      "is_nullable": false,
+      "canonical_id": "provincia_della_sede"
+    },
+    "comparto": {
+      "column_name": "comparto",
+      "dtype": "string",
+      "format": {
+        "type": "enum",
+        "values": [
+          "ALTRO PERSONALE",
+          "AREA DIRIGENZIALE FUNZIONI CENTRALI",
+          "AREA DIRIGENZIALE FUNZIONI LOCALI",
+          "AREA DIRIGENZIALE ISTRUZIONE E RICERCA",
+          "AREA DIRIGENZIALE PRESIDENZA DEL CONSIGLIO DEI MINISTRI",
+          "AREA DIRIGENZIALE SANITA'",
+          "AUTORITA' INDIPENDENTI",
+          "COMPARTO FUNZIONI CENTRALI",
+          "COMPARTO FUNZIONI LOCALI",
+          "COMPARTO ISTRUZIONE e RICERCA",
+          "COMPARTO PRESIDENZA DEL CONSIGLIO DEI MINISTRI",
+          "COMPARTO SANITA'",
+          "ENTI PUBBLICI ECONOMICI - DIRIGENZA",
+          "ENTI PUBBLICI ECONOMICI - PERSONALE",
+          "PERSONALE ADDETTO SISTEMAZIONE IDRAULICA FORESTALE E AGRARIA",
+          "PERSONALE CARRIERA SPECIALE DIPLOMATICA",
+          "PERSONALE CARRIERA SPECIALE PREFETTIZIA",
+          "PERSONALE DELLA MAGISTRATURA",
+          "PERSONALE DI COLLABORAZIONE",
+          "PERSONALE DIFESA  SICUREZZA E SOCCORSO PUBBLICO",
+          "PERSONALE NON CONTRATTUALIZZATO",
+          "PERSONALE REGIONI AUTONOME",
+          "SANITA' MEDICINA GENERALE",
+          "SANITA' MEDICINA SPECIALISTICA"
+        ]
+      },
+      "case_convention": "UPPER_with_lowercase_conjunctions",
+      "is_nullable": false,
+      "canonical_id": "comparto"
+    },
+    "inquadramento": {
+      "column_name": "inquadramento",
+      "dtype": "string",
+      "format": {
+        "type": "regex",
+        "pattern": "^[A-ZÀ-Ú0-9'\\.\\-\\/ ]{6,40}$"
+      },
+      "case_convention": "UPPER",
+      "is_nullable": false,
+      "canonical_id": "inquadramento"
+    },
+    "provincia_di_residenza": {
+      "column_name": "provincia_di_residenza",
+      "dtype": "string",
+      "format": {
+        "type": "regex",
+        "pattern": "^[A-ZÀ-Ú'\\- ]{4,30}$"
+      },
+      "case_convention": "UPPER",
+      "is_nullable": false,
+      "canonical_id": "provincia_di_residenza"
+    },
+    "regione_italiana_estesa": {
+      "column_name": "regione_italiana_estesa",
+      "dtype": "string",
+      "format": {
+        "type": "enum",
+        "values": [
+          "ABRUZZO",
+          "BASILICATA",
+          "CALABRIA",
+          "CAMPANIA",
+          "EMILIA ROMAGNA",
+          "ESTERO",
+          "FRIULI-VENEZIA GIULIA",
+          "LAZIO",
+          "LIGURIA",
+          "LOMBARDIA",
+          "MARCHE",
+          "MOLISE",
+          "PIEMONTE",
+          "PUGLIA",
+          "SARDEGNA",
+          "SICILIA",
+          "TOSCANA",
+          "TRENTINO ALTO ADIGE",
+          "UMBRIA",
+          "VALLE D'AOSTA",
+          "VENETO"
+        ]
+      },
+      "case_convention": "UPPER",
+      "is_nullable": false,
+      "canonical_id": "regione_italiana_estesa"
+    },
+    "euro_amount": {
+      "column_name": "euro_amount",
+      "dtype": "float",
+      "format": {
+        "type": "regex",
+        "pattern": "^-?[0-9]+(\\.[0-9]{1,2})?$"
+      },
+      "case_convention": null,
+      "is_nullable": false,
+      "canonical_id": "euro_amount"
+    },
+    "anno_fiscale": {
+      "column_name": "anno_fiscale",
+      "dtype": "integer",
+      "format": {
+        "type": "range",
+        "min": 2000.0,
+        "max": 2099.0
+      },
+      "case_convention": null,
+      "is_nullable": false,
+      "canonical_id": "anno_fiscale"
+    }
+  },
+  "global_conventions": {
+    "naming_convention": "snake_case_lower_with_uppercase_acronym_suffix",
+    "naming_regex": "^[a-z][a-z0-9_]*(_[A-Z]{2,})?$",
+    "encoding": "utf-8",
+    "csv_separator": ",",
+    "decimal_separator": ".",
+    "filename_convention_monthly": "EntryDatasetName_YYYYMM.csv",
+    "filename_convention_annual": "EntryDatasetName_YYYY.csv",
+    "k_anonymity_floor_for_person_counts": 6
+  },
+  "observations": {
+    "amministrati_observations": [
+      "All count columns (numero, numero_amministrati, numero_occorrenze) have a minimum value of 6 — strongly suggests a k-anonymity privacy floor applied at source.",
+      "eta_max is null exactly when eta_min == 65 (open-ended top age bracket '65+').",
+      "Age brackets follow fixed pairs: (18,24)(25,34)(35,44)(45,54)(55,64)(65,null).",
+      "Three column names refer to the same conceptual entity (Italian PA body): 'amministrazione', 'amministrazione_appartenenza', 'ente'. Same value space (~50–69 unique uppercase entity names).",
+      "regione_residenza_domicilio includes 'ESTERO' as a 21st valid value alongside the 20 Italian regions.",
+      "distance_min_KM / distance_max_KM are paired bucket bounds; both nullable when stesso_comune == 'SI'."
+    ],
+    "amministrazioni_observations": [
+      "Structural/organizational counts (e.g. numero_unita_organizzative) do NOT follow the k-anonymity floor of 6 — they start at 1. The floor of 6 appears to apply only to person-counts, not entity-counts. Important distinction for the Anomaly Detection Agent: a value of 1 in numero_unita_organizzative is normal; a value of 1 in any 'numero' column counting people is an anomaly.",
+      "EntryStrutturaOrganizzativa shares 5 of 7 columns with Amministrati datasets (comune_della_sede, amministrazione, eta_min, eta_max, sesso) — structurally a near-twin of EntryAccreditoStipendi, swapping payment-method dimensions for organizational-structure metrics."
+    ],
+    "rapporti_di_lavoro_observations": [
+      "K-anonymity floor of 6 on person-count 'numero' column is now confirmed across all 4 datasets in this domain — total of 8 datasets across 3 domains. Strong candidate for promotion to a formal cross-column constraint at the registry level.",
+      "eta_max nullability rule (null iff eta_min == 65) holds across all 3 demographic-bearing datasets in this domain — same as Amministrati and Amministrazioni. Universal rule.",
+      "comparto column appears in 2 datasets (EntryContrattiGestiti has 21 unique values, EntryInquadramenti has 22); EntryInquadramenti contains one extra value 'AUTORITA\\' INDIPENDENTI'. Shared definition uses the union of 22 values.",
+      "comparto value 'COMPARTO ISTRUZIONE e RICERCA' contains a deliberately lowercase Italian conjunction 'e'; this is intentional Italian editorial style, not a casing error. Schema Validation Agent should NOT flag this.",
+      "amministrazione value space drifts across datasets (45–69 unique values seen so far). The true canonical list of NoiPA-served entities is at minimum 69. An enum-based validation would be too brittle; the existing regex approach is correct.",
+      "provincia_della_sede value count drifts: 108 in most datasets, 111 in EntryContrattiGestiti and EntryInquadramenti. The 3 extra are likely provinces represented only in those datasets due to k-anonymity suppression elsewhere. Confirms regex-based validation over enum.",
+      "EntryInquadramenti is the only dataset in this domain with no demographic dimensions (no eta_min, eta_max, sesso) — it groups by contractual-classification dimensions only."
+    ],
+    "trattamento_economico_observations": [
+      "K-anonymity floor of 6 on person-and-event count columns is now confirmed across the entire registry (15 datasets, 4 domains) with one explicit exception: EntryAmministratiPerFasciaDiReddito.numerosita starts at 1 — likely because the dataset is already pre-aggregated into income bands rather than identifiable individual rows. The floor is now formalized in metadata.global_conventions.",
+      "EntryCertificazioniUniche is the only annual dataset in the entire registry; its three snapshots are indexed by tax year (2022, 2023, 2024), not by YYYYMM. The canonical filename convention is EntryCertificazioniUniche_YYYY where YYYY is the publication year (one year after the tax year reflected in the data). The CSVs received in this build were misnamed ENTRYC_1.CSV (=2024 tax year), ENTRYC_2.CSV (=2023), ENTRYC_3.CSV (=2022).",
+      "Three different column names refer to the same conceptual entity (Italian region of residence): 'regione_residenza_domicilio' (Amministrati), 'regione_residenza' (Trattamento Economico), and 'regione_di_residenza' (Trattamento Economico). Same alias-group pattern as amministrazione/amministrazione_appartenenza/ente. Promoted to shared definition 'regione_italiana_estesa' with a 21-value enum (20 Italian regions + ESTERO). Note: not every dataset uses the ESTERO value (e.g. EntryCertificazioniUniche has only 20 of 21).",
+      "comparto enum grew from 22 to 25 values upon analysing EntryAmministratiPerFasciaDiReddito (added 'PERSONALE REGIONI AUTONOME' and 'PERSONALE DI COLLABORAZIONE'). Shared definition updated.",
+      "provincia_di_residenza now appears in 3 datasets (EntryResidenti, EntryRitenutePrestiti, EntryRitenuteSindacali) — promoted from inline definition in EntryResidenti to a formal shared definition.",
+      "Monetary amounts across all financial datasets follow a consistent format: positive decimal, dot decimal separator, 1–2 decimal places, no thousands separator (e.g. '272238.68', '87.8'). Promoted to shared definition 'euro_amount'. A subset of fields can be zero (e.g. importo_lavoratore for employer-only contributions like DISOCCUPAZIONE), which is valid.",
+      "EntryAssegniFamiliari uses older 2022-era ministry naming ('MINISTERO DELL\\'ISTRUZIONE' rather than 'MINISTERO DELL\\'ISTRUZIONE E DEL MERITO' — the ministry was renamed in late 2022). The amministrazione_pa regex accepts both forms; the Schema Validation Agent should NOT flag this as a validation error.",
+      "EntryAssenzeContabilizzate.numero stores integer counts as decimal-formatted floats (e.g. '6.0', '7.0') rather than plain integers like every other count column. Pure formatting quirk; values are integer-equivalent. Worth normalising to int during ingestion.",
+      "EntryAssenzeContabilizzate.motivazione_assenza enum values use lowercase parenthesised qualifiers (e.g. 'CONGEDI (assenze giornaliere)') — intentional Italian editorial style, like 'COMPARTO ISTRUZIONE e RICERCA'. Schema Validation Agent should NOT flag the lowercase qualifier as a casing error.",
+      "EntryCedolinoRitenutePrevidenziali.ritenuta_previdenziale enum is highly heterogeneous (45 values mixing acronyms, embedded years, and percentages e.g. 'CASSA UFFICIALI EI - 2023', 'INPDAP 118%', 'INAIL 0 72%'). Captured as enum but agents should expect future schema growth as new social-security funds are added.",
+      "EntryAmministratiPerFasciaDiReddito uses text-encoded income brackets (fascia_reddito_min, fascia_reddito_max) with Italian-language values like 'Fino a 28000' and 'Oltre i 28000' — Title Case Italian, not numeric. Both columns are nullable for the open-ended top and bottom brackets respectively (mirrors the eta_min/eta_max nullability pattern).",
+      "EntryRitenuteSindacali and EntryRitenutePrestiti are schema-identical twin datasets (same 8 columns, same dtypes, same nullability) — they differ only semantically (trade-union dues vs personal-loan repayments). Captured as separate datasets but agents could treat them with shared validation logic.",
+      "EntryCedolinoRitenutePrevidenziali contains many rows where importo_lavoratore = 0 OR importo_datore = 0 (~25% and ~22% respectively). This is NOT missing data — it reflects the contribution structure (some funds are employer-only e.g. DISOCCUPAZIONE, others worker-only e.g. FONDO CREDITO). Anomaly Detection Agent should NOT flag zeros in these columns."
+    ]
+  }
 }
