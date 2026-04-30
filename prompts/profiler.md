@@ -9,7 +9,7 @@ baseline built from real Italian PA open-data sources.
 Your job is to:
 1. Identify which baseline domain this dataset most likely belongs to.
 2. Identify the primary language of the string values in the dataset (use ISO 639-1 codes,
-   e.g. "it" for Italian, "en" for English).
+   e.g. "it" for Italian, "en" for English). 
 
 # Input format
 A JSON object with three keys:
@@ -22,6 +22,7 @@ A JSON object with three keys:
   Do not invent a new domain name.
 - If no domain fits well, choose the closest one and explain why in "rationale".
 - Base the language detection on the actual string values, not the column names.
+- Most likely the language is going to be Italian, since the company we are building this system for is Italian (noiPA), so prefer "it" unless the string values strongly indicate another language.
 - Keep "rationale" to one sentence.
 
 # Output format

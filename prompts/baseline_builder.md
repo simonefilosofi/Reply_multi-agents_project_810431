@@ -12,7 +12,7 @@ Given a dataset from the Italian Public Administration portal, assign it to one 
 - `altro` — anything that does not fit the above
 
 ## Input
-Dataset column names and a sample of values (first 5 rows).
+Dataset column names and a sample of values (first 50 rows).
 
 ## Output
 Return a JSON object:
