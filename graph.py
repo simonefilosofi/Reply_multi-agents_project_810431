@@ -9,6 +9,7 @@ from agents.duplicate_row import duplicate_row_node
 from agents.format_consistency import format_consistency_node
 from agents.nan_handler import nan_handler_node
 from agents.profiler import profiler_node
+from agents.report_generator import report_generator_node
 from agents.semantic import semantic_node
 from state import PipelineState
 
@@ -24,6 +25,7 @@ def build_graph() -> StateGraph:
     g.add_node("format_consistency", format_consistency_node)
     g.add_node("nan_handler", nan_handler_node)
     g.add_node("duplicate_row", duplicate_row_node)
+    g.add_node("report_generator", report_generator_node)
 
     g.set_entry_point("baseline_builder")
     g.add_edge("baseline_builder", "profiler")
@@ -33,7 +35,8 @@ def build_graph() -> StateGraph:
     g.add_edge("duplicate_column", "classification")
     g.add_edge("classification", "format_consistency")
     g.add_edge("format_consistency", "duplicate_row")
-    g.add_edge("duplicate_row", END)
+    g.add_edge("duplicate_row", "report_generator")
+    g.add_edge("report_generator", END)
 
     return g
 
