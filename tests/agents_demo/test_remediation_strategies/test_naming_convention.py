@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from agents_demo.remediation_strategies.naming_convention import NamingConventionStrategy
-from state_demo.issues import NamingConventionIssue
+from state.issues import NamingConventionIssue
 
 
 def test_naming_convention_renames_camel_case(make_agent) -> None:

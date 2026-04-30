@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from agents_demo.remediation_strategies.fractional_integers import FractionalIntegersStrategy
-from state_demo.issues import FractionalIntegersIssue
+from state.issues import FractionalIntegersIssue
 
 
 def test_fractional_integers_nulls_non_trivial_fractions(make_agent) -> None:

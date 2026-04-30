@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from agents_demo.remediation_strategies.mixed_type import MixedTypeStrategy
-from state_demo.issues import MixedTypeIssue
+from state.issues import MixedTypeIssue
 
 
 def test_mixed_type_coerces_to_numeric(make_agent) -> None:

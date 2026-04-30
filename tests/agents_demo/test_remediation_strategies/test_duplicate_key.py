@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from agents_demo.remediation_strategies.duplicate_key import DuplicateKeyStrategy
-from state_demo.issues import DuplicateKeyIssue
+from state.issues import DuplicateKeyIssue
 
 
 def test_duplicate_key_drops_dup_rows_on_id_column(make_agent) -> None:

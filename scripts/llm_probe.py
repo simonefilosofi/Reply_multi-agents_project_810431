@@ -22,7 +22,7 @@ load_dotenv(ROOT / ".env")
 
 from pydantic_ai import Agent  # noqa: E402
 
-from state_demo import settings  # noqa: E402
+from state import settings  # noqa: E402
 
 
 def probe(label: str, model_id: str) -> tuple[bool, str]:

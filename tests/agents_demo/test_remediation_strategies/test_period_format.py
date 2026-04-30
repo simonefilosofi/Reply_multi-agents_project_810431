@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from agents_demo.remediation_strategies.period_format import PeriodFormatStrategy
-from state_demo.issues import PeriodFormatInconsistencyIssue
+from state.issues import PeriodFormatInconsistencyIssue
 
 
 def test_period_format_normalises_mixed_codes(make_agent) -> None:

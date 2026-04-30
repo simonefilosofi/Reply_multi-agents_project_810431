@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from agents_demo.remediation_strategies.missing_values import MissingValuesStrategy
-from state_demo.issues import MissingValuesIssue
+from state.issues import MissingValuesIssue
 
 
 def test_missing_values_imputes_low_severity_numeric(make_agent) -> None:

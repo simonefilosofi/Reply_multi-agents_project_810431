@@ -12,8 +12,8 @@ import pandas as pd
 
 from agents_demo._enrichment import EnrichmentResponse
 from agents_demo.consistency_agent import ConsistencyAgent
-from state_demo.issues import ISSUE_ADAPTER, DateOrderIssue, IssueBase
-from state_demo.pipeline_state import PipelineState
+from state.issues import ISSUE_ADAPTER, DateOrderIssue, IssueBase
+from state.pipeline_state import PipelineState
 
 
 def _validate_each(issues: list[Any]) -> None:

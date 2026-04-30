@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from agents_demo.remediation_strategies.placeholder import PlaceholderStrategy
-from state_demo.issues import PlaceholderValuesIssue
+from state.issues import PlaceholderValuesIssue
 
 
 def test_placeholder_replaces_known_sentinels(make_agent) -> None:

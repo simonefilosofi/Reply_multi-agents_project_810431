@@ -26,8 +26,8 @@ import pytest
 
 import tools_code_validator
 from agents_demo.code_validator_agent import CodeValidatorAgent
-from state_demo import settings as global_settings
-from state_demo.pipeline_state import PipelineState
+from state import settings as global_settings
+from state.pipeline_state import PipelineState
 from tools_code_validator import (
     _parse_mem_to_bytes,
     _reset_docker_probe,

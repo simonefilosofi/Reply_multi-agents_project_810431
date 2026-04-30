@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from agents_demo.remediation_strategies.format_pattern import FormatPatternStrategy
-from state_demo.issues import FormatPatternViolationIssue
+from state.issues import FormatPatternViolationIssue
 
 
 def test_format_pattern_nulls_violations_using_typed_field(make_agent) -> None:

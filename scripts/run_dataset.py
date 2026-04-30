@@ -28,7 +28,7 @@ import pandas as pd  # noqa: E402
 
 from agents_demo._graph import build_pipeline_graph, state_from_dict  # noqa: E402
 from agents_demo.report_agent import serialize_report  # noqa: E402
-from state_demo import settings  # noqa: E402
+from state import settings  # noqa: E402
 
 
 def _install_lean_llm_patches() -> None:

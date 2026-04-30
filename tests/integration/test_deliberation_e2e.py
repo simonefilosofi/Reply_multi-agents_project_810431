@@ -18,8 +18,8 @@ import pandas as pd
 import pytest
 
 from agents_demo.synthesis_agent import SynthesisAgent
-from state_demo.deliberation import Vote
-from state_demo.issues import (
+from state.deliberation import Vote
+from state.issues import (
     DomainNegativeValuesIssue,
     DuplicateColumnsIssue,
     InvalidDatesIssue,
@@ -28,7 +28,7 @@ from state_demo.issues import (
     MixedTypeIssue,
     OutliersIssue,
 )
-from state_demo.pipeline_state import PipelineState
+from state.pipeline_state import PipelineState
 
 
 def _wide_state(wide_dirty_df: pd.DataFrame) -> PipelineState:

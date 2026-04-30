@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from agents_demo.remediation_strategies.currency_symbol import CurrencySymbolStrategy
-from state_demo.issues import CurrencySymbolInNumericIssue
+from state.issues import CurrencySymbolInNumericIssue
 
 
 def test_currency_symbol_strips_symbols(make_agent) -> None:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from agents_demo.remediation_strategies.invalid_dates import InvalidDatesStrategy
-from state_demo.issues import InvalidDatesIssue
+from state.issues import InvalidDatesIssue
 
 
 def test_invalid_dates_reparses_italian_dates(make_agent) -> None:

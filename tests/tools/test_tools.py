@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from state_demo.constants import PLACEHOLDERS
+from state.constants import PLACEHOLDERS
 from tools import (
     apply_lookup_imputation,
     check_format_pattern,

@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from state_demo.issues import (
+from state.issues import (
     ISSUE_ADAPTER,
     ISSUE_SUBCLASSES,
     IssueBase,
@@ -124,7 +124,7 @@ def test_duplicate_key_auto_populates_column() -> None:
 
 def test_subclasses_match_constants_one_to_one() -> None:
     """Every subclass type must have a matching key in constants.ISSUE_TYPES and vice versa."""
-    from state_demo.constants import ISSUE_TYPES
+    from state.constants import ISSUE_TYPES
 
     sub_types = {c.model_fields["type"].default for c in ISSUE_SUBCLASSES}
     const_types = set(ISSUE_TYPES)

@@ -17,9 +17,9 @@ import pytest
 
 from agents_demo.base_agent import BaseAgent
 from agents_demo.synthesis_agent import SynthesisAgent
-from state_demo import settings as live_settings
-from state_demo.deliberation import SupervisorDecision, Vote
-from state_demo.issues import (
+from state import settings as live_settings
+from state.deliberation import SupervisorDecision, Vote
+from state.issues import (
     DomainNegativeValuesIssue,
     DuplicateColumnsIssue,
     InvalidDatesIssue,
@@ -28,7 +28,7 @@ from state_demo.issues import (
     MixedTypeIssue,
     OutliersIssue,
 )
-from state_demo.pipeline_state import PipelineState
+from state.pipeline_state import PipelineState
 
 
 def _seed_empty_reports(state: PipelineState) -> None:

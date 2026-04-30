@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from agents_demo.remediation_strategies.duplicate_columns import DuplicateColumnsStrategy
-from state_demo.issues import DuplicateColumnsIssue
+from state.issues import DuplicateColumnsIssue
 
 
 def test_duplicate_columns_drops_one_when_overlap_high(make_agent) -> None:

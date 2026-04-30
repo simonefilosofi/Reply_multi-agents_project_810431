@@ -28,8 +28,8 @@ import sys
 import numpy as np
 import pandas as pd
 
-from state_demo.config import Settings
-from state_demo.helpers import non_empty_values
+from state.config import Settings
+from state.helpers import non_empty_values
 
 logger = logging.getLogger(__name__)
 

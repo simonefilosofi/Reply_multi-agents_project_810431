@@ -43,10 +43,10 @@ sys.path.insert(0, str(ROOT / "data" / "examples"))
 from agents_demo._graph import build_pipeline_graph, state_from_dict  # noqa: E402
 from agents_demo.report_agent import serialize_report  # noqa: E402
 from agents_demo.synthesis_agent import SynthesisAgent  # noqa: E402
-from state_demo import settings  # noqa: E402
-from state_demo.deliberation import Vote  # noqa: E402
-from state_demo.fingerprint_schema import DatasetFingerprint  # noqa: E402
-from state_demo.issues import Issue  # noqa: E402
+from state import settings  # noqa: E402
+from state.deliberation import Vote  # noqa: E402
+from state.fingerprint_schema import DatasetFingerprint  # noqa: E402
+from state.issues import Issue  # noqa: E402
 
 DATA_DIR = ROOT / "data" / "examples"
 CLEAN_CSV = DATA_DIR / "clean_noipa_sample.csv"
@@ -222,7 +222,7 @@ def run_wide_dirty_assertions() -> None:
     import numpy as np
     from _generate import build_wide_dirty_df
 
-    from state_demo.issues import (
+    from state.issues import (
         DomainNegativeValuesIssue,
         DuplicateColumnsIssue,
         InvalidDatesIssue,
@@ -230,7 +230,7 @@ def run_wide_dirty_assertions() -> None:
         MixedTypeIssue,
         OutliersIssue,
     )
-    from state_demo.pipeline_state import PipelineState
+    from state.pipeline_state import PipelineState
 
     df = build_wide_dirty_df().copy()
     rng = np.random.default_rng(42)

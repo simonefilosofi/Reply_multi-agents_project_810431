@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from agents_demo.remediation_strategies.duplicate_rows import DuplicateRowsStrategy
-from state_demo.issues import DuplicateRowsIssue
+from state.issues import DuplicateRowsIssue
 
 
 def test_duplicate_rows_drops_duplicates(make_agent) -> None:

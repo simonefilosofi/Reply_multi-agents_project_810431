@@ -19,8 +19,8 @@ from pydantic_ai.models.test import TestModel
 
 from agents_demo._llm_clients import reset_model_cache
 from agents_demo.base_agent import FAST, SMART, BaseAgent
-from state_demo import settings
-from state_demo.pipeline_state import PipelineState
+from state import settings
+from state.pipeline_state import PipelineState
 
 
 class _SmartAgent(BaseAgent):

@@ -18,9 +18,9 @@ import pandas as pd
 import pytest
 
 from agents_demo.report_agent import ReportAgent, serialize_report
-from state_demo.deliberation import DeliberationOutcome, Vote
-from state_demo.issues import MissingValuesIssue, OutliersIssue
-from state_demo.pipeline_state import PipelineState
+from state.deliberation import DeliberationOutcome, Vote
+from state.issues import MissingValuesIssue, OutliersIssue
+from state.pipeline_state import PipelineState
 from tools import (
     chart_completeness_heatmap_before_after,
     chart_dimension_trajectory,

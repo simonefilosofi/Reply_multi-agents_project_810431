@@ -26,12 +26,12 @@ import pandas as pd
 import pytest
 
 from agents_demo.remediation_agent import RemediationAgent
-from state_demo.issues import (
+from state.issues import (
     CommaDecimalFormatIssue,
     CurrencySymbolInNumericIssue,
     MixedTypeIssue,
 )
-from state_demo.pipeline_state import PipelineState
+from state.pipeline_state import PipelineState
 
 
 def test_currency_then_comma_decimal_then_numeric_coercion(

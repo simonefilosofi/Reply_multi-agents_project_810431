@@ -28,8 +28,8 @@ from agents_demo.remediation_agent import RemediationAgent
 from agents_demo.report_agent import ReportAgent, serialize_report
 from agents_demo.schema_agent import SchemaAgent
 from agents_demo.synthesis_agent import SynthesisAgent
-from state_demo import settings
-from state_demo.pipeline_state import PipelineState
+from state import settings
+from state.pipeline_state import PipelineState
 
 load_dotenv()
 

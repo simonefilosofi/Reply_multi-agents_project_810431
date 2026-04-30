@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from state_demo.constants import (
+from state.constants import (
     ANOMALY_ISSUE_TYPES,
     COMPLETENESS_ISSUE_TYPES,
     CONSISTENCY_ISSUE_TYPES,

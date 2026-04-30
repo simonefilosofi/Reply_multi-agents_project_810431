@@ -23,12 +23,12 @@ from typing import Any
 import pandas as pd
 
 from agents_demo.remediation_agent import RemediationAgent
-from state_demo.issues import (
+from state.issues import (
     LookupImputabilityIssue,
     MissingValuesIssue,
     PlaceholderValuesIssue,
 )
-from state_demo.pipeline_state import PipelineState
+from state.pipeline_state import PipelineState
 
 
 def test_lookup_imputation_runs_before_median_imputation(

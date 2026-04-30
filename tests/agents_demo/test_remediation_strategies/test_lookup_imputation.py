@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from agents_demo.remediation_strategies.lookup_imputation import LookupImputationStrategy
-from state_demo.issues import LookupImputabilityIssue
+from state.issues import LookupImputabilityIssue
 
 
 def test_lookup_imputation_fills_via_learned_mapping(make_agent) -> None:

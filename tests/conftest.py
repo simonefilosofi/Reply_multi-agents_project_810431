@@ -31,7 +31,7 @@ from _generate import (  # noqa: E402
     build_wide_dirty_df,
 )
 
-from state_demo.pipeline_state import PipelineState  # noqa: E402
+from state.pipeline_state import PipelineState  # noqa: E402
 
 
 @pytest.fixture

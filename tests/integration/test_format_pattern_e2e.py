@@ -18,8 +18,8 @@ from agents_demo._enrichment import EnrichmentResponse
 from agents_demo.constraint_agent import ConstraintAgent
 from agents_demo.remediation_agent import RemediationAgent
 from agents_demo.synthesis_agent import SynthesisAgent
-from state_demo.issues import FormatPatternViolationIssue
-from state_demo.pipeline_state import PipelineState
+from state.issues import FormatPatternViolationIssue
+from state.pipeline_state import PipelineState
 
 
 def test_format_pattern_pattern_field_survives_to_remediation(

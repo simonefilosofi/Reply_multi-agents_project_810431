@@ -11,7 +11,7 @@ from pathlib import Path
 import pandas as pd
 
 from agents_demo.ingestion_agent import IngestionAgent
-from state_demo.pipeline_state import PipelineState
+from state.pipeline_state import PipelineState
 
 
 def _write_csv(path: Path, df: pd.DataFrame) -> str:

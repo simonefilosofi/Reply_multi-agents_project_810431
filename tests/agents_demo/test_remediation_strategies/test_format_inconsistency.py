@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from agents_demo.remediation_strategies.format_inconsistency import FormatInconsistencyStrategy
-from state_demo.issues import FormatInconsistencyIssue
+from state.issues import FormatInconsistencyIssue
 
 
 def test_format_inconsistency_standardises_mixed_dates(make_agent) -> None:

@@ -27,8 +27,8 @@ from agents_demo._graph import (
     state_to_dict,
 )
 from agents_demo.base_agent import BaseAgent
-from state_demo import settings
-from state_demo.pipeline_state import PipelineState
+from state import settings
+from state.pipeline_state import PipelineState
 
 
 def test_state_round_trip_preserves_fields(clean_pa_df: pd.DataFrame) -> None:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from agents_demo.remediation_strategies.month_column import MonthColumnStrategy
-from state_demo.issues import MonthFormatInconsistencyIssue, SpecialMonthCodeIssue
+from state.issues import MonthFormatInconsistencyIssue, SpecialMonthCodeIssue
 
 
 def test_month_column_normalises_text_and_specials(make_agent) -> None:

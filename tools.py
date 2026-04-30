@@ -16,14 +16,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from state_demo.constants import (
+from state.constants import (
     DATE_FORMAT_MAP,
     DATE_PATTERNS,
     PLACEHOLDER_PATTERNS,
     PLACEHOLDERS,
 )
-from state_demo.helpers import missing_mask, non_empty_values
-from state_demo.locale_it import (
+from state.helpers import missing_mask, non_empty_values
+from state.locale_it import (
     CURRENCY_SYMBOLS,
     IT_DECIMAL_PATTERN,
     IT_EN_MONTH_TRANSLATION,

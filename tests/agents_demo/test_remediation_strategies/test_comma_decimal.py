@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from agents_demo.remediation_strategies.comma_decimal import CommaDecimalStrategy
-from state_demo.issues import CommaDecimalFormatIssue
+from state.issues import CommaDecimalFormatIssue
 
 
 def test_comma_decimal_converts_italian_format(make_agent) -> None:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from agents_demo.remediation_strategies.flag_only import FlagOnlyStrategy
-from state_demo.issues import DateOrderIssue, SparseColumnIssue
+from state.issues import DateOrderIssue, SparseColumnIssue
 
 
 def test_flag_only_emits_flag_for_sparse_column(make_agent) -> None:

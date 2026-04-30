@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from agents_demo.remediation_strategies.case_inconsistency import CaseInconsistencyStrategy
-from state_demo.issues import CaseInconsistencyIssue
+from state.issues import CaseInconsistencyIssue
 
 
 def test_case_inconsistency_normalises_to_dominant_variant(make_agent) -> None:

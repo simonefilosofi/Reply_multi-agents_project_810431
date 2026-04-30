@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from agents_demo.remediation_strategies.year_column import YearColumnStrategy
-from state_demo.issues import AmbiguousYearFormatIssue, YearFormatInconsistencyIssue
+from state.issues import AmbiguousYearFormatIssue, YearFormatInconsistencyIssue
 
 
 def test_year_column_strips_noise(make_agent) -> None:

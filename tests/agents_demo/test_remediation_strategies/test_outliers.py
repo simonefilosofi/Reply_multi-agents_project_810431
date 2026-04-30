@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from agents_demo.remediation_strategies.outliers import OutlierStrategy
-from state_demo.issues import OutliersIssue
+from state.issues import OutliersIssue
 
 
 def test_outliers_caps_symmetric_distribution(make_agent) -> None:

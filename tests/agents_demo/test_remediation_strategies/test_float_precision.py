@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from agents_demo.remediation_strategies.float_precision import FloatPrecisionStrategy
-from state_demo.issues import FloatPrecisionNoiseIssue
+from state.issues import FloatPrecisionNoiseIssue
 
 
 def test_float_precision_rounds_noise(make_agent) -> None:

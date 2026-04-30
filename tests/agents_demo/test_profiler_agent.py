@@ -16,8 +16,8 @@ import pandas as pd
 import pytest
 
 from agents_demo.profiler_agent import ProfilerAgent
-from state_demo.fingerprint_schema import DatasetFingerprint
-from state_demo.pipeline_state import PipelineState
+from state.fingerprint_schema import DatasetFingerprint
+from state.pipeline_state import PipelineState
 
 
 def _empty_fingerprint(**overrides: Any) -> DatasetFingerprint:
