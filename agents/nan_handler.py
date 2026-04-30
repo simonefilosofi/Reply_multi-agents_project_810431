@@ -1,4 +1,4 @@
-"""Replaces disguised NaNs using payload placeholder lists, then imputes or drops."""
+"""Replaces disguised NaNs in every column using the per-column placeholder lists from the payload."""
 from __future__ import annotations
 
 from state import PipelineState
@@ -10,10 +10,8 @@ def nan_handler_node(state: PipelineState) -> PipelineState:
         return state
 
     df = state.dataset.copy()
-    payload_map = {p.column_name: p for p in state.payload}
-
-    for col in state.surviving_columns:
-        if col in payload_map and col in df.columns:
-            df[col] = detect_placeholders(df[col], payload_map[col].placeholders)
+    for p in state.payload:
+        if p.column_name in df.columns and p.placeholders:
+            df[p.column_name] = detect_placeholders(df[p.column_name], p.placeholders)
 
     return state.model_copy(update={"dataset": df})

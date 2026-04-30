@@ -22,7 +22,7 @@ def profiler_node(state: PipelineState) -> PipelineState:
     baseline = _load_baseline(state)
     user_payload = _build_user_payload(state, baseline)
 
-    llm = ChatOpenAI(model="gpt-4o", temperature=0)
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
     chain = llm.with_structured_output(_ProfilerResponse)
 
     result: _ProfilerResponse = chain.invoke([

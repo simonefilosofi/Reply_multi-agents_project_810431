@@ -5,7 +5,7 @@ from typing import Annotated, Any
 import pandas as pd
 from pydantic import BaseModel, Field
 
-from models import BaselineFile, ColumnClassification, ColumnPayload, ValidationReport
+from models import BaselineFile, ColumnClassification, ColumnPayload, DuplicateResolution, ValidationReport
 
 
 class PipelineState(BaseModel):
@@ -26,6 +26,7 @@ class PipelineState(BaseModel):
 
     # after duplicate-column removal
     surviving_columns: list[str] = Field(default_factory=list)
+    duplicate_resolutions: list[DuplicateResolution] = Field(default_factory=list)
 
     # classification
     classifications: list[ColumnClassification] = Field(default_factory=list)

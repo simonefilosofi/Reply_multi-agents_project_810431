@@ -28,11 +28,11 @@ def build_graph() -> StateGraph:
     g.set_entry_point("baseline_builder")
     g.add_edge("baseline_builder", "profiler")
     g.add_edge("profiler", "semantic")
-    g.add_edge("semantic", "duplicate_column")
+    g.add_edge("semantic", "nan_handler")
+    g.add_edge("nan_handler", "duplicate_column")
     g.add_edge("duplicate_column", "classification")
     g.add_edge("classification", "format_consistency")
-    g.add_edge("format_consistency", "nan_handler")
-    g.add_edge("nan_handler", "duplicate_row")
+    g.add_edge("format_consistency", "duplicate_row")
     g.add_edge("duplicate_row", END)
 
     return g

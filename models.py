@@ -37,6 +37,14 @@ class BaselineFile(BaseModel):
     domains: list[DomainBaseline] = Field(default_factory=list)
 
 
+class DuplicateResolution(BaseModel):
+    group: list[str]
+    data_survivor: str
+    canonical_name: str
+    rationale: str
+    dropped: list[str]
+
+
 class ColumnClassification(BaseModel):
     column_name: str
     normalized_name: str

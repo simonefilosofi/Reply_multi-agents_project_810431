@@ -45,7 +45,7 @@ def semantic_node(state: PipelineState) -> PipelineState:
 
     df = state.dataset
     all_columns = list(df.columns)
-    chain = ChatOpenAI(model="gpt-4o", temperature=0).with_structured_output(_SemanticResponse)
+    chain = ChatOpenAI(model="gpt-4o-mini", temperature=0).with_structured_output(_SemanticResponse)
     system = load_prompt("semantic")
 
     payload: list[ColumnPayload] = []
