@@ -1,32 +1,35 @@
 # Semantic Agent Prompt
 
 ## Task
-Analyze a single dataset column and produce a structured semantic payload.
+Analyze a single dataset column and return a structured semantic payload.
 
 ## Input
 - `column_name`: string
-- `domain`: detected domain of the dataset
-- `dtype`: pandas dtype string
-- `sample`: list of up to 10 representative non-null values
-- `all_column_names`: list of all column names in the dataset (for related_columns inference)
+- `dataset_domain`: detected domain of the whole dataset
+- `dtype`: pandas-inferred dtype string
+- `sample`: up to 10 representative non-null values
+- `all_column_names`: every column name in the dataset (for `related_columns`)
+- `placeholder_candidates`: values literally observed in this column that match a curated
+  list of generic disguised-NaN tokens. They were detected programmatically — your job
+  is to **filter** them by column meaning, not extend them.
 
 ## Output
-Return a JSON object matching this schema:
-```json
-{
-  "column_name": "...",
-  "domain": "...",
-  "dtype": "...",
-  "sample": [...],
-  "placeholders": ["N/A", "ND", "-", 0],
-  "related_columns": ["col_a", "col_b"],
-  "target_casing": "lowercase | uppercase | as-is"
-}
-```
-
-## Guidelines
-- `placeholders`: values that are syntactically present but semantically missing.
-  For numeric columns consider `0`, `-1`, `9999`; for strings consider `"N/A"`, `"ND"`, `"-"`, `"NULL"`.
-- `related_columns`: columns that share a semantic relationship (e.g. start/end date, name/code pairs).
-- `target_casing`: use `lowercase` for free-text categoricals, `uppercase` for codes/identifiers,
-  `as-is` for proper names, dates, or numeric-like fields.
+Return a JSON object with these fields:
+- `dtype`: most accurate pandas dtype. If values are clearly numeric or datetimes, return
+  `float64` / `int64` / `datetime64[ns]` instead of `object`.
+- `column_meaning`: a short phrase (max ~10 words) describing what this column represents
+  in context (e.g. "monthly gross salary in euro", "employee fiscal code",
+  "contract start date").
+- `placeholders`: a SUBSET of `placeholder_candidates`. Keep a candidate only if it is
+  implausible as a real value for this column's meaning; drop it if it could legitimately
+  occur. Do NOT add values that are not in `placeholder_candidates`.
+  Example: for a "monthly salary" column, the candidate `0` is a plausible real value
+  (unpaid period) and must be DROPPED; for a "country code" column, `0` is implausible
+  and KEPT. For free-text fields, tokens like `"-"`, `"n/a"`, `"tbd"` are virtually
+  always placeholders.
+- `related_columns`: other column names sharing a semantic relationship
+  (e.g. start/end date pairs, name/code pairs).
+- `target_casing`: one of `lowercase`, `uppercase`, `as-is`.
+  - `lowercase` for free-text categoricals,
+  - `uppercase` for codes / identifiers / acronyms,
+  - `as-is` for proper names AND ALWAYS for numeric, datetime, or boolean columns.
