@@ -51,7 +51,7 @@ def semantic_node(state: PipelineState) -> PipelineState:
     payload: list[ColumnPayload] = []
     for col in all_columns:
         series = df[col]
-        sample = series.dropna().head(10).tolist()
+        sample = series.dropna().sample(n=min(30, series.dropna().shape[0]), random_state=42).tolist()
         candidates = _detect_placeholder_candidates(series)
         user = {
             "column_name": col,
