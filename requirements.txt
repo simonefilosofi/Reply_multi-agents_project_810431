@@ -18,3 +18,4 @@ plotly>=5.20
 kaleido
 docker>=7.1
 python-dotenv>=1.0
+fpdf2>=2.7
