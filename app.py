@@ -52,6 +52,16 @@ st.json({
     if nan_after[col] != nan_before[col]
 } or {"info": "no disguised NaNs were detected"})
 
+nullability_issues = [
+    {"column": r.column_name, "nan_count": v.value}
+    for r in state.validation_reports
+    for v in r.violations
+    if v.expected_pattern == "not nullable"
+]
+if nullability_issues:
+    st.subheader("Nullability issues — non-nullable columns with NaN")
+    st.json(nullability_issues)
+
 cols_before = list(state.dataset.columns)
 nan_pre_dup = state.dataset.isna().sum().to_dict()
 with st.spinner("Duplicate Column..."):
