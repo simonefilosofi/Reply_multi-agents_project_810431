@@ -68,7 +68,10 @@ def duplicate_column_node(state: PipelineState) -> PipelineState:
         new_df = new_df.rename(columns=renames)
 
     new_payload = [
-        p.model_copy(update={"column_name": renames[p.column_name]}) if p.column_name in renames else p
+        p.model_copy(update={
+            "column_name": renames.get(p.column_name, p.column_name),
+            "related_columns": [renames.get(r, r) for r in p.related_columns if r not in dropped],
+        })
         for p in state.payload
         if p.column_name not in dropped
     ]

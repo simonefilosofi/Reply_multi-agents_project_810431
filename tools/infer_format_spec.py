@@ -31,6 +31,8 @@ class _InferResponse(BaseModel):
 def infer_format_spec(
     payload: ColumnPayload,
     baseline_hint: str | None,
+    candidate: FormatSpec | None = None,
+    extended_sample: list | None = None,
 ) -> FormatSpec | None:
     chain = ChatOpenAI(model="gpt-5.4-mini", temperature=0, max_tokens=1024).with_structured_output(_InferResponse)
     user = {
@@ -38,7 +40,9 @@ def infer_format_spec(
         "description": payload.description,
         "dtype": payload.dtype,
         "sample": payload.sample,
+        "extended_sample": extended_sample or [],
         "baseline_hint": baseline_hint,
+        "deterministic_candidate": candidate.model_dump() if candidate else None,
     }
     try:
         result: _InferResponse = chain.invoke([

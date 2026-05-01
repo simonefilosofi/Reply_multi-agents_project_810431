@@ -19,8 +19,17 @@ A JSON object with these fields:
     - `examples`: up to 20 `{offending_value -> corrected_value}` pairs (non-null only) — illustrative samples showing the *kind* of corrections produced.
     - `total_correctable`: total number of offenders the value-correction agent produced a non-null correction for (the full map may be much larger than `examples`).
     - `total_unaddressable`: total number of offenders the value-correction agent could not fix (their `corrected_value` was `null`); these need human review.
+  - `imputation_hint`: a precomputed lookup mapping for filling this column's NaN values, mined deterministically from a related column or pair, or `null` if no strong dependency was found. Fields when present:
+    - `predictor_columns`: 1- or 2-column list. The columns whose values predict this column.
+    - `path`: `"raw"` (use predictor values as-is) or `"normalized"` (lowercase + strip predictor before lookup).
+    - `purity`: fraction of predictor groups that map to a single target value. `1.0` is a strict functional dependency; values in `[0.95, 1.0)` are "dominant" — a small minority of conflicts exist.
+    - `coverage`: fraction of this column's NaN rows the mapping can fill (the rest must go to `unaddressed_violation_ids`).
+    - `confidence`: `"strict"` or `"dominant"` — purity bucket.
+    - `mapping_size` / `mapping_examples`: total entries and up to 10 illustrative `{predictor_key -> target_value}` pairs. The full mapping is materialized at runtime as `imputation_hints["<column_name>"]["mapping"]`.
+    - `rationale`: short human-readable summary.
 - `evidence_rows`: up to 10 dataframe rows where at least one column in the group has a violation. Each row includes `_row_id` (the dataframe index) plus the value of every column in the group.
 - `clean_reference_rows`: up to 5 rows where every group column is valid — included so you can see what "correct" looks like in this dataset, beyond the canonical spec.
+- `context_columns`: second-degree neighbor columns referenced by group members through `related_columns` but **not part of this group**. Each entry has `name`, `description`, `dtype`, and a 5-value `sample`. These are READ-ONLY: you may reason about them when explaining a fix's rationale, but you may NOT mutate them in `code` and you may NOT list them in `affected_columns`.
 
 ## Output
 Return a `FixGroupResponse` JSON object with these fields:
@@ -59,6 +68,41 @@ You may assume `import pandas as pd` and `import numpy as np` have already execu
 
    Cast back to the original dtype after the replace if the column is numeric. **Do NOT inline the dict literally in your code** — always reference `value_corrections["col_name"]` so all corrections are applied even when `total_correctable` exceeds the example count. **Do NOT replace these dirty values with `null`, `0`, or `"unknown"`.**
 10. **Unaddressable offenders need human review.** When `total_unaddressable > 0`, the value-correction agent could not infer a reliable fix for some offenders. Do not invent values — list the corresponding violation IDs in `unaddressed_violation_ids` so the human reviewer can resolve them.
+
+11. **Use `imputation_hint` first for NaN imputation.** When a column's `imputation_hint` is non-null, the executor materializes the full lookup at runtime as `imputation_hints["<column_name>"]` (a dict with `predictor_columns`, `path`, and `mapping`). Prefer this over freeform `groupby().transform()` — the hint was mined from the full column with explicit purity/coverage stats. Apply it like this:
+
+    Single predictor, `path == "raw"`:
+    ```
+    _hint = imputation_hints["target_col"]
+    _key = df[_hint["predictor_columns"][0]].astype("string")
+    df["target_col"] = df["target_col"].fillna(_key.map(_hint["mapping"]))
+    ```
+
+    Single predictor, `path == "normalized"`:
+    ```
+    _hint = imputation_hints["target_col"]
+    _key = df[_hint["predictor_columns"][0]].astype("string").str.lower().str.strip()
+    df["target_col"] = df["target_col"].fillna(_key.map(_hint["mapping"]))
+    ```
+
+    Pair predictors (always join with `"|"` — this matches how the mapping was built):
+    ```
+    _hint = imputation_hints["target_col"]
+    _p1, _p2 = _hint["predictor_columns"]
+    _k1 = df[_p1].astype("string")
+    _k2 = df[_p2].astype("string")
+    if _hint["path"] == "normalized":
+        _k1 = _k1.str.lower().str.strip()
+        _k2 = _k2.str.lower().str.strip()
+    _key = _k1.str.cat(_k2, sep="|")
+    df["target_col"] = df["target_col"].fillna(_key.map(_hint["mapping"]))
+    ```
+
+    Cast back to the original dtype after the fillna if the column is numeric (`pd.to_numeric(df["target_col"], errors="coerce")` then `.astype("Int64")`/`"Float64"` as appropriate).
+
+    `coverage < 1.0` means some NaN rows have no key in the mapping — they will remain NaN after the fillna. That is correct; do NOT chain a generic fallback. List the violation ID for those rows in `unaddressed_violation_ids` if `is_nullable: false`. For `confidence == "dominant"`, the mapping was built only from purity-1.0 groups, so applied values are still safe — but be aware that a small share of predictor values were excluded from the mapping due to conflicts; those rows also stay NaN.
+
+    Do NOT inline the mapping dict literally in your code. Always reference `imputation_hints["<column_name>"]["mapping"]` so the full mapping is used (the prompt only shows up to 10 examples).
 
 ## Granularity heuristic for splitting proposals
 

@@ -109,14 +109,34 @@ if state.duplicate_resolutions:
 st.caption(f"Dataset after pruning: {state.dataset.shape[0]} rows x {state.dataset.shape[1]} columns")
 st.dataframe(state.dataset.head(20))
 
-format_issues = [
-    {"column": r.column_name, "violation_count": len(r.violations)}
+format_violations_by_col = {
+    r.column_name: sum(
+        1 for v in r.violations
+        if v.expected_pattern not in (None, "not nullable", "missing value")
+    )
     for r in state.validation_reports
-    if any(v.expected_pattern not in (None, "not nullable") for v in r.violations)
+}
+inference_rows = [
+    {
+        "column": col,
+        "source": info.get("source", "skipped"),
+        "profiler_spec": info.get("profiler_spec"),
+        "final_spec": info.get("final_spec"),
+        "format_violations": format_violations_by_col.get(col, 0),
+        "missing": int(state.dataset[col].isna().sum()) if col in state.dataset.columns else 0,
+    }
+    for col, info in state.inferred_format_specs.items()
 ]
-if format_issues:
-    st.subheader("Format-consistency violations")
-    st.json(format_issues)
+if inference_rows:
+    st.subheader("Format-consistency — per-column inference")
+    st.caption(
+        "source: 'deterministic' = profiler's spec kept (LLM confirmed or punted); "
+        "'deterministic-refined' = LLM upgraded the profiler's spec (e.g. regex -> date); "
+        "'llm-only' = profiler found no dominant shape, LLM produced one; "
+        "'skipped' = neither found a pattern (treated as free text). "
+        "missing = NaN count surfaced as a violation for the unified agent to impute."
+    )
+    st.dataframe(inference_rows, use_container_width=True)
 
 
 def _group_id_of(fix_id: str) -> str:
@@ -128,6 +148,7 @@ def _repropose(group_id: str, feedback: str) -> None:
     group = s.fix_groups.get(group_id, [])
     if not group:
         return
+    from agents.unified import _specs_by_col
     new_proposals = propose_for_group(
         group_id,
         group,
@@ -137,6 +158,8 @@ def _repropose(group_id: str, feedback: str) -> None:
         s.baseline,
         value_corrections=s.value_corrections,
         feedback=feedback,
+        specs_by_col=_specs_by_col(s.inferred_format_specs),
+        imputation_hints=s.imputation_hints,
     )
     remaining = [p for p in s.proposed_fixes if _group_id_of(p.id) != group_id]
     st.session_state.pipeline_state = s.model_copy(update={"proposed_fixes": remaining + new_proposals})
@@ -200,4 +223,38 @@ st.json({
     "rejected": [p.id for p in rejected],
     "pending": [p.id for p in pending],
 })
-st.caption("Sandboxed execution of accepted fixes is not yet wired in. The next step adds an Executor node that runs the accepted code in E2B and applies the cleaned dataframe back to state.dataset.")
+
+if accepted and st.button("Apply accepted fixes"):
+    before_df = state.dataset.copy()
+    with st.spinner("Executing fixes..."):
+        cleaned_df, statuses = execute_fixes(
+            state.dataset, accepted, state.value_corrections,
+            imputation_hints=state.imputation_hints,
+        )
+    st.session_state.pipeline_state = state.model_copy(update={
+        "dataset": cleaned_df,
+        "applied_fix_ids": [s["id"] for s in statuses if s["status"] == "applied"],
+    })
+    st.session_state.execution = {"statuses": statuses, "before": before_df}
+    st.rerun()
+
+execution = st.session_state.execution
+if execution is not None:
+    st.subheader("Execution result")
+    st.json(execution["statuses"])
+    before_df = execution["before"]
+    after_df = st.session_state.pipeline_state.dataset
+    diff = [
+        {
+            "column": c,
+            "nans_before": int(before_df[c].isna().sum()),
+            "nans_after": int(after_df[c].isna().sum()) if c in after_df.columns else None,
+            "uniques_before": int(before_df[c].nunique(dropna=True)),
+            "uniques_after": int(after_df[c].nunique(dropna=True)) if c in after_df.columns else None,
+        }
+        for c in before_df.columns
+    ]
+    st.caption(f"Before: {before_df.shape[0]} x {before_df.shape[1]}  |  After: {after_df.shape[0]} x {after_df.shape[1]}")
+    st.dataframe(diff, use_container_width=True)
+    st.subheader("Cleaned dataset preview")
+    st.dataframe(after_df.head(20))
