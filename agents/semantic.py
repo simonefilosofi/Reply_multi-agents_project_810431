@@ -65,7 +65,7 @@ def semantic_node(state: PipelineState) -> PipelineState:
 
     domain_catalog = column_catalog_all_domains(state.baseline) if state.baseline else {}
     aliases = alias_index(state.baseline) if state.baseline else {}
-    chain = ChatOpenAI(model="gpt-4o-mini", temperature=0).with_structured_output(_SemanticResponse)
+    chain = ChatOpenAI(model="gpt-5.4-mini", temperature=0).with_structured_output(_SemanticResponse)
     system = load_prompt("semantic")
     descriptions = _describe_columns(df, all_columns)
 
@@ -213,7 +213,7 @@ def _cast_series(series: pd.Series, dtype: str) -> pd.Series:
 
 
 def _describe_columns(df: pd.DataFrame, columns: list[str]) -> dict[str, str]:
-    chain = ChatOpenAI(model="gpt-4o-mini", temperature=0).with_structured_output(_DescribeResponse)
+    chain = ChatOpenAI(model="gpt-5.4-mini", temperature=0).with_structured_output(_DescribeResponse)
     user = {
         "columns": [
             {

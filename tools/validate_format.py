@@ -1,39 +1,63 @@
-"""Checks each value in a column against the expected regex format pattern from the baseline. Step-1 compatibility shim: only RegexFormat specs are honoured here; enum and range dispatch land in step 6 (Format & Consistency)."""
+"""Checks each value in a column against a per-column FormatSpec. Dispatches over RegexFormat (full-match against pattern), EnumFormat (membership against allowed values), RangeFormat (numeric bounds), and DateFormat (parseability against an strftime pattern via pd.to_datetime), surfacing each violation through a uniform expected_pattern string consumed by the Format & Consistency agent."""
 from __future__ import annotations
 
 import re
+from typing import Callable
 
 import pandas as pd
 
-from models import BaselineFile, FormatViolation, RegexFormat, ValidationReport
+from models import (
+    DateFormat,
+    EnumFormat,
+    FormatSpec,
+    FormatViolation,
+    RangeFormat,
+    RegexFormat,
+    ValidationReport,
+)
 
 
 def validate_format(
     col_name: str,
     series: pd.Series,
-    baseline: BaselineFile | None,
+    spec: FormatSpec | None,
 ) -> ValidationReport:
-    pattern = _lookup_regex_pattern(baseline, col_name)
-    violations: list[FormatViolation] = []
-    if pattern:
-        compiled = re.compile(pattern)
-        for idx, val in series.items():
-            if pd.notna(val) and not compiled.fullmatch(str(val)):
-                violations.append(FormatViolation(
-                    column_name=col_name,
-                    row_index=int(idx),
-                    value=val,
-                    expected_pattern=pattern,
-                ))
+    if spec is None:
+        return ValidationReport(column_name=col_name)
+
+    is_valid, expected = _checker_for(spec)
+    violations = [
+        FormatViolation(
+            column_name=col_name,
+            row_index=int(idx),
+            value=val,
+            expected_pattern=expected,
+        )
+        for idx, val in series.items()
+        if pd.notna(val) and not is_valid(val)
+    ]
     return ValidationReport(column_name=col_name, violations=violations)
 
 
-def _lookup_regex_pattern(baseline: BaselineFile | None, col_name: str) -> str | None:
-    if baseline is None:
-        return None
-    for domain in baseline.domains.values():
-        for dataset in domain.datasets.values():
-            schema = dataset.columns.get(col_name)
-            if schema and isinstance(schema.format, RegexFormat):
-                return schema.format.pattern
-    return None
+def _checker_for(spec: FormatSpec) -> tuple[Callable[[object], bool], str]:
+    if isinstance(spec, RegexFormat):
+        compiled = re.compile(spec.pattern)
+        return (lambda v: compiled.fullmatch(str(v)) is not None), spec.pattern
+    if isinstance(spec, EnumFormat):
+        allowed = {str(x) for x in spec.values}
+        return (lambda v: str(v) in allowed), f"enum: {spec.values}"
+    if isinstance(spec, RangeFormat):
+        lo, hi = spec.min, spec.max
+        return (lambda v: _in_range(v, lo, hi)), f"range: [{lo}, {hi}]"
+    if isinstance(spec, DateFormat):
+        fmt = spec.strftime_pattern
+        return (lambda v: pd.notna(pd.to_datetime(str(v), format=fmt, errors="coerce"))), f"date: {fmt}"
+    raise TypeError(f"Unsupported FormatSpec: {type(spec).__name__}")
+
+
+def _in_range(value: object, lo: float | None, hi: float | None) -> bool:
+    try:
+        x = float(value)
+    except (TypeError, ValueError):
+        return False
+    return (lo is None or x >= lo) and (hi is None or x <= hi)

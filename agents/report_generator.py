@@ -23,7 +23,7 @@ class _ReportResponse(BaseModel):
 def report_generator_node(state: PipelineState) -> PipelineState:
     payload = _build_payload(state)
     system = load_prompt("report_generator")
-    chain = ChatOpenAI(model="gpt-4o-mini", temperature=0).with_structured_output(_ReportResponse)
+    chain = ChatOpenAI(model="gpt-5.4-mini", temperature=0).with_structured_output(_ReportResponse)
 
     result: _ReportResponse = chain.invoke([
         {"role": "system", "content": system},

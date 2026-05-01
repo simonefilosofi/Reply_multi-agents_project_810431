@@ -29,8 +29,13 @@ class RangeFormat(BaseModel):
     max: float | None = None
 
 
+class DateFormat(BaseModel):
+    type: Literal["date"] = "date"
+    strftime_pattern: str
+
+
 FormatSpec = Annotated[
-    Union[EnumFormat, RegexFormat, RangeFormat],
+    Union[EnumFormat, RegexFormat, RangeFormat, DateFormat],
     Field(discriminator="type"),
 ]
 
@@ -109,3 +114,20 @@ class FormatViolation(BaseModel):
 class ValidationReport(BaseModel):
     column_name: str
     violations: list[FormatViolation] = Field(default_factory=list)
+
+
+class FixProposal(BaseModel):
+    id: str
+    description: str
+    rationale: str
+    addresses_violations: list[str] = Field(default_factory=list)
+    affected_columns: list[str] = Field(default_factory=list)
+    estimated_rows_affected: int = 0
+    code: str
+    depends_on: list[str] = Field(default_factory=list)
+
+
+class FixGroupResponse(BaseModel):
+    proposals: list[FixProposal] = Field(default_factory=list)
+    unaddressed_violation_ids: list[str] = Field(default_factory=list)
+    rationale_for_unaddressed: str = ""
