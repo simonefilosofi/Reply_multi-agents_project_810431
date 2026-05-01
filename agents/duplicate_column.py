@@ -30,7 +30,7 @@ def duplicate_column_node(state: PipelineState) -> PipelineState:
     if not groups:
         return state.model_copy(update={"surviving_columns": list(df.columns)})
 
-    chain = ChatOpenAI(model="gpt-4o-mini", temperature=0).with_structured_output(_NameElection)
+    chain = ChatOpenAI(model="gpt-5.4-mini", temperature=0).with_structured_output(_NameElection)
     system = load_prompt("duplicate_column")
     baseline_columns = _baseline_columns_for_domain(state)
 

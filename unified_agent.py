@@ -14,7 +14,7 @@ class CodeOutput(BaseModel):
 
 def run_mechanic_in_cloud(dataset: dict, approved_errors: str):
     print("Running Code Generator...")
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    llm = ChatOpenAI(model="gpt-5.4-mini", temperature=0)
     structured_llm = llm.with_structured_output(CodeOutput)
     
     prompt = ChatPromptTemplate.from_messages([

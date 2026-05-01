@@ -5,7 +5,7 @@ from typing import Annotated, Any
 import pandas as pd
 from pydantic import BaseModel, Field
 
-from models import BaselineFile, ColumnClassification, ColumnPayload, DuplicateResolution, ValidationReport
+from models import BaselineFile, ColumnClassification, ColumnPayload, DuplicateResolution, FixProposal, ValidationReport
 
 
 class PipelineState(BaseModel):
@@ -33,6 +33,12 @@ class PipelineState(BaseModel):
 
     # format validation
     validation_reports: list[ValidationReport] = Field(default_factory=list)
+    value_corrections: dict[str, dict[str, str | None]] = Field(default_factory=dict)
+
+    # remediation proposals + approvals
+    proposed_fixes: list[FixProposal] = Field(default_factory=list)
+    fix_groups: dict[str, list[str]] = Field(default_factory=dict)
+    applied_fix_ids: list[str] = Field(default_factory=list)
 
     # pipeline control
     errors: list[str] = Field(default_factory=list)
