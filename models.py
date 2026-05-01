@@ -131,3 +131,17 @@ class FixGroupResponse(BaseModel):
     proposals: list[FixProposal] = Field(default_factory=list)
     unaddressed_violation_ids: list[str] = Field(default_factory=list)
     rationale_for_unaddressed: str = ""
+
+
+class AnomalyEntry(BaseModel):
+    row_index: int
+    value: Any
+    reason: str
+
+
+class AnomalyReport(BaseModel):
+    column_name: str
+    method: str  # "iqr" or "rare_category"
+    anomalies: list[AnomalyEntry] = Field(default_factory=list)
+    stats: dict = Field(default_factory=dict)
+    comment: str = ""

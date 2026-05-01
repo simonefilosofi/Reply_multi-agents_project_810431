@@ -8,6 +8,7 @@ load_dotenv()
 import pandas as pd
 import streamlit as st
 
+from agents.anomaly_detector import anomaly_detector_node
 from agents.duplicate_column import duplicate_column_node
 from agents.format_consistency import format_consistency_node
 from agents.nan_handler import nan_handler_node
@@ -52,6 +53,8 @@ if st.button("Run pipeline"):
     snapshots["nan_post_dup"] = state.dataset.isna().sum().to_dict()
     with st.spinner("Format Consistency..."):
         state = format_consistency_node(state)
+    with st.spinner("Anomaly Detector..."):
+        state = anomaly_detector_node(state)
     with st.spinner("Unified Remediation..."):
         state = unified_node(state)
 
@@ -115,6 +118,58 @@ format_issues = [
 if format_issues:
     st.subheader("Format-consistency violations")
     st.json(format_issues)
+
+st.subheader("Anomaly Detection")
+if not state.anomaly_reports:
+    st.info("No anomalies detected.")
+else:
+    numeric_reports = [r for r in state.anomaly_reports if r.method == "iqr"]
+    cat_reports = [r for r in state.anomaly_reports if r.method == "rare_category"]
+    col1, col2 = st.columns(2)
+    col1.metric("Columns with numeric outliers", len(numeric_reports))
+    col2.metric("Columns with rare categories", len(cat_reports))
+
+    if numeric_reports:
+        st.markdown("#### Numeric Outliers (IQR)")
+        for r in numeric_reports:
+            with st.expander(f"`{r.column_name}` — {r.stats.get('outlier_count', len(r.anomalies))} outliers"):
+                if r.comment:
+                    st.info(r.comment)
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Q1", r.stats.get("q1"))
+                c2.metric("Q3", r.stats.get("q3"))
+                c3.metric("IQR", r.stats.get("iqr"))
+                c1.metric("Lower bound", r.stats.get("lower_bound"))
+                c2.metric("Upper bound", r.stats.get("upper_bound"))
+                if r.anomalies:
+                    st.caption("Sample outlier values (up to 10):")
+                    st.dataframe(
+                        pd.DataFrame([{"row": a.row_index, "value": a.value} for a in r.anomalies[:10]]),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+
+    if cat_reports:
+        st.markdown("#### Rare Categories")
+        for r in cat_reports:
+            with st.expander(f"`{r.column_name}` — {r.stats.get('rare_values_count', len(r.anomalies))} rare value(s) out of {r.stats.get('distinct_values', '?')} distinct"):
+                if r.comment:
+                    st.info(r.comment)
+                top = r.stats.get("top_values", [])
+                if top:
+                    st.caption("Most common values:")
+                    st.dataframe(
+                        pd.DataFrame(top).rename(columns={"value": "Value", "count": "Count", "pct": "%"}),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+                if r.anomalies:
+                    st.caption(f"Rare values (threshold: < {r.stats.get('threshold')} occurrences):")
+                    st.dataframe(
+                        pd.DataFrame([{"value": a.value, "reason": a.reason} for a in r.anomalies]),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
 
 
 def _group_id_of(fix_id: str) -> str:
