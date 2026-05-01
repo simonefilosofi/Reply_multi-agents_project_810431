@@ -106,12 +106,13 @@ def semantic_node(state: PipelineState) -> PipelineState:
         )
         dtype = _resolve_dtype(canonical_hint, series, result.dtype)
         df[col] = _cast_series(series, dtype)
+        final_placeholders = _merge_placeholders(placeholder_cands, result.placeholders)
         payload.append(ColumnPayload(
             column_name=col,
             description=result.column_meaning,
             dtype=dtype,
             sample=sample,
-            placeholders=result.placeholders,
+            placeholders=final_placeholders,
             related_columns=result.related_columns,
             target_casing=_resolve_casing(dtype, result.target_casing, confirmed_spec),
             canonical_hint=canonical_hint,
@@ -165,6 +166,18 @@ def _summarize_spec(canonical_id: str | None, spec: ColumnSchema | None) -> dict
         "case_convention": spec.case_convention,
         "is_nullable": spec.is_nullable,
     }
+
+
+def _merge_placeholders(detected: list, llm_kept: list) -> list:
+    auto = [v for v in detected if isinstance(v, str)]
+    merged: list = []
+    seen: set = set()
+    for v in auto + list(llm_kept):
+        key = v.lower().strip() if isinstance(v, str) else v
+        if key not in seen:
+            seen.add(key)
+            merged.append(v)
+    return merged
 
 
 def _validate_canonical_match(match: str | None) -> str:
