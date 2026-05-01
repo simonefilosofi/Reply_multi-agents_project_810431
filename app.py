@@ -15,6 +15,7 @@ from agents.profiler import profiler_node
 from agents.semantic import semantic_node
 from agents.unified import propose_for_group, unified_node
 from state import PipelineState
+from tools.execute_fixes import execute_fixes
 
 st.set_page_config(page_title="NoiPA DQ — pipeline test", layout="wide")
 st.title("NoiPA DQ — Profiler, Semantic, NaN, Duplicate-Column, Format, Unified")
@@ -23,6 +24,7 @@ st.session_state.setdefault("pipeline_state", None)
 st.session_state.setdefault("snapshots", {})
 st.session_state.setdefault("fix_decisions", {})
 st.session_state.setdefault("editing", {})
+st.session_state.setdefault("execution", None)
 
 uploaded = st.file_uploader("Upload a CSV", type=["csv"])
 if uploaded is None:
