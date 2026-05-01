@@ -131,20 +131,3 @@ class FixGroupResponse(BaseModel):
     proposals: list[FixProposal] = Field(default_factory=list)
     unaddressed_violation_ids: list[str] = Field(default_factory=list)
     rationale_for_unaddressed: str = ""
-
-
-class FixReviewResponse(BaseModel):
-    decision: Literal["approve", "revise"]
-    feedback: str = ""
-
-
-class ImputationHint(BaseModel):
-    target_column: str
-    strategy: Literal["lookup"] = "lookup"
-    predictor_columns: list[str]
-    mapping: dict[str, Any]
-    path: Literal["raw", "normalized"]
-    purity: float
-    coverage: float
-    confidence: Literal["strict", "dominant"]
-    rationale: str = ""

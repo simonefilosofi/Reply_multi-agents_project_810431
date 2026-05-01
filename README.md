@@ -5,7 +5,7 @@
 
 ---
 
-## Section 1 — Introduction
+## Introduction
 
 NoiPA is the digital platform of the Ministero dell'Economia e delle Finanze managing
 salaries, timesheets, and tax/social-security obligations for Italian Public Administration
@@ -22,7 +22,7 @@ anomaly detection and remediation.
 
 ---
 
-## Section 2 — Methods
+## Methods
 
 ### System architecture
 
@@ -208,7 +208,7 @@ for `column_descriptions.json` is cached to disk on first run.
 
 ---
 
-## Section 3 — Experimental Design
+## Experimental Design
 
 The core contribution of this project is a multi-agent pipeline that automatically identifies
 and fixes data quality issues in NoiPA datasets. We validate it through three experiments.
@@ -254,7 +254,7 @@ count, (d) columns with correct dtype.
 
 ---
 
-## Section 4 — Results
+## Results
 
 > **[TODO: fill in after running experiments on both datasets. All figures must be generated
 > from `main.ipynb`.]**
@@ -286,7 +286,7 @@ count, (d) columns with correct dtype.
 
 ---
 
-## Section 5 — Conclusions
+## Conclusions
 
 This project shows that a multi-agent LLM pipeline can automate the majority of data quality
 tasks that NoiPA analysts currently perform manually. The key takeaway is that grounding LLM

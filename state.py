@@ -5,7 +5,11 @@ from typing import Annotated, Any
 import pandas as pd
 from pydantic import BaseModel, Field
 
+<<<<<<< HEAD
 from models import BaselineFile, ColumnClassification, ColumnPayload, DuplicateResolution, FixProposal, ImputationHint, ValidationReport
+=======
+from models import AnomalyReport, BaselineFile, ColumnClassification, ColumnPayload, DuplicateResolution, FixProposal, ValidationReport
+>>>>>>> ad8200560c2263b07974568e2b03551d90e350ba
 
 
 class PipelineState(BaseModel):
@@ -36,6 +40,9 @@ class PipelineState(BaseModel):
     value_corrections: dict[str, dict[str, str | None]] = Field(default_factory=dict)
     inferred_format_specs: dict[str, dict] = Field(default_factory=dict)
     imputation_hints: dict[str, ImputationHint] = Field(default_factory=dict)
+
+    # anomaly detection
+    anomaly_reports: list[AnomalyReport] = Field(default_factory=list)
 
     # remediation proposals + approvals
     proposed_fixes: list[FixProposal] = Field(default_factory=list)
