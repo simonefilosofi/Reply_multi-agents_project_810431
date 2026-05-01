@@ -60,7 +60,7 @@ def _build_payload(state: PipelineState) -> dict:
         "semantic_payload": [
             {
                 "column_name": p.column_name,
-                "meaning": p.domain,
+                "meaning": p.description,
                 "dtype": p.dtype,
                 "placeholders_found": p.placeholders,
             }

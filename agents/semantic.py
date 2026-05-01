@@ -88,7 +88,7 @@ def semantic_node(state: PipelineState) -> PipelineState:
         dtype = infer_and_validate_dtype(series, llm_suggestion=result.dtype)
         payload.append(ColumnPayload(
             column_name=col,
-            domain=result.column_meaning,
+            description=result.column_meaning,
             dtype=dtype,
             sample=sample,
             placeholders=result.placeholders,

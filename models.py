@@ -37,7 +37,7 @@ FormatSpec = Annotated[
 
 class ColumnPayload(BaseModel):
     column_name: str
-    domain: str
+    description: str
     dtype: str
     sample: list[Any] = Field(default_factory=list)
     placeholders: list[Any] = Field(default_factory=list)
