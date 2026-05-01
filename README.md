@@ -20,6 +20,111 @@ implemented as a LangGraph pipeline of specialised agents, each responsible for 
 data quality dimension: schema validation, completeness analysis, consistency checking,
 anomaly detection and remediation.
 
+
+---
+
+## Repository contents
+
+A one-pass map of every file in the repo, so a reviewer can locate any component in seconds.
+
+### Top-level entry points and deliverables
+
+- `main.ipynb` — The single deliverable notebook. Walks through every pipeline agent on `attivazioniCessazioni.csv` with alternating markdown / code cells; each agent section embeds its corresponding `prompts/*.md` inline so the notebook is self-contained.
+- `app.py` — Streamlit harness exposing the pipeline behind an interactive approval gate where a reviewer can Accept, Reject, or Edit-with-feedback each remediation proposal before it is applied.
+- `graph.py` — LangGraph DAG wiring the nine canonical pipeline agents (`baseline_builder` → `profiler` → `semantic` → `nan_handler` → `duplicate_column` → `classification` → `format_consistency` → `duplicate_row` → `report_generator`).
+- `unified_agent.py` — Stand-alone E2B-cloud sandbox prototype that takes approved fixes and runs LLM-generated `clean_data(df)` code in an isolated container; kept as a forward-looking experiment for sandboxed remediation.
+- `attivazioniCessazioni.pdf` — Sample report produced by `agents/report_generator.py` on `attivazioniCessazioni.csv`, committed as an example deliverable.
+- `README.md` — This file.
+
+### Pipeline core types
+
+- `state.py` — Defines `PipelineState`, the single Pydantic model every agent reads from and writes to (dataset, baseline, payload, validation reports, anomaly reports, proposed fixes, ...).
+- `models.py` — All Pydantic data models exchanged across the pipeline (`BaselineFile`, `ColumnPayload`, `ValidationReport`, `FixProposal`, `AnomalyReport`, ...).
+
+### Agents (`agents/`)
+
+- `agents/baseline_builder.py` — Loads `noipa_schema_registry.json`, resolves every `$ref` against `shared_column_definitions`, and validates the result into a `BaselineFile`. Pure-Python, no LLM call.
+- `agents/profiler.py` — Asks `gpt-4o-mini` to identify the dataset's NoiPA domain and primary language by matching the input column signature against the per-domain signatures derived from the baseline.
+- `agents/semantic.py` — Per-column enrichment that combines deterministic name matching, embeddings retrieval against `column_descriptions.json`, and an LLM verdict to produce a `ColumnPayload` with description, dtype, placeholders, related columns, target casing, and canonical hint.
+- `agents/nan_handler.py` — Replaces disguised NaN tokens (the placeholder list inferred by the Semantic agent) with `pd.NA`, then flags non-nullable canonical columns whose NaN count is still positive.
+- `agents/duplicate_column.py` — Groups columns by hashed-value identity, asks an LLM to elect the most descriptive surface name within each group, and backfills NaNs from the dropped sibling.
+- `agents/classification.py` — Produces a snake_case normalised name and short description for each surviving column; currently a deterministic stub that the graph keeps in place for future LLM enrichment.
+- `agents/format_consistency.py` — Picks a `FormatSpec` per column (from baseline or via LLM inference), validates every value against it, and asks an LLM to suggest per-value corrections for the Unified agent to consider.
+- `agents/anomaly_detector.py` — Flags numeric outliers (IQR rule) and rare categorical values (frequency + count threshold), then asks `gpt-4o-mini` to attach a one-sentence explanatory comment per anomalous column.
+- `agents/unified.py` — Groups columns by their related-columns transitive closure, aggregates upstream violations, and asks an LLM to emit `FixProposal` objects (description + Python snippet) covering every input violation; never executes code itself.
+- `agents/duplicate_row.py` — Drops exact duplicate rows via `drop_duplicates()` as the final cleaning step, after column-level normalisations have run.
+- `agents/report_generator.py` — Builds a structured payload from the final `PipelineState` and uses `gpt-4o-mini` plus `fpdf2` to produce a five-section narrative PDF report.
+- `agents/__init__.py` — Empty package marker.
+
+### Tools (`tools/`)
+
+Reusable building blocks used by multiple agents.
+
+- `tools/baseline_accessors.py` — Projection helpers (e.g. `find_spec_by_hint`, `domain_signatures`) exposing slice views of the resolved `BaselineFile` so agents do not leak the full structure into their prompts.
+- `tools/match_canonical.py` — Programmatic name-match cascade (exact → accent-and-case-normalised → fuzzy) plus a compact format-summary helper, consumed by the Semantic and Unified agents.
+- `tools/retrieve_canonical.py` — Embeddings-based retriever that embeds `column_descriptions.json` once with `text-embedding-3-small`, caches the matrix to `column_descriptions.embeddings.pkl`, and ranks candidates by cosine similarity boosted with sample-overlap and dtype-agreement signals.
+- `tools/infer_and_validate_dtype.py` — Pandas-driven dtype inference that reconciles the LLM's dtype suggestion with the actual sample before casting.
+- `tools/detect_placeholders.py` — Replaces values matching a payload-derived placeholder list with NaN; used internally by the NaN Handler.
+- `tools/infer_format_spec.py` — LLM call that proposes a `FormatSpec` (regex / enum / range / date) for columns with no canonical match.
+- `tools/validate_format.py` — Runs a `FormatSpec` over a column and emits a `FormatViolation` for every failing value, with uniform `expected_pattern` strings across spec types.
+- `tools/correct_violations.py` — LLM call that takes the unique offending values of a column plus its neighborhood and returns a `{value -> corrected_value | null}` map for the Unified agent to apply.
+- `tools/normalize_date_format.py` — Coerces date-like columns to a consistent strftime format dictated by the baseline.
+- `tools/normalize_entity_format.py` — Standardises strings representing organisation / entity names (whitespace, casing, common abbreviations).
+- `tools/apply_casing.py` — Applies the `target_casing` directive from a `ColumnPayload` to a string column.
+- `tools/cluster_by_domain.py` — Groups multiple input dataframes by thematic NoiPA domain via metadata or LLM classification (used when batch-processing several files).
+- `tools/extract_column_schema.py` — Extracts column names, dtypes, and format patterns from sample data and serialises them in the baseline-compatible shape.
+- `tools/hash_column_values.py` — Produces a deterministic hash of a column's full sorted value set; the identity primitive behind the Duplicate-Column agent.
+- `tools/scrape_pa_datasets.py` — Fetches and downloads datasets from the Italian PA open-data portal (`dati.gov.it`); used offline to bootstrap the canonical knowledge base.
+- `tools/__init__.py` — Empty package marker.
+
+### Utilities (`utils/`)
+
+- `utils/prompts.py` — `load_prompt(name)` helper that reads `prompts/<name>.md` from disk; the single way every agent fetches its system prompt at runtime.
+- `utils/__init__.py` — Empty package marker.
+
+### Prompts (`prompts/`)
+
+System prompts loaded by `utils.prompts.load_prompt()`. Files marked *(reference)* exist as design-time documentation for nodes that are currently deterministic and do not load a prompt at runtime.
+
+- `prompts/profiler.md` — Domain and language detection prompt for `agents/profiler.py`.
+- `prompts/semantic.md` — Canonical-match decision prompt for `agents/semantic.py`, called once the embedding shortlist has been built.
+- `prompts/semantic_describe.md` — Batched first-pass prompt that asks `gpt-4o-mini` for a one-sentence factual description of every column at once.
+- `prompts/duplicate_column.md` — Canonical-name election prompt for `agents/duplicate_column.py`.
+- `prompts/infer_format_spec.md` — System prompt for `tools/infer_format_spec.py` (proposes a `FormatSpec` from a value sample).
+- `prompts/correct_violations.md` — System prompt for `tools/correct_violations.py` (proposes per-value corrections).
+- `prompts/anomaly_detector.md` — Comment-generation prompt for `agents/anomaly_detector.py`.
+- `prompts/unified.md` — `FixProposal` generation prompt for `agents/unified.py`.
+- `prompts/report_generator.md` — Five-section narrative prompt for `agents/report_generator.py`.
+- `prompts/format_consistency.md` *(reference)* — Design-time prompt for `agents/format_consistency.py`; the agent currently delegates to its sub-tools' prompts.
+- `prompts/baseline_builder.md` *(reference)* — Schema-registry shape reference; the builder itself is deterministic.
+- `prompts/classification.md` *(reference)* — Reference for the Classification agent's planned LLM call.
+- `prompts/nan_handler.md` *(reference)* — Reference for the NaN handler; the runtime implementation is deterministic.
+- `prompts/impute_gate.md` *(reference)* — Forward-looking reference for an imputation-gating agent that decides whether each missing cell should be imputed or left as NaN.
+
+### Knowledge base and generated artefacts
+
+- `noipa_schema_registry.json` — Hand-authored canonical NoiPA schema covering 4 domains (`Amministrati`, `Amministrazioni`, `Rapporti_di_lavoro`, `Trattamento_economico`), 12 shared column definitions reused via `$ref`, and 143 dataset-specific columns; the source of truth for every validation rule in the pipeline.
+- `baseline.json` — Compiled, fully-dereferenced version of the registry produced at runtime by `agents/baseline_builder.py`; consumed by every downstream agent.
+- `column_descriptions.json` — Catalogue of 54 canonical NoiPA columns (name, description, sample values, dtype) used as the retrieval corpus for the Semantic agent.
+- `column_descriptions.embeddings.pkl` — On-disk cache of the 54×1536 embedding matrix for `column_descriptions.json`, regenerated automatically by `tools/retrieve_canonical.py` when the catalog changes.
+- `payload.json` — Scratch file used during development to inspect the `ColumnPayload` list emitted by the Semantic agent; not loaded at runtime.
+
+### Data (`Datasets-Reply-20260313/project_data_quality/`)
+
+- `attivazioniCessazioni.csv` — One of the two NoiPA test datasets used in the experiments; tracks employment activations and terminations.
+- `spesa.csv` — The second NoiPA test dataset; tracks personnel expense data.
+
+### Project setup
+
+- `requirements.txt` — Pinned Python dependencies covering `pandas`, `numpy`, `pydantic`, `langgraph`, `langchain-openai`, `openai`, `streamlit`, `fpdf2`, `e2b-code-interpreter`, plus a few extras kept around for the JSON / Excel / Parquet ingestion paths the brief mentions.
+- `.env` — Local environment file holding `OPENAI_API_KEY`; loaded by `dotenv.load_dotenv()` at the top of every entry point.
+- `.gitignore` — Excludes the `.env/` directory and Python bytecode caches.
+
+### Reference material (`guidelines/`)
+
+- `guidelines/Reply_projects.pdf` — The Reply-issued project brief defining deliverable expectations and the six data-quality dimensions.
+- `guidelines/ML Projects general info.docx.pdf` — Course-issued guidelines for ML project deliverables (notebook structure, README expectations, results-section conventions).
+
 ---
 
 ## Methods
@@ -36,7 +141,6 @@ baseline_builder → profiler → semantic → nan_handler → duplicate_column
 ```
 
 
-![Pipeline diagram](images/pipeline.png)
 
 ### The two knowledge-base files
 
@@ -254,37 +358,6 @@ count, (d) columns with correct dtype.
 
 ---
 
-## Results
-
-> **[TODO: fill in after running experiments on both datasets. All figures must be generated
-> from `main.ipynb`.]**
-
-### Canonical matching accuracy
-
-| Method | spesa.csv | attivazioniCessazioni.csv |
-|---|---|---|
-| Name-only (baseline) | — | — |
-| Embeddings retrieval (ours) | — | — |
-
-### Placeholder detection
-
-| Dataset | Precision | Recall |
-|---|---|---|
-| spesa.csv | — | — |
-| attivazioniCessazioni.csv | — | — |
-
-### End-to-end quality improvement
-
-| Metric | Before | After | Δ |
-|---|---|---|---|
-| Total null cells | — | — | — |
-| Format violations | — | — | — |
-| Duplicate rows | — | — | — |
-| Columns with correct dtype | — | — | — |
-
-*(figures generated from main.ipynb — see `images/` folder)*
-
----
 
 ## Conclusions
 
@@ -315,3 +388,4 @@ dtype casting only produce meaningful results when the canonical match is correc
   LangGraph supports parallelism; agents that operate on independent column subsets
   (e.g. format_consistency and duplicate_row) could run concurrently to reduce latency on
   wide datasets.
+
