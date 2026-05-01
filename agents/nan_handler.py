@@ -29,7 +29,7 @@ def _check_nullability(df: pd.DataFrame, state: PipelineState) -> list[Validatio
         return []
     reports: list[ValidationReport] = []
     for p in state.payload:
-        if not p.canonical_hint or p.column_name not in df.columns:
+        if not p.canonical_hint or p.canonical_hint == "NaN" or p.column_name not in df.columns:
             continue
         spec = find_spec_by_hint(state.baseline, p.canonical_hint)
         if spec is None or spec.is_nullable:

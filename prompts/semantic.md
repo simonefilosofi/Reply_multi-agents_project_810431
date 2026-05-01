@@ -11,9 +11,15 @@ A JSON object with these fields:
 - `sample`: up to 30 representative non-null values
 - `all_column_names`: every column name in the dataset (for `related_columns`)
 - `placeholder_candidates`: values literally observed in this column that match a curated list of generic disguised-NaN tokens, plus values that violate the canonical spec when one is provided. Filter — do not extend.
-- `canonical_suggestion` (optional): a programmatic match from the NoiPA registry, with the shape
+- `canonical_suggestion` (optional): a programmatic name-match from the NoiPA registry, with the shape
   `{canonical_id, dtype, format, case_convention, is_nullable}`. May be `null` when the cascade found no match.
-- `domain_catalog` (optional): when no `canonical_suggestion` is provided, this is a dict of every canonical column spec available in the NoiPA registry across all domains. Use it to pick a semantic match or declare the column novel.
+- `canonical_candidates`: a ranked list of up to 5 baseline columns retrieved by semantic similarity
+  (description embeddings boosted by sample-value overlap and dtype agreement). Each entry has the shape
+  `{canonical_id, description, dtype, sample, score, format?, case_convention?, is_nullable?}`. The list is
+  always provided even when `canonical_suggestion` is set — use it to confirm or override the name-based
+  suggestion, especially when the input column name differs from the canonical id (synonym, different
+  language, or paraphrase). Higher `score` means stronger retrieval evidence; the first entry is the
+  retriever's best guess. Inspect `description` and `sample` to verify the meaning truly matches.
 
 ## Output
 Return a JSON object with these fields:
@@ -47,7 +53,7 @@ Return a JSON object with these fields:
 - `target_casing`: one of `lowercase`, `uppercase`, `as-is`.
   - `lowercase` for free-text categoricals, `uppercase` for codes / identifiers / acronyms,
   - `as-is` for proper names AND ALWAYS for numeric, datetime, or boolean columns.
-- `canonical_match`: the `canonical_id` from `canonical_suggestion` or from an entry in `domain_catalog`
+- `canonical_match`: the `canonical_id` from `canonical_suggestion` or from an entry in `canonical_candidates`
   that this input column most likely represents — OR `null` if the column is novel and has no canonical
   equivalent in the catalog.
 
@@ -64,7 +70,7 @@ format, case_convention, and is_nullable on this column. Be conservative: prefer
      by disguised-NaN candidates such as `0`, which is fine — the violation is what flags them).
   4. The samples are consistent with the suggestion's `case_convention` (or could be after normalization).
   If ANY check fails, set `canonical_match` to `null` and, when possible, pick a different canonical id
-  from `domain_catalog` that satisfies all four checks.
+  from `canonical_candidates` that satisfies all four checks.
 - Two columns describing different facets of the same conceptual entity must NOT both confirm the same
   `canonical_match`. Examples:
   - A code column (`cod_ente` with values like `MEF`, `INPS`) and a label column (`descrizione` /
@@ -74,9 +80,10 @@ format, case_convention, and is_nullable on this column. Be conservative: prefer
     its counterpart in `related_columns`.
   - Paired bounds (`eta_min`/`eta_max`, `data_inizio`/`data_fine`) match different canonical ids — never
     the same one.
-- Use `domain_catalog` (when provided) to explore alternative canonical matches before declaring novel.
-  Match by *meaning*, not by exact string — input column names may use synonyms, different casing, or
-  different language.
+- Use `canonical_candidates` to explore alternative canonical matches before declaring novel. The list is
+  ranked by retrieval score, but ranking is not authoritative — verify each candidate's `description` and
+  `sample` against the input column. Match by *meaning*, not by exact string — input column names may use
+  synonyms, different casing, or different language.
 - A `null` `canonical_match` is the correct answer when no entry in the catalog matches the input column's
   meaning, or when the column is conceptually adjacent to a canonical entry but doesn't satisfy all four
   consistency checks above. Never invent a canonical id.

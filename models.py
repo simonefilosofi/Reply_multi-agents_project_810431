@@ -43,7 +43,8 @@ class ColumnPayload(BaseModel):
     placeholders: list[Any] = Field(default_factory=list)
     related_columns: list[str] = Field(default_factory=list)
     target_casing: Casing = Casing.as_is
-    canonical_hint: str | None = None
+    canonical_hint: str = "NaN"
+    canonical_candidates: list[dict] = Field(default_factory=list)
 
 
 class ColumnSchema(BaseModel):

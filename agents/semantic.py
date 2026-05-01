@@ -16,6 +16,7 @@ from tools.baseline_accessors import (
 )
 from tools.infer_and_validate_dtype import infer_and_validate_dtype
 from tools.match_canonical import compact_format_summary, programmatic_match
+from tools.retrieve_canonical import lookup_descriptor, retrieve_top_k
 from utils.prompts import load_prompt
 
 
@@ -46,27 +47,41 @@ class _SemanticResponse(BaseModel):
     canonical_match: str | None = None
 
 
+class _ColumnDescription(BaseModel):
+    column_name: str
+    description: str
+
+
+class _DescribeResponse(BaseModel):
+    descriptions: list[_ColumnDescription]
+
+
 def semantic_node(state: PipelineState) -> PipelineState:
     if state.dataset is None:
         return state
 
-    df = state.dataset
+    df = state.dataset.copy()
     all_columns = list(df.columns)
 
     domain_catalog = column_catalog_all_domains(state.baseline) if state.baseline else {}
     aliases = alias_index(state.baseline) if state.baseline else {}
     chain = ChatOpenAI(model="gpt-4o-mini", temperature=0).with_structured_output(_SemanticResponse)
     system = load_prompt("semantic")
+    descriptions = _describe_columns(df, all_columns)
 
     payload: list[ColumnPayload] = []
     for col in all_columns:
         series = df[col]
         non_null = series.dropna()
         sample = non_null.sample(n=min(30, non_null.shape[0]), random_state=42).tolist()
+        description = descriptions.get(col, "")
 
         suggestion = programmatic_match(col, domain_catalog, aliases) if domain_catalog else None
         suggested_spec = find_spec_by_hint(state.baseline, suggestion) if state.baseline else None
-        candidates = _detect_placeholder_candidates(series, suggested_spec)
+        placeholder_cands = _detect_placeholder_candidates(series, suggested_spec)
+        canonical_cands = _retrieve_canonical_candidates(
+            col, str(series.dtype), sample, state.baseline, description
+        )
 
         user = {
             "column_name": col,
@@ -74,18 +89,23 @@ def semantic_node(state: PipelineState) -> PipelineState:
             "dtype": str(series.dtype),
             "sample": sample,
             "all_column_names": all_columns,
-            "placeholder_candidates": candidates,
+            "placeholder_candidates": placeholder_cands,
             "canonical_suggestion": _summarize_spec(suggestion, suggested_spec),
-            "domain_catalog": _compact_catalog(domain_catalog) if domain_catalog and suggested_spec is None else None,
+            "canonical_candidates": canonical_cands,
         }
         result: _SemanticResponse = chain.invoke([
             {"role": "system", "content": system},
             {"role": "user", "content": json.dumps(user, ensure_ascii=False, default=str)},
         ])
 
-        canonical_hint = result.canonical_match or None
-        confirmed_spec = find_spec_by_hint(state.baseline, canonical_hint) if state.baseline else None
-        dtype = infer_and_validate_dtype(series, llm_suggestion=result.dtype)
+        canonical_hint = _validate_canonical_match(result.canonical_match)
+        confirmed_spec = (
+            find_spec_by_hint(state.baseline, canonical_hint)
+            if state.baseline and canonical_hint != "NaN"
+            else None
+        )
+        dtype = _resolve_dtype(canonical_hint, series, result.dtype)
+        df[col] = _cast_series(series, dtype)
         payload.append(ColumnPayload(
             column_name=col,
             description=result.column_meaning,
@@ -95,9 +115,10 @@ def semantic_node(state: PipelineState) -> PipelineState:
             related_columns=result.related_columns,
             target_casing=_resolve_casing(dtype, result.target_casing, confirmed_spec),
             canonical_hint=canonical_hint,
+            canonical_candidates=canonical_cands,
         ))
 
-    return state.model_copy(update={"payload": payload})
+    return state.model_copy(update={"payload": payload, "dataset": df})
 
 
 def _detect_placeholder_candidates(series: pd.Series, spec: ColumnSchema | None) -> list:
@@ -146,17 +167,70 @@ def _summarize_spec(canonical_id: str | None, spec: ColumnSchema | None) -> dict
     }
 
 
-def _compact_catalog(catalog: dict[str, ColumnSchema]) -> dict[str, dict]:
-    return {
-        name: {
-            "canonical_id": schema.canonical_id or name,
-            "dtype": schema.dtype,
-            "format": compact_format_summary(schema.format),
-            "case_convention": schema.case_convention,
-            "is_nullable": schema.is_nullable,
-        }
-        for name, schema in catalog.items()
+def _validate_canonical_match(match: str | None) -> str:
+    if not match:
+        return "NaN"
+    return match if lookup_descriptor(match) is not None else "NaN"
+
+
+def _resolve_dtype(canonical_hint: str, series: pd.Series, llm_dtype: str) -> str:
+    if canonical_hint != "NaN":
+        descriptor = lookup_descriptor(canonical_hint)
+        if descriptor and descriptor.get("dtype"):
+            return descriptor["dtype"]
+    return infer_and_validate_dtype(series, llm_suggestion=llm_dtype)
+
+
+def _cast_series(series: pd.Series, dtype: str) -> pd.Series:
+    target = dtype.lower()
+    try:
+        if "int" in target:
+            return pd.to_numeric(series, errors="coerce").astype("Int64")
+        if "float" in target or "double" in target or "decimal" in target:
+            return pd.to_numeric(series, errors="coerce")
+        if "date" in target or "time" in target:
+            return pd.to_datetime(series, errors="coerce")
+        if "bool" in target:
+            return series.astype("boolean")
+        if "string" in target or target == "object":
+            return series.astype("string")
+        return series.astype(dtype)
+    except (ValueError, TypeError):
+        return series
+
+
+def _describe_columns(df: pd.DataFrame, columns: list[str]) -> dict[str, str]:
+    chain = ChatOpenAI(model="gpt-4o-mini", temperature=0).with_structured_output(_DescribeResponse)
+    user = {
+        "columns": [
+            {
+                "column_name": col,
+                "dtype": str(df[col].dtype),
+                "sample": df[col].dropna().head(5).tolist(),
+            }
+            for col in columns
+        ],
     }
+    result: _DescribeResponse = chain.invoke([
+        {"role": "system", "content": load_prompt("semantic_describe")},
+        {"role": "user", "content": json.dumps(user, ensure_ascii=False, default=str)},
+    ])
+    return {d.column_name: d.description for d in result.descriptions}
+
+
+def _retrieve_canonical_candidates(
+    name: str, dtype: str, samples: list, baseline, description: str = ""
+) -> list[dict]:
+    candidates = retrieve_top_k(name, dtype, samples, description=description, k=5)
+    if baseline is None:
+        return candidates
+    for c in candidates:
+        spec = find_spec_by_hint(baseline, c["canonical_id"])
+        if spec:
+            c["format"] = compact_format_summary(spec.format)
+            c["case_convention"] = spec.case_convention
+            c["is_nullable"] = spec.is_nullable
+    return candidates
 
 
 def _resolve_casing(dtype: str, llm_casing: Casing, spec: ColumnSchema | None) -> Casing:
