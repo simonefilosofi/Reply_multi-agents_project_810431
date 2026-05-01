@@ -6,6 +6,8 @@ You receive a JSON array where each entry describes anomalies found in one colum
 - `stats`: statistical summary — for "iqr": Q1, Q3, IQR, computed bounds, and total outlier count; for "rare_category": total non-null count, distinct value count, rare value count, frequency threshold used, and `top_values` (the 2 most frequent values with their count and percentage)
 - `sample_anomalies`: up to 5 representative anomalous values with their detection reason
 
+**Important:** If the column name contains 'id' or similar identifier patterns (e.g., `ID`, `_id`, `identifier`, `code`, `pk`), skip it entirely—do not write a comment, as such columns are expected to have unique or near-unique values and are not relevant for data quality anomaly analysis.
+
 For each column, write a single concise sentence (1–2 lines max) that:
 1. States the type and scale of the anomaly (e.g., "X numeric outliers", "Y rare categories")
 2. Describes what the anomalous values look like based on the samples
