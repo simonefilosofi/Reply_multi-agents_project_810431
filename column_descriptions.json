@@ -1,0 +1,826 @@
+[
+  {
+    "column_name": "aliquota_max",
+    "description": "Maximum IRPEF marginal tax rate (%) applied to the income bracket of the group.",
+    "sample": [
+      "23",
+      "35",
+      "43"
+    ],
+    "dtype": "integer"
+  },
+  {
+    "column_name": "amministrazione",
+    "description": "Name of the public administration entity to which the employees belong.",
+    "sample": [
+      "A.O. S. GIOVANNI ADDOLORATA",
+      "AGENZIA ITALIANA PER LA COOPERAZIONE ALLO SVILUPPO",
+      "AUTORITA' DI BACINO DISTRETTUALE DELL'APPENNINO CENTRALE",
+      "AZIENDA SANITARIA LOCALE ROMA 2",
+      "COMUNE DI MERCATO SAN SEVERINO",
+      "ENTE PARCO NAZIONALE DELLA MAJELLA",
+      "ISTITUTO SUPERIORE DI SANITA'",
+      "MINISTERO DELL'ECONOMIA E FINANZE",
+      "MINISTERO DELLA SALUTE",
+      "REGIONE LAZIO"
+    ],
+    "dtype": "string"
+  },
+  {
+    "column_name": "amministrazione_appartenenza",
+    "description": "Public administration of membership, used in portal-access datasets to identify the employer of the accessing user.",
+    "sample": [
+      "A.O. S. GIOVANNI ADDOLORATA",
+      "AGENZIA DELLE ENTRATE",
+      "AZIENDA REGIONALE EMERGENZA SANITARIA",
+      "AZIENDA SANITARIA LOCALE ROMA 3",
+      "CONSIGLIO DI STATO E T.A.R.",
+      "ENTE PARCO NAZIONALE DELLA MAJELLA",
+      "MINISTERO DEL LAVORO E DELLE POLITICHE SOCIALI",
+      "MINISTERO DELL'INTERNO",
+      "MINISTERO DELLA SALUTE",
+      "REGIONE LAZIO"
+    ],
+    "dtype": "string"
+  },
+  {
+    "column_name": "anno",
+    "description": "Tax year to which the Certificazione Unica (CU) income and withholding figures refer.",
+    "sample": [
+      "2022",
+      "2023",
+      "2024"
+    ],
+    "dtype": "integer"
+  },
+  {
+    "column_name": "comparto",
+    "description": "Collective bargaining sector (e.g. Comparto Funzioni Centrali, Comparto Sanita') under which employees are contracted.",
+    "sample": [
+      "ALTRO PERSONALE",
+      "AREA DIRIGENZIALE FUNZIONI CENTRALI",
+      "AREA DIRIGENZIALE FUNZIONI LOCALI",
+      "AREA DIRIGENZIALE SANITA'",
+      "COMPARTO FUNZIONI CENTRALI",
+      "COMPARTO ISTRUZIONE e RICERCA",
+      "ENTI PUBBLICI ECONOMICI - PERSONALE",
+      "PERSONALE ADDETTO SISTEMAZIONE IDRAULICA FORESTALE E AGRARIA",
+      "PERSONALE DELLA MAGISTRATURA",
+      "PERSONALE NON CONTRATTUALIZZATO"
+    ],
+    "dtype": "string"
+  },
+  {
+    "column_name": "comune_della_sede",
+    "description": "Municipality where the organisational unit or administrative office is located.",
+    "sample": [
+      "ABANO TERME",
+      "ANDRANO",
+      "BERGAMO",
+      "CASTELVERDE",
+      "FIORENZUOLA D'ARDA",
+      "LORIA",
+      "NUORO",
+      "RIMINI",
+      "SOLARINO",
+      "ZERO BRANCO"
+    ],
+    "dtype": "string"
+  },
+  {
+    "column_name": "detrazioni_altri_familiari",
+    "description": "Number of employees in the unit claiming IRPEF deductions for other dependent family members (not spouse or children).",
+    "sample": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4"
+    ],
+    "dtype": "integer"
+  },
+  {
+    "column_name": "detrazioni_coniuge",
+    "description": "Number of employees in the unit claiming IRPEF deductions for a dependent spouse.",
+    "sample": [
+      "0",
+      "12",
+      "16",
+      "20",
+      "24",
+      "35",
+      "4",
+      "58",
+      "7",
+      "9"
+    ],
+    "dtype": "integer"
+  },
+  {
+    "column_name": "detrazioni_figli",
+    "description": "Number of employees in the unit claiming IRPEF deductions for dependent children.",
+    "sample": [
+      "0",
+      "11",
+      "15",
+      "19",
+      "22",
+      "25",
+      "29",
+      "32",
+      "5",
+      "9"
+    ],
+    "dtype": "integer"
+  },
+  {
+    "column_name": "distance_max_KM",
+    "description": "Upper bound (in kilometres) of the commute-distance bracket for the employee group.",
+    "sample": [
+      "10",
+      "100",
+      "20",
+      "200",
+      "5",
+      "50",
+      "600"
+    ],
+    "dtype": "integer"
+  },
+  {
+    "column_name": "distance_min_KM",
+    "description": "Lower bound (in kilometres) of the commute-distance bracket for the employee group.",
+    "sample": [
+      "10",
+      "100",
+      "20",
+      "200",
+      "5",
+      "50"
+    ],
+    "dtype": "integer"
+  },
+  {
+    "column_name": "ente",
+    "description": "Public entity name, used in commuting (pendolarismo) data to identify the employer.",
+    "sample": [
+      "AGENZIA DEL DEMANIO",
+      "AGENZIA INDUSTRIE DIFESA AID",
+      "AUTORITA' DI BACINO DISTR. DELL'APPENNINO SETTENTRIONALE",
+      "COMUNE DI CORLETO MONFORTE",
+      "CORTE DEI CONTI",
+      "ISPETTORATO NAZIONALE DEL LAVORO",
+      "MINISTERO DELL'ECONOMIA E FINANZE",
+      "MINISTERO DELLA CULTURA",
+      "MINISTERO DELLA SALUTE",
+      "MINISTERO UNIVERSITA' E RICERCA"
+    ],
+    "dtype": "string"
+  },
+  {
+    "column_name": "eta_max",
+    "description": "Upper bound (inclusive) of the age bracket used to aggregate employees.",
+    "sample": [
+      "24",
+      "34",
+      "44",
+      "54",
+      "64"
+    ],
+    "dtype": "integer"
+  },
+  {
+    "column_name": "eta_min",
+    "description": "Lower bound (inclusive) of the age bracket used to aggregate employees.",
+    "sample": [
+      "18",
+      "25",
+      "35",
+      "45",
+      "55",
+      "65"
+    ],
+    "dtype": "integer"
+  },
+  {
+    "column_name": "fascia_reddito_max",
+    "description": "Upper bound of the annual income bracket (in euros, or a descriptive label such as 'Oltre 100000').",
+    "sample": [
+      "Fino a 28000",
+      "Fino a 50000"
+    ],
+    "dtype": "string"
+  },
+  {
+    "column_name": "fascia_reddito_min",
+    "description": "Lower bound of the annual income bracket (in euros, or a descriptive label such as 'Fino a 28000').",
+    "sample": [
+      "Oltre i 28000",
+      "Oltre i 50000"
+    ],
+    "dtype": "string"
+  },
+  {
+    "column_name": "granularita_assenza",
+    "description": "Unit of measurement for the recorded absence: 'GG' for full days, 'HH' for hours.",
+    "sample": [
+      "GG",
+      "HH"
+    ],
+    "dtype": "string"
+  },
+  {
+    "column_name": "imponibile_fiscale",
+    "description": "Aggregate taxable income (in euros) for the group, used as the base for IRPEF withholding calculations.",
+    "sample": [
+      "1.00603e+06",
+      "128509.0",
+      "166700.0",
+      "207677.0",
+      "27018.8",
+      "35016.1",
+      "45273.3",
+      "60267.4",
+      "780517.0",
+      "99312.5"
+    ],
+    "dtype": "float"
+  },
+  {
+    "column_name": "imponibili_previdenziali",
+    "description": "Aggregate social-security taxable income (in euros) for the group, as certified in the CU.",
+    "sample": [
+      "0.00",
+      "1297823.08",
+      "1720343.55",
+      "2194549.27",
+      "289304.84",
+      "360319.42",
+      "463221.73",
+      "593042.99",
+      "743923.40",
+      "999113.38"
+    ],
+    "dtype": "float"
+  },
+  {
+    "column_name": "importo",
+    "description": "Total monetary amount (in euros) for the record; semantics depend on the dataset (e.g. family allowances paid).",
+    "sample": [
+      "1010.13",
+      "1373.69",
+      "175.59",
+      "2080.13",
+      "2461.78",
+      "302.11",
+      "382.16",
+      "4399.92",
+      "6933.97",
+      "999.44"
+    ],
+    "dtype": "float"
+  },
+  {
+    "column_name": "importo_IRPEF",
+    "description": "Total IRPEF income tax (in euros) withheld from payslips for the group in the reference period.",
+    "sample": [
+      "10003.2",
+      "132058.0",
+      "175846.0",
+      "225287.0",
+      "28973.3",
+      "3687.51",
+      "4682.9",
+      "59292.6",
+      "7935.39",
+      "99872.7"
+    ],
+    "dtype": "float"
+  },
+  {
+    "column_name": "importo_datore",
+    "description": "Total social-security contribution amount (in euros) paid by the employer for the group.",
+    "sample": [
+      "0.0",
+      "13456.9",
+      "17529.9",
+      "2182.45",
+      "29.22",
+      "3794.55",
+      "46826.0",
+      "582.18",
+      "786.69",
+      "9972.9"
+    ],
+    "dtype": "float"
+  },
+  {
+    "column_name": "importo_lavoratore",
+    "description": "Total social-security contribution amount (in euros) paid by the employees in the group.",
+    "sample": [
+      "0.0",
+      "1305.03",
+      "1596.75",
+      "2028.33",
+      "2756.74",
+      "3426.63",
+      "453.39",
+      "6092.55",
+      "7747.62",
+      "999.15"
+    ],
+    "dtype": "float"
+  },
+  {
+    "column_name": "importo_ritenute",
+    "description": "Total withholding amount (in euros) deducted from payslips, covering union dues or loan repayments.",
+    "sample": [
+      "100.0",
+      "1334.69",
+      "1680.0",
+      "211.68",
+      "2668.54",
+      "3298.76",
+      "41768.4",
+      "55791.1",
+      "7466.15",
+      "9971.71"
+    ],
+    "dtype": "float"
+  },
+  {
+    "column_name": "inquadramento",
+    "description": "Contractual job classification or grade of the employees (e.g. Funzionari-Entrate-EX III F 4).",
+    "sample": [
+      "AFAM - DOCENTE I FASCIA",
+      "ASSISTENTE",
+      "ASSISTENTI-INTERNO- EX II F 4",
+      "COLLABORATORI",
+      "FUNZ-GIUSTIZIA-EX III F 2",
+      "FUNZIONARI-ENTRATE-EX III F 5",
+      "IMPIEGATO LIVELLO 6",
+      "MAGISTRATO ORDINARIO",
+      "SUPPL.DIPL.SEC.SUP",
+      "VIGILE DEL FUOCO ESPERTO S.C."
+    ],
+    "dtype": "string"
+  },
+  {
+    "column_name": "modalita_autenticazione",
+    "description": "Authentication method used to access the NoiPA portal (e.g. SPID, CIE, username/password).",
+    "sample": [
+      "CIE",
+      "CNS",
+      "FEDERATION",
+      "SPID"
+    ],
+    "dtype": "string"
+  },
+  {
+    "column_name": "modalita_pagamento",
+    "description": "Salary disbursement method chosen by the employee (e.g. conto corrente bancario, conto corrente postale).",
+    "sample": [
+      "Conto corrente bancario",
+      "Conto corrente postale",
+      "Libretto postale"
+    ],
+    "dtype": "string"
+  },
+  {
+    "column_name": "motivazione_assenza",
+    "description": "Category label for the type of absence recorded (e.g. malattia, congedo, permesso legge 104).",
+    "sample": [
+      "ALTRE RIDUZIONI (assenze giornaliere)",
+      "ALTRE RIDUZIONI (assenze orarie)",
+      "ASPETTATIVE (assenze giornaliere)",
+      "CONGEDI (assenze giornaliere)",
+      "CONGEDI (assenze orarie)",
+      "MALATTIE (assenze giornaliere)",
+      "PERMESSI (assenze giornaliere)",
+      "RIDUZIONI (assenze giornaliere)",
+      "RIDUZIONI (assenze orarie)",
+      "SOSPENSIONI (assenze giornaliere)"
+    ],
+    "dtype": "string"
+  },
+  {
+    "column_name": "motivo_assunzione",
+    "description": "Legal reason or procedure through which the employee was hired (e.g. concorso, mobilita', comando).",
+    "sample": [
+      "CONCORSO",
+      "DECRETO",
+      "MOBILITA'",
+      "NOMINA"
+    ],
+    "dtype": "string"
+  },
+  {
+    "column_name": "motivo_cessazione",
+    "description": "Reason for the termination of the employment relationship (e.g. pensione, dimissioni, fine incarico).",
+    "sample": [
+      "ALTRO MOTIVO",
+      "ANNULLO GIURIDICO",
+      "CESSAZIONE DI DIRITTO PER ASSUNZIONE IN ALTRO IMPIEGO PUBBLICO",
+      "DECADENZA DALL'IMPIEGO PER ACCETTAZIONE INCARICO A TEMPO DETERMINATO",
+      "DESTITUZIONE DI DIRITTO DAL SERVIZIO",
+      "FINE INCARICO",
+      "PASSAGGIO AD ALTRA AMMINISTRAZIONE",
+      "PASSAGGIO ALTRA AMMINISTRAZIONE PER COMANDO",
+      "RISOLUZIONE DEL RAPPORTO DI LAVORO PER ALTRE CAUSE",
+      "RISOLUZIONE DEL RAPPORTO DI LAVORO PER COMPIUTO LIMITE DI ASSENZA PER MALATTIA"
+    ],
+    "dtype": "string"
+  },
+  {
+    "column_name": "numero",
+    "description": "Generic count of employees or records in the aggregated group; exact meaning is determined by the dataset context.",
+    "sample": [
+      "10",
+      "1279",
+      "1631",
+      "2055",
+      "271",
+      "346",
+      "453.0",
+      "5949.0",
+      "7581.0",
+      "999.0"
+    ],
+    "dtype": "float"
+  },
+  {
+    "column_name": "numero_amministrati",
+    "description": "Number of employees (amministrati) managed by NoiPA within the group.",
+    "sample": [
+      "10",
+      "135",
+      "177",
+      "224",
+      "283",
+      "3711",
+      "477",
+      "592",
+      "755",
+      "997"
+    ],
+    "dtype": "integer"
+  },
+  {
+    "column_name": "numero_cedolini",
+    "description": "Number of payslips (cedolini) processed for the group in the reference month.",
+    "sample": [
+      "10",
+      "13",
+      "17",
+      "210",
+      "254",
+      "32",
+      "416",
+      "52",
+      "70",
+      "99"
+    ],
+    "dtype": "integer"
+  },
+  {
+    "column_name": "numero_occorrenze",
+    "description": "Number of portal login or access events recorded for the group in the reference period.",
+    "sample": [
+      "10",
+      "125",
+      "173",
+      "233",
+      "298",
+      "355",
+      "44",
+      "54",
+      "69",
+      "993"
+    ],
+    "dtype": "integer"
+  },
+  {
+    "column_name": "numero_rapporti_lavoro",
+    "description": "Number of active employment contracts (rapporti di lavoro) associated with the organisational unit.",
+    "sample": [
+      "10",
+      "13",
+      "169",
+      "20",
+      "240",
+      "32",
+      "431",
+      "58",
+      "77",
+      "99"
+    ],
+    "dtype": "integer"
+  },
+  {
+    "column_name": "numero_ritenute",
+    "description": "Number of individual withholding deduction lines (e.g. union due entries or loan instalment lines) in the group.",
+    "sample": [
+      "10",
+      "135",
+      "164",
+      "2036",
+      "263",
+      "348",
+      "47",
+      "59",
+      "80",
+      "997"
+    ],
+    "dtype": "integer"
+  },
+  {
+    "column_name": "numero_unita_organizzative",
+    "description": "Number of distinct organisational units (uffici) present within the administration and location group.",
+    "sample": [
+      "1",
+      "11",
+      "13",
+      "17",
+      "2",
+      "22",
+      "24",
+      "4",
+      "6",
+      "9"
+    ],
+    "dtype": "integer"
+  },
+  {
+    "column_name": "numerosita",
+    "description": "Count of employees falling within the income-bracket and demographic segment; equivalent to numero in income-bracket datasets.",
+    "sample": [
+      "1",
+      "122",
+      "17",
+      "26",
+      "35",
+      "43",
+      "53",
+      "6",
+      "8",
+      "99"
+    ],
+    "dtype": "integer"
+  },
+  {
+    "column_name": "previdenza_complementare",
+    "description": "Aggregate contributions (in euros) to supplementary or complementary pension funds, as certified in the CU.",
+    "sample": [
+      "0.00",
+      "1278.08",
+      "163617.24",
+      "2055.04",
+      "2676.32",
+      "3629.82",
+      "504624.30",
+      "620.04",
+      "7667.17",
+      "9991.91"
+    ],
+    "dtype": "float"
+  },
+  {
+    "column_name": "provincia_della_sede",
+    "description": "Province where the organisational unit or administrative office is located.",
+    "sample": [
+      "AGRIGENTO",
+      "BENEVENTO",
+      "CATANZARO",
+      "FORLI' E CESENA",
+      "LIVORNO",
+      "NAPOLI",
+      "PISA",
+      "ROVIGO",
+      "TRAPANI",
+      "VITERBO"
+    ],
+    "dtype": "string"
+  },
+  {
+    "column_name": "provincia_di_residenza",
+    "description": "Province of residence of the employees in the group.",
+    "sample": [
+      "AGRIGENTO",
+      "ALESSANDRIA",
+      "AOSTA",
+      "AREZZO",
+      "ASTI",
+      "AVELLINO",
+      "BARLETTA-ANDRIA-TRANI",
+      "BELLUNO",
+      "BERGAMO",
+      "BOLOGNA"
+    ],
+    "dtype": "string"
+  },
+  {
+    "column_name": "reddito_relativo_anni_precedenti",
+    "description": "Employment income pertaining to prior tax years but paid and certified in the current Certificazione Unica.",
+    "sample": [
+      "0.00",
+      "125677.42",
+      "16485.02",
+      "2172029.88",
+      "29163.85",
+      "36723.52",
+      "478365.61",
+      "611721.14",
+      "77308.61",
+      "99855.53"
+    ],
+    "dtype": "float"
+  },
+  {
+    "column_name": "reddito_relativo_anno_corrente",
+    "description": "Employment income pertaining to the reference tax year, as certified in the Certificazione Unica.",
+    "sample": [
+      "0.00",
+      "1318846180.80",
+      "16846078.31",
+      "218557.52",
+      "274447769.93",
+      "3478699.74",
+      "438257.41",
+      "5729148.75",
+      "754005.66",
+      "999876.97"
+    ],
+    "dtype": "float"
+  },
+  {
+    "column_name": "regione_di_residenza",
+    "description": "Italian region of residence of the employees, as recorded in the Certificazione Unica datasets.",
+    "sample": [
+      "ABRUZZO",
+      "CALABRIA",
+      "EMILIA ROMAGNA",
+      "LAZIO",
+      "LOMBARDIA",
+      "MOLISE",
+      "PUGLIA",
+      "SICILIA",
+      "TRENTINO ALTO ADIGE",
+      "VENETO"
+    ],
+    "dtype": "string"
+  },
+  {
+    "column_name": "regione_residenza",
+    "description": "Italian region of residence of the employees, as used in income-bracket (fascia di reddito) datasets.",
+    "sample": [
+      "ABRUZZO",
+      "CALABRIA",
+      "EMILIA ROMAGNA",
+      "FRIULI-VENEZIA GIULIA",
+      "LIGURIA",
+      "MOLISE",
+      "PUGLIA",
+      "SICILIA",
+      "TRENTINO ALTO ADIGE",
+      "VENETO"
+    ],
+    "dtype": "string"
+  },
+  {
+    "column_name": "regione_residenza_domicilio",
+    "description": "Italian region of residence or domicile of the employees, as used in portal-access tracking datasets.",
+    "sample": [
+      "ABRUZZO",
+      "BASILICATA"
+    ],
+    "dtype": "string"
+  },
+  {
+    "column_name": "ritenuta_previdenziale",
+    "description": "Label identifying the type of social-security deduction applied (e.g. INPDAP, Disoccupazione, Fondo Credito).",
+    "sample": [
+      "CPDEL",
+      "DISOCCUPAZIONE",
+      "FIP ENPDEP",
+      "FONDO CREDITO",
+      "INPDAP",
+      "INPDAP F.POL.EX RETR.",
+      "MAGGIORAZIONE FONDO CREDITO",
+      "MAGGIORAZIONE INPDAP F.POL.EX RETR.",
+      "OP.PREV.  IIS",
+      "TFR"
+    ],
+    "dtype": "string"
+  },
+  {
+    "column_name": "ritenute_comunali",
+    "description": "Aggregate municipal surtax (addizionale comunale IRPEF, in euros) withheld, as certified in the CU.",
+    "sample": [
+      "0.00",
+      "12846.38",
+      "1675.77",
+      "21523.47",
+      "27809.46",
+      "348799.84",
+      "4574.93",
+      "5913.89",
+      "779.89",
+      "999.36"
+    ],
+    "dtype": "float"
+  },
+  {
+    "column_name": "ritenute_irpef_anno_corrente",
+    "description": "IRPEF withholdings (in euros) relating to the current tax year, as certified in the CU.",
+    "sample": [
+      "0.00",
+      "126860.17",
+      "167946.72",
+      "2179935.98",
+      "27683.30",
+      "36010.90",
+      "457304.54",
+      "59997.11",
+      "78013.59",
+      "99805.89"
+    ],
+    "dtype": "float"
+  },
+  {
+    "column_name": "ritenute_irpef_anno_precedente",
+    "description": "IRPEF withholdings (in euros) relating to prior tax years, as certified in the CU.",
+    "sample": [
+      "0.00",
+      "126703.98",
+      "16550.50",
+      "209241.50",
+      "263171.28",
+      "3401.92",
+      "4411.13",
+      "58396.02",
+      "7666.68",
+      "999.36"
+    ],
+    "dtype": "float"
+  },
+  {
+    "column_name": "ritenute_regionali",
+    "description": "Aggregate regional surtax (addizionale regionale IRPEF, in euros) withheld, as certified in the CU.",
+    "sample": [
+      "0.00",
+      "1319.97",
+      "1726.72",
+      "216719.61",
+      "2804.88",
+      "3599282.05",
+      "46200.56",
+      "58099.30",
+      "75178.90",
+      "9965.49"
+    ],
+    "dtype": "float"
+  },
+  {
+    "column_name": "stesso_comune",
+    "description": "Flag ('SI'/'NO') indicating whether the employee resides in the same municipality as their workplace.",
+    "sample": [
+      "NO",
+      "SI"
+    ],
+    "dtype": "string"
+  },
+  {
+    "column_name": "totale_detrazioni",
+    "description": "Total IRPEF tax deductions (in euros) applied for dependent family members (spouse + children + others combined), as certified in the CU.",
+    "sample": [
+      "0.00",
+      "12739.88",
+      "1644643.59",
+      "207564.76",
+      "27214.72",
+      "35920.96",
+      "469384.95",
+      "60238.74",
+      "77859.18",
+      "997199.49"
+    ],
+    "dtype": "float"
+  },
+  {
+    "column_name": "unita_organizzativa",
+    "description": "Name of the specific organisational unit (e.g. school, office) within the parent administration.",
+    "sample": [
+      "1. ISTITUTO COMPRENSIVO",
+      "ANGELO MOZZILLO AFRAGOLA",
+      "DIREZ. INTER. EMILIA ROMAGNA E MARCHE - DISTRETTO DI ANCONA UFFICIO DELLE DOGANE DI ANCONA",
+      "I.C. 3 ASTI",
+      "I.C. G. VERDI - P. CAFARO",
+      "I.O. D'AGNILLO-MOLISE ALTISSIMO",
+      "IC PATRIZIO RIGONI",
+      "ISTITUTO OMNICOMPRENSIVO ALVITO",
+      "PROCURA DELLA REPUBBLICA PRESSO IL TRIBUNALE",
+      "VITTORIO ALFIERI"
+    ],
+    "dtype": "string"
+  }
+]

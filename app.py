@@ -1,110 +1,256 @@
-import os
-import tempfile
-import streamlit as st
-from dotenv import load_dotenv
+"""Minimal Streamlit harness to manually exercise the Profiler, Semantic, NaN-Handler, Duplicate-Column, Format-Consistency, and Unified-Remediation agents on an uploaded CSV. Renders an approval gate where the user can Accept, Reject, or Edit-with-feedback each proposed fix."""
+from __future__ import annotations
 
-from state.pipeline_state import PipelineState
-from agents.ingestion_agent import IngestionAgent
-from agents.profiler_agent import ProfilerAgent
-from agents.schema_agent import SchemaAgent
-from agents.completeness_agent import CompletenessAgent
-from agents.duplicate_agent import DuplicateAgent
-from agents.anomaly_agent import AnomalyAgent
-from agents.consistency_agent import ConsistencyAgent
-from agents.synthesis_agent import SynthesisAgent
+from dotenv import load_dotenv
 
 load_dotenv()
 
-st.set_page_config(page_title="Data Quality Pipeline", layout="wide")
-st.title("Multi-Agent Data Quality Pipeline")
+import pandas as pd
+import streamlit as st
 
-uploaded = st.file_uploader("Upload a dataset", type=["csv", "json", "xlsx", "xls", "parquet"])
+from agents.anomaly_detector import anomaly_detector_node
+from agents.duplicate_column import duplicate_column_node
+from agents.format_consistency import format_consistency_node
+from agents.nan_handler import nan_handler_node
+from agents.profiler import profiler_node
+from agents.semantic import semantic_node
+from agents.unified import propose_for_group, unified_node
+from state import PipelineState
 
-if uploaded:
-    # Save uploaded file to a temp path so agents can read it
-    suffix = "." + uploaded.name.rsplit(".", 1)[-1]
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        tmp.write(uploaded.read())
-        tmp_path = tmp.name
+st.set_page_config(page_title="NoiPA DQ — pipeline test", layout="wide")
+st.title("NoiPA DQ — Profiler, Semantic, NaN, Duplicate-Column, Format, Unified")
 
-    if st.button("Run Analysis"):
-        state = PipelineState(source_path=tmp_path)
+st.session_state.setdefault("pipeline_state", None)
+st.session_state.setdefault("snapshots", {})
+st.session_state.setdefault("fix_decisions", {})
+st.session_state.setdefault("editing", {})
 
-        with st.spinner("Loading dataset..."):
-            IngestionAgent(state).run()
+uploaded = st.file_uploader("Upload a CSV", type=["csv"])
+if uploaded is None:
+    st.stop()
 
-        with st.spinner("Profiling dataset..."):
-            ProfilerAgent(state).run()
+df = pd.read_csv(uploaded)
+st.subheader("Input preview")
+st.caption(f"{df.shape[0]} rows x {df.shape[1]} columns")
+st.dataframe(df.head(20))
 
-        with st.spinner("Running analysis..."):
-            SchemaAgent(state).run()
-            CompletenessAgent(state).run()
-            DuplicateAgent(state).run()
-            AnomalyAgent(state).run()
-            ConsistencyAgent(state).run()
+if st.button("Run pipeline"):
+    snapshots: dict = {}
+    state = PipelineState(dataset=df, dataset_path=uploaded.name)
 
-        with st.spinner("Synthesizing results..."):
-            SynthesisAgent(state).run()
+    with st.spinner("Profiler..."):
+        state = profiler_node(state)
+    with st.spinner("Semantic..."):
+        state = semantic_node(state)
+    snapshots["nan_before"] = state.dataset.isna().sum().to_dict()
+    with st.spinner("NaN handler..."):
+        state = nan_handler_node(state)
+    snapshots["nan_after"] = state.dataset.isna().sum().to_dict()
+    snapshots["cols_before_dup"] = list(state.dataset.columns)
+    snapshots["nan_pre_dup"] = state.dataset.isna().sum().to_dict()
+    with st.spinner("Duplicate Column..."):
+        state = duplicate_column_node(state)
+    snapshots["nan_post_dup"] = state.dataset.isna().sum().to_dict()
+    with st.spinner("Format Consistency..."):
+        state = format_consistency_node(state)
+    with st.spinner("Anomaly Detector..."):
+        state = anomaly_detector_node(state)
+    with st.spinner("Unified Remediation..."):
+        state = unified_node(state)
 
-        os.unlink(tmp_path)
+    st.session_state.pipeline_state = state
+    st.session_state.snapshots = snapshots
+    st.session_state.fix_decisions = {}
+    st.session_state.editing = {}
 
-        # --- Dataset overview ---
-        st.header("Dataset Overview")
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Rows", state.ingestion_meta["rows"])
-        col2.metric("Columns", state.ingestion_meta["columns"])
-        col3.metric("Format", state.source_format.upper())
-        overall_rate = state.completeness_report.get("overall_rate", None)
-        col4.metric("Completeness", f"{overall_rate:.1%}" if overall_rate is not None else "-")
+state: PipelineState | None = st.session_state.pipeline_state
+if state is None:
+    st.stop()
 
-        st.dataframe(state.df_raw.head(10), use_container_width=True)
+snapshots = st.session_state.snapshots
 
-        # --- Fingerprint ---
-        st.header("Dataset Profile")
-        fp = state.dataset_fingerprint
-        col1, col2 = st.columns(2)
-        col1.markdown(f"**Domain:** {fp.get('domain', '-')}")
-        col1.markdown(f"**Language:** {fp.get('language', '-')}")
-        col2.markdown(f"**ID columns:** {', '.join(fp.get('id_columns', [])) or '-'}")
-        col2.markdown(f"**Date columns:** {', '.join(fp.get('date_columns', [])) or '-'}")
+st.subheader("Profiler output")
+st.json({"detected_domain": state.detected_domain, "detected_language": state.detected_language})
 
-        # --- Synthesis ---
-        st.header("Executive Summary")
-        st.info(state.synthesis_summary)
+st.subheader("Semantic payload")
+st.json([p.model_dump() for p in state.payload])
 
-        issues = state.prioritized_issues
-        high = sum(1 for i in issues if i["severity"] == "high")
-        medium = sum(1 for i in issues if i["severity"] == "medium")
-        low = sum(1 for i in issues if i["severity"] == "low")
+st.subheader("NaN handler — disguised NaNs replaced")
+nan_diff = {
+    col: {"before": int(snapshots["nan_before"][col]), "after": int(snapshots["nan_after"][col])}
+    for col in snapshots["nan_before"]
+    if snapshots["nan_after"][col] != snapshots["nan_before"][col]
+} or {"info": "no disguised NaNs were detected"}
+st.json(nan_diff)
 
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Total Issues", len(issues))
-        col2.metric("High", high)
-        col3.metric("Medium", medium)
-        col4.metric("Low", low)
+nullability_issues = [
+    {"column": r.column_name, "violations": [v.model_dump() for v in r.violations]}
+    for r in state.validation_reports
+    if any(v.expected_pattern == "not nullable" for v in r.violations)
+]
+if nullability_issues:
+    st.subheader("Nullability issues — non-nullable columns with NaN")
+    st.json(nullability_issues)
 
-        st.subheader("Prioritized Issues")
-        if issues:
-            st.dataframe(issues, use_container_width=True)
+dropped = [c for c in snapshots["cols_before_dup"] if c not in state.surviving_columns]
+filled = {
+    c: int(snapshots["nan_pre_dup"][c] - snapshots["nan_post_dup"][c])
+    for c in state.surviving_columns
+    if snapshots["nan_pre_dup"].get(c, 0) > snapshots["nan_post_dup"].get(c, 0)
+}
+st.subheader("Duplicate-Column output")
+st.json({
+    "surviving_columns": state.surviving_columns,
+    "dropped_columns": dropped,
+    "gaps_filled_from_siblings": filled,
+})
+if state.duplicate_resolutions:
+    st.subheader("Name election rationales")
+    st.json([r.model_dump() for r in state.duplicate_resolutions])
+st.caption(f"Dataset after pruning: {state.dataset.shape[0]} rows x {state.dataset.shape[1]} columns")
+st.dataframe(state.dataset.head(20))
 
-        # --- Issues by agent ---
-        st.header("Issues by Agent")
+format_issues = [
+    {"column": r.column_name, "violation_count": len(r.violations)}
+    for r in state.validation_reports
+    if any(v.expected_pattern not in (None, "not nullable") for v in r.violations)
+]
+if format_issues:
+    st.subheader("Format-consistency violations")
+    st.json(format_issues)
 
-        reports = {
-            "Schema": (state.schema_report, state.schema_summary),
-            "Completeness": (state.completeness_report, state.completeness_summary),
-            "Duplicates": (state.duplicate_report, state.duplicate_summary),
-            "Anomalies": (state.anomaly_report, state.anomaly_summary),
-            "Consistency": (state.consistency_report, state.consistency_summary),
-        }
+st.subheader("Anomaly Detection")
+if not state.anomaly_reports:
+    st.info("No anomalies detected.")
+else:
+    numeric_reports = [r for r in state.anomaly_reports if r.method == "iqr"]
+    cat_reports = [r for r in state.anomaly_reports if r.method == "rare_category"]
+    col1, col2 = st.columns(2)
+    col1.metric("Columns with numeric outliers", len(numeric_reports))
+    col2.metric("Columns with rare categories", len(cat_reports))
 
-        for name, (report, summary) in reports.items():
-            count = report.get("total_issues", 0)
-            with st.expander(f"{name} — {count} issue(s)"):
-                if summary:
-                    st.info(summary)
-                issues = report.get("issues", [])
-                if issues:
-                    st.table(issues)
-                else:
-                    st.success("No issues found.")
+    if numeric_reports:
+        st.markdown("#### Numeric Outliers (IQR)")
+        for r in numeric_reports:
+            with st.expander(f"`{r.column_name}` — {r.stats.get('outlier_count', len(r.anomalies))} outliers"):
+                if r.comment:
+                    st.info(r.comment)
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Q1", r.stats.get("q1"))
+                c2.metric("Q3", r.stats.get("q3"))
+                c3.metric("IQR", r.stats.get("iqr"))
+                c1.metric("Lower bound", r.stats.get("lower_bound"))
+                c2.metric("Upper bound", r.stats.get("upper_bound"))
+                if r.anomalies:
+                    st.caption("Sample outlier values (up to 10):")
+                    st.dataframe(
+                        pd.DataFrame([{"row": a.row_index, "value": a.value} for a in r.anomalies[:10]]),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+
+    if cat_reports:
+        st.markdown("#### Rare Categories")
+        for r in cat_reports:
+            with st.expander(f"`{r.column_name}` — {r.stats.get('rare_values_count', len(r.anomalies))} rare value(s) out of {r.stats.get('distinct_values', '?')} distinct"):
+                if r.comment:
+                    st.info(r.comment)
+                top = r.stats.get("top_values", [])
+                if top:
+                    st.caption("Most common values:")
+                    st.dataframe(
+                        pd.DataFrame(top).rename(columns={"value": "Value", "count": "Count", "pct": "%"}),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+                if r.anomalies:
+                    st.caption(f"Rare values (threshold: < {r.stats.get('threshold')} occurrences):")
+                    st.dataframe(
+                        pd.DataFrame([{"value": a.value, "reason": a.reason} for a in r.anomalies]),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+
+
+def _group_id_of(fix_id: str) -> str:
+    return fix_id.split("_", 1)[0]
+
+
+def _repropose(group_id: str, feedback: str) -> None:
+    s: PipelineState = st.session_state.pipeline_state
+    group = s.fix_groups.get(group_id, [])
+    if not group:
+        return
+    new_proposals = propose_for_group(
+        group_id,
+        group,
+        {p.column_name: p for p in s.payload},
+        {r.column_name: r for r in s.validation_reports},
+        s.dataset,
+        s.baseline,
+        value_corrections=s.value_corrections,
+        feedback=feedback,
+    )
+    remaining = [p for p in s.proposed_fixes if _group_id_of(p.id) != group_id]
+    st.session_state.pipeline_state = s.model_copy(update={"proposed_fixes": remaining + new_proposals})
+    for p in s.proposed_fixes:
+        if _group_id_of(p.id) == group_id:
+            st.session_state.fix_decisions.pop(p.id, None)
+            st.session_state.editing.pop(p.id, None)
+
+
+st.subheader(f"Approval gate — {len(state.proposed_fixes)} proposed fix(es)")
+if not state.proposed_fixes:
+    st.info("No remediation proposed. Either no violations were detected, or every violation was declared unaddressable.")
+
+for proposal in state.proposed_fixes:
+    decision = st.session_state.fix_decisions.get(proposal.id)
+    label = f"{proposal.id} — {proposal.description}"
+    if decision:
+        label = f"[{decision.upper()}] {label}"
+    with st.expander(label, expanded=decision is None):
+        cols = st.columns([2, 1, 1])
+        cols[0].markdown(f"**Affects:** `{', '.join(proposal.affected_columns) or '—'}`")
+        cols[1].markdown(f"**Addresses:** `{', '.join(proposal.addresses_violations) or '—'}`")
+        cols[2].markdown(f"**~Rows:** `{proposal.estimated_rows_affected}`")
+        if proposal.depends_on:
+            st.caption(f"Depends on: {', '.join(proposal.depends_on)}")
+        st.markdown(f"_{proposal.rationale}_")
+        st.code(proposal.code, language="python")
+
+        btns = st.columns(3)
+        if btns[0].button("Accept", key=f"acc_{proposal.id}"):
+            st.session_state.fix_decisions[proposal.id] = "accepted"
+            st.session_state.editing.pop(proposal.id, None)
+            st.rerun()
+        if btns[1].button("Reject", key=f"rej_{proposal.id}"):
+            st.session_state.fix_decisions[proposal.id] = "rejected"
+            st.session_state.editing.pop(proposal.id, None)
+            st.rerun()
+        if btns[2].button("Edit", key=f"edt_{proposal.id}"):
+            st.session_state.editing[proposal.id] = True
+            st.rerun()
+
+        if st.session_state.editing.get(proposal.id):
+            feedback = st.text_area(
+                "What should the LLM change?",
+                key=f"fb_{proposal.id}",
+                placeholder="e.g. don't impute eta_max from sesso, use eta_min's enum mapping instead",
+            )
+            if st.button("Re-propose with this feedback", key=f"rep_{proposal.id}"):
+                if feedback.strip():
+                    with st.spinner("Re-proposing..."):
+                        _repropose(_group_id_of(proposal.id), feedback.strip())
+                    st.rerun()
+
+accepted = [p for p in state.proposed_fixes if st.session_state.fix_decisions.get(p.id) == "accepted"]
+rejected = [p for p in state.proposed_fixes if st.session_state.fix_decisions.get(p.id) == "rejected"]
+pending = [p for p in state.proposed_fixes if st.session_state.fix_decisions.get(p.id) is None]
+
+st.subheader("Approval summary")
+st.json({
+    "accepted": [p.id for p in accepted],
+    "rejected": [p.id for p in rejected],
+    "pending": [p.id for p in pending],
+})
+st.caption("Sandboxed execution of accepted fixes is not yet wired in. The next step adds an Executor node that runs the accepted code in E2B and applies the cleaned dataframe back to state.dataset.")
