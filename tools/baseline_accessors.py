@@ -26,27 +26,23 @@ def column_catalog_for_dataset(
     return dict(dataset_obj.columns)
 
 
-def column_catalog_for_domain(
-    baseline: BaselineFile, domain: str
-) -> dict[str, ColumnSchema]:
-    domain_obj = baseline.domains.get(domain)
-    if domain_obj is None:
-        return {}
+def column_catalog_all_domains(baseline: BaselineFile) -> dict[str, ColumnSchema]:
     catalog: dict[str, ColumnSchema] = {}
-    for dataset in domain_obj.datasets.values():
-        for col_name, schema in dataset.columns.items():
-            catalog.setdefault(col_name, schema)
+    for domain in baseline.domains.values():
+        for dataset in domain.datasets.values():
+            for col_name, schema in dataset.columns.items():
+                catalog.setdefault(col_name, schema)
     return catalog
 
 
 def find_spec_by_hint(
-    baseline: BaselineFile, domain: str, hint: str | None
+    baseline: BaselineFile, hint: str | None
 ) -> ColumnSchema | None:
     if not hint:
         return None
     if hint in baseline.shared_definitions:
         return baseline.shared_definitions[hint]
-    return column_catalog_for_domain(baseline, domain).get(hint)
+    return column_catalog_all_domains(baseline).get(hint)
 
 
 def alias_index(baseline: BaselineFile) -> dict[str, str]:

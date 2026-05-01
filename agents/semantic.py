@@ -11,7 +11,7 @@ from models import Casing, ColumnPayload, ColumnSchema, EnumFormat, RangeFormat
 from state import PipelineState
 from tools.baseline_accessors import (
     alias_index,
-    column_catalog_for_domain,
+    column_catalog_all_domains,
     find_spec_by_hint,
 )
 from tools.infer_and_validate_dtype import infer_and_validate_dtype
@@ -53,11 +53,7 @@ def semantic_node(state: PipelineState) -> PipelineState:
     df = state.dataset
     all_columns = list(df.columns)
 
-    domain_catalog = (
-        column_catalog_for_domain(state.baseline, state.detected_domain)
-        if state.baseline and state.detected_domain
-        else {}
-    )
+    domain_catalog = column_catalog_all_domains(state.baseline) if state.baseline else {}
     aliases = alias_index(state.baseline) if state.baseline else {}
     chain = ChatOpenAI(model="gpt-4o-mini", temperature=0).with_structured_output(_SemanticResponse)
     system = load_prompt("semantic")
@@ -69,7 +65,7 @@ def semantic_node(state: PipelineState) -> PipelineState:
         sample = non_null.sample(n=min(30, non_null.shape[0]), random_state=42).tolist()
 
         suggestion = programmatic_match(col, domain_catalog, aliases) if domain_catalog else None
-        suggested_spec = find_spec_by_hint(state.baseline, state.detected_domain, suggestion) if state.baseline else None
+        suggested_spec = find_spec_by_hint(state.baseline, suggestion) if state.baseline else None
         candidates = _detect_placeholder_candidates(series, suggested_spec)
 
         user = {
@@ -88,7 +84,7 @@ def semantic_node(state: PipelineState) -> PipelineState:
         ])
 
         canonical_hint = result.canonical_match or None
-        confirmed_spec = find_spec_by_hint(state.baseline, state.detected_domain, canonical_hint) if state.baseline else None
+        confirmed_spec = find_spec_by_hint(state.baseline, canonical_hint) if state.baseline else None
         dtype = infer_and_validate_dtype(series, llm_suggestion=result.dtype)
         payload.append(ColumnPayload(
             column_name=col,

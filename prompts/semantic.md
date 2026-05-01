@@ -13,7 +13,7 @@ A JSON object with these fields:
 - `placeholder_candidates`: values literally observed in this column that match a curated list of generic disguised-NaN tokens, plus values that violate the canonical spec when one is provided. Filter — do not extend.
 - `canonical_suggestion` (optional): a programmatic match from the NoiPA registry, with the shape
   `{canonical_id, dtype, format, case_convention, is_nullable}`. May be `null` when the cascade found no match.
-- `domain_catalog` (optional): when no `canonical_suggestion` is provided, this is a dict of every canonical column spec available in the detected domain. Use it to pick a semantic match or declare the column novel.
+- `domain_catalog` (optional): when no `canonical_suggestion` is provided, this is a dict of every canonical column spec available in the NoiPA registry across all domains. Use it to pick a semantic match or declare the column novel.
 
 ## Output
 Return a JSON object with these fields:
