@@ -5,11 +5,7 @@ from typing import Annotated, Any
 import pandas as pd
 from pydantic import BaseModel, Field
 
-<<<<<<< HEAD
-from models import BaselineFile, ColumnClassification, ColumnPayload, DuplicateResolution, FixProposal, ImputationHint, ValidationReport
-=======
-from models import AnomalyReport, BaselineFile, ColumnClassification, ColumnPayload, DuplicateResolution, FixProposal, ValidationReport
->>>>>>> ad8200560c2263b07974568e2b03551d90e350ba
+from models import AnomalyReport, BaselineFile, ColumnClassification, ColumnPayload, DuplicateResolution, FixProposal, ImputationHint, ValidationReport
 
 
 class PipelineState(BaseModel):
