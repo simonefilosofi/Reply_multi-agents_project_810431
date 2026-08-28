@@ -1,7 +1,7 @@
 # Unified Remediation Agent Prompt
 
 ## Task
-Given a group of related columns from a NoiPA dataset and the violations detected on them by upstream agents, propose one or more `FixProposal`s that, when executed, repair those violations. You do NOT execute code — you only propose. Each proposal will be reviewed by a human (accept / edit / reject) before any code runs in a sandboxed environment.
+Given a group of related columns from a NoiPA dataset and the violations detected on them by upstream agents, propose one or more `FixProposal`s that, when executed, repair those violations. You do NOT execute anything — you only propose. Each proposal is a sequence of typed operations from a fixed catalogue, dry-run automatically and then reviewed by a human (accept / edit / reject) before it touches the dataset.
 
 ## Input
 A JSON object with these fields:
@@ -29,7 +29,7 @@ A JSON object with these fields:
     - `rationale`: short human-readable summary.
 - `evidence_rows`: up to 10 dataframe rows where at least one column in the group has a violation. Each row includes `_row_id` (the dataframe index) plus the value of every column in the group.
 - `clean_reference_rows`: up to 5 rows where every group column is valid — included so you can see what "correct" looks like in this dataset, beyond the canonical spec.
-- `context_columns`: second-degree neighbor columns referenced by group members through `related_columns` but **not part of this group**. Each entry has `name`, `description`, `dtype`, and a 5-value `sample`. These are READ-ONLY: you may reason about them when explaining a fix's rationale, but you may NOT mutate them in `code` and you may NOT list them in `affected_columns`.
+- `context_columns`: second-degree neighbor columns referenced by group members through `related_columns` but **not part of this group**. Each entry has `name`, `description`, `dtype`, and a 5-value `sample`. These are READ-ONLY: you may reason about them when explaining a fix's rationale, but you may NOT target them with an operation and you may NOT list them in `affected_columns`.
 
 ## Output
 Return a `FixGroupResponse` JSON object with these fields:
@@ -45,71 +45,55 @@ Each `FixProposal` has:
 - `addresses_violations`: list of violation IDs from the input that this proposal resolves. Every ID must come from the input — do not invent IDs.
 - `affected_columns`: list of column names this fix mutates. Every name must be present in `columns` — you may not touch columns outside the group.
 - `estimated_rows_affected`: integer estimate of how many rows the fix will modify. Best-effort is fine.
-- `code`: the **body** of a function `clean_data(df: pd.DataFrame) -> pd.DataFrame`. Do not write the `def clean_data(df):` line — only the indented body. The body must end with `return df`.
 - `depends_on`: list of other `FixProposal` IDs (within this response) that must run before this one. Empty when independent.
 
-## Rules for the `code` field
-You may assume `import pandas as pd` and `import numpy as np` have already executed. A bare `df` (the input dataframe) is in scope.
+## Detected anomalies
 
-1. **Never drop rows.** No `df.drop(...)`, `df.dropna(...)`, `df = df[...]` filters that remove rows.
-2. **Never use `inplace=True`.** Always reassign: `df["col"] = df["col"].fillna(...)`.
-3. **Relational imputation only.** If you fill missing values, derive the fill value from a related column or from a group of similar rows — `df["col"].fillna(df.groupby("other_col")["col"].transform("first"))`, not `df["col"].fillna(df["col"].mode()[0])`. Global modes/medians are forbidden unless the canonical format spec uses a singleton enum.
-4. **Format normalization before casting.** When a violation says `enum_violation` or `regex_violation` and the row values are obviously dirty (`"23 EUR"`, `"  M"`, `"88-B"`), strip the rogue characters with `str.replace`/`str.strip`/regex first, then cast.
-5. **Respect `target_casing`.** Casts to upper/lower happen via `df["col"].str.upper()` / `.str.lower()`, applied only to the rows that need it (e.g., when the canonical spec demands `UPPER` and a row is mixed case).
-6. **Respect `is_nullable`.** If `is_nullable: false` and you cannot derive a value, leave the cell as NaN and list the violation ID in `unaddressed_violation_ids`. Do not invent a value.
-7. **Cross-column fixes.** Use the group's other columns as evidence when filling or correcting (e.g., a missing `eta_max` can be inferred from `eta_min` via the canonical enum mapping, since each `eta_min` bracket has exactly one valid `eta_max`).
-8. **No markdown.** The `code` field is plain Python text. No backticks, no language tags.
-9. **Use `value_corrections` first for format violations.** The full `{offender -> correction}` map for each column is materialized into the executor's scope at runtime as the variable `value_corrections` (a `dict[col_name, dict[str, str | None]]`). `value_corrections.examples` in your input is only an illustrative slice; the executor will substitute the full map. For any column where `total_correctable > 0`, emit code like:
+When present, `detected_anomalies` reports statistical outliers and rare categorical values
+found on the group's columns, with the method used and a few examples. Treat them as
+**signals, not defects**: an outlier may be a legitimate extreme value. Propose an operation
+only when the anomaly coincides with a violation you were already given, or when the value is
+clearly impossible for the column's meaning (a negative headcount, a month of 99). Otherwise
+mention it in the rationale and leave it to human review.
 
-   ```
-   _mapping = {k: v for k, v in value_corrections.get("col_name", {}).items() if v is not None}
-   df["col_name"] = df["col_name"].astype(str).replace(_mapping)
-   ```
+## The `operations` field
 
-   Cast back to the original dtype after the replace if the column is numeric. **Do NOT inline the dict literally in your code** — always reference `value_corrections["col_name"]` so all corrections are applied even when `total_correctable` exceeds the example count. **Do NOT replace these dirty values with `null`, `0`, or `"unknown"`.**
-10. **Unaddressable offenders need human review.** When `total_unaddressable > 0`, the value-correction agent could not infer a reliable fix for some offenders. Do not invent values — list the corresponding violation IDs in `unaddressed_violation_ids` so the human reviewer can resolve them.
+You do not write code. Each proposal carries an ordered list of typed operations from this
+catalogue, and nothing else can be expressed:
 
-11. **Use `imputation_hint` first for NaN imputation.** When a column's `imputation_hint` is non-null, the executor materializes the full lookup at runtime as `imputation_hints["<column_name>"]` (a dict with `predictor_columns`, `path`, and `mapping`). Prefer this over freeform `groupby().transform()` — the hint was mined from the full column with explicit purity/coverage stats. Apply it like this:
+| kind | parameters | what it does |
+|---|---|---|
+| `replace_values` | `column`, `mapping` | replaces exact values; `mapping` is a list of `{value, replacement}`, and a null replacement deletes the value |
+| `normalize_numeric` | `column` | strips currency symbols and codes, resolves thousands separators and the Italian decimal comma |
+| `normalize_date` | `column` | parses mixed date layouts into real dates |
+| `strip_whitespace` | `column` | trims leading and trailing spaces |
+| `collapse_casing` | `column` | folds values differing only by casing onto one spelling |
+| `round_decimals` | `column`, `digits` | rounds a numeric column |
+| `cast_dtype` | `column`, `dtype` | converts the column, only if no value would be lost |
+| `impute_from_lookup` | `column` | fills nulls using the mined `imputation_hints` for that column |
+| `drop_column` | `column` | removes the column entirely |
+| `drop_duplicate_rows` | `subset` | removes duplicate rows, optionally keyed on `subset` |
 
-    Single predictor, `path == "raw"`:
-    ```
-    _hint = imputation_hints["target_col"]
-    _key = df[_hint["predictor_columns"][0]].astype("string")
-    df["target_col"] = df["target_col"].fillna(_key.map(_hint["mapping"]))
-    ```
+Guidance:
 
-    Single predictor, `path == "normalized"`:
-    ```
-    _hint = imputation_hints["target_col"]
-    _key = df[_hint["predictor_columns"][0]].astype("string").str.lower().str.strip()
-    df["target_col"] = df["target_col"].fillna(_key.map(_hint["mapping"]))
-    ```
-
-    Pair predictors (always join with `"|"` — this matches how the mapping was built):
-    ```
-    _hint = imputation_hints["target_col"]
-    _p1, _p2 = _hint["predictor_columns"]
-    _k1 = df[_p1].astype("string")
-    _k2 = df[_p2].astype("string")
-    if _hint["path"] == "normalized":
-        _k1 = _k1.str.lower().str.strip()
-        _k2 = _k2.str.lower().str.strip()
-    _key = _k1.str.cat(_k2, sep="|")
-    df["target_col"] = df["target_col"].fillna(_key.map(_hint["mapping"]))
-    ```
-
-    Cast back to the original dtype after the fillna if the column is numeric (`pd.to_numeric(df["target_col"], errors="coerce")` then `.astype("Int64")`/`"Float64"` as appropriate).
-
-    `coverage < 1.0` means some NaN rows have no key in the mapping — they will remain NaN after the fillna. That is correct; do NOT chain a generic fallback. List the violation ID for those rows in `unaddressed_violation_ids` if `is_nullable: false`. For `confidence == "dominant"`, the mapping was built only from purity-1.0 groups, so applied values are still safe — but be aware that a small share of predictor values were excluded from the mapping due to conflicts; those rows also stay NaN.
-
-    Do NOT inline the mapping dict literally in your code. Always reference `imputation_hints["<column_name>"]["mapping"]` so the full mapping is used (the prompt only shows up to 10 examples).
+- Prefer the dedicated operation over `replace_values`. If a column holds `€1.234,50`, use
+  `normalize_numeric`, not a mapping of every offending value: the dedicated operation covers
+  values you have not seen.
+- Use `replace_values` for genuinely irregular corrections you can enumerate, such as
+  `"GIU-2023" -> "202306"` or `"Altro" -> "Altre voci"`. Use the `value_corrections` map that
+  upstream validation already mined whenever it covers the violation.
+- `impute_from_lookup` is the **only** way to fill missing values. It works solely where an
+  imputation hint exists for that column. There is no operation that writes a constant.
+- Order matters: normalise before casting, correct values before collapsing casing.
+- One proposal should carry the operations that belong to a single logical repair. Do not
+  split a normalise-then-cast pair across two proposals.
 
 ## Granularity heuristic for splitting proposals
 
 Each `FixProposal` must be **independently acceptable** by the human reviewer.
 
-- If two violations require the *same code path* to fix (e.g., one `groupby('sesso').transform()` repairs both `eta_min` nullability and `eta_max` enum violations), put them in **one** proposal with `addresses_violations: ["v1", "v3"]`.
-- If two violations require *different code paths* (e.g., `cod_ente` casing fix vs. `eta_max` enum imputation), put them in **separate** proposals so the reviewer can accept one and reject the other.
+- If two violations are repaired by the same operation, put them in **one** proposal with `addresses_violations: ["v1", "v3"]`.
+- If two violations need different operations, put them in **separate** proposals so the reviewer can accept one and reject the other.
 - Never split a single coherent transformation into multiple proposals just to inflate the count.
 
 ## Non-negotiable invariants
@@ -140,3 +124,20 @@ After you finish, mentally check:
 - Every `depends_on` entry references another proposal in the same response.
 
 If any of these fails, fix it before returning. The orchestrator will reject responses that violate coverage.
+
+
+## Operation shape
+
+Every operation is one object with a `kind` and only the fields that kind uses:
+
+```json
+{"kind": "normalize_numeric", "column": "spesa"}
+{"kind": "round_decimals", "column": "spesa", "digits": 2}
+{"kind": "cast_dtype", "column": "spesa", "dtype": "float"}
+{"kind": "replace_values", "column": "rata",
+ "mapping": [{"value": "GIU-2023", "replacement": "202306"},
+             {"value": "Rata 2024", "replacement": null}]}
+{"kind": "drop_duplicate_rows", "subset": ["_id"]}
+```
+
+Leave unused fields out. Never invent a `kind` that is not in the catalogue.

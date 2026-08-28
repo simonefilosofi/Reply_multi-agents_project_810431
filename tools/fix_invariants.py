@@ -3,21 +3,20 @@ from __future__ import annotations
 
 import pandas as pd
 
-_DEDUP_MARKERS = ("drop_duplicates", "duplicated")
 _MAX_DELETION_RATIO = 0.02
 
 
 def check_invariants(
     before: pd.DataFrame,
     after: pd.DataFrame,
-    code: str,
+    proposal,
     imputation_hints: dict | None = None,
     removable_by_column: dict[str, set] | None = None,
 ) -> list[str]:
     hints = imputation_hints or {}
     removable = removable_by_column or {}
     failures: list[str] = []
-    failures.extend(_check_row_count(before, after, code))
+    failures.extend(_check_row_count(before, after, proposal))
     for column in after.columns:
         if column not in before.columns:
             continue
@@ -56,10 +55,10 @@ def _check_deleted_values(
     ]
 
 
-def _check_row_count(before: pd.DataFrame, after: pd.DataFrame, code: str) -> list[str]:
+def _check_row_count(before: pd.DataFrame, after: pd.DataFrame, proposal) -> list[str]:
     if len(after) == len(before):
         return []
-    if any(marker in code for marker in _DEDUP_MARKERS):
+    if any(operation.kind == "drop_duplicate_rows" for operation in proposal.operations):
         return []
     return [
         f"row count changed from {len(before)} to {len(after)} without a declared deduplication"

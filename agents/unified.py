@@ -1,4 +1,4 @@
-"""Proposal Unified remediation agent: groups columns by related_columns transitive closure, aggregates upstream validation_reports into IDed violations per column, builds a per-group LLM payload (columns + evidence rows + clean reference rows), invokes structured FixGroupResponse output, runs coverage checks with one retry, then dry-runs each proposal in a sandbox and asks the same model to self-review the trial outcome — approving the proposal or regenerating with feedback — before writing group-prefixed proposals to state.proposed_fixes. The downstream Apply step still owns the real execution against state.dataset."""
+"""Unified remediation agent: groups columns by related_columns transitive closure, aggregates upstream validation_reports into IDed violations per column, builds a per-group LLM payload (columns + evidence rows + clean reference rows), invokes structured FixGroupResponse output whose proposals are typed catalogue operations rather than generated code, runs coverage checks with one retry, then dry-runs each proposal in a sandbox and asks the same model to self-review the trial outcome — approving the proposal or regenerating with feedback — before writing group-prefixed proposals to state.proposed_fixes. The downstream Apply step still owns the real execution against state.dataset."""
 from __future__ import annotations
 
 import json
@@ -19,6 +19,7 @@ from models import (
 from state import PipelineState
 from tools.baseline_accessors import find_spec_by_hint
 from tools.match_canonical import compact_format_summary
+from tools.operations import describe_operation
 from tools.fix_invariants import removable_values
 from tools.trial_execute import trial_execute
 from utils.prompts import load_prompt
@@ -44,6 +45,15 @@ def unified_node(state: PipelineState) -> PipelineState:
     if not actionable:
         return state.model_copy(update={"proposed_fixes": [], "fix_groups": {}})
 
+    anomalies_by_column = {
+        r.column_name: {
+            "method": r.method,
+            "detected": int(r.stats.get("detected", len(r.anomalies))),
+            "comment": r.comment,
+            "examples": [a.value for a in r.anomalies[:5]],
+        }
+        for r in state.anomaly_reports
+    }
     all_proposals: list[FixProposal] = []
     fix_groups: dict[str, list[str]] = {}
     for group_idx, group in enumerate(actionable):
@@ -55,6 +65,7 @@ def unified_node(state: PipelineState) -> PipelineState:
             specs_by_col=specs_by_col,
             imputation_hints=state.imputation_hints,
             removable_by_column=removable_values(state.payload, state.validation_reports),
+            anomalies=anomalies_by_column,
         ))
 
     deduped = dedupe_proposals(all_proposals)
@@ -77,19 +88,26 @@ def dedupe_proposals(proposals: list[FixProposal]) -> list[FixProposal]:
         else:
             seen[key] = p
             order.append(key)
-    return [seen[k] for k in order]
+    return _drop_subsumed([seen[k] for k in order])
+
+
+def _drop_subsumed(proposals: list[FixProposal]) -> list[FixProposal]:
+    ranked = sorted(proposals, key=lambda p: -len(p.addresses_violations))
+    kept: list[FixProposal] = []
+    for proposal in ranked:
+        covered = set(proposal.addresses_violations)
+        columns = set(proposal.affected_columns)
+        if covered and any(
+            columns == set(other.affected_columns) and covered <= set(other.addresses_violations)
+            for other in kept
+        ):
+            continue
+        kept.append(proposal)
+    return [p for p in proposals if p in kept]
 
 
 def _fingerprint(p: FixProposal) -> tuple:
-    return (
-        frozenset(p.affected_columns),
-        frozenset(p.addresses_violations),
-        _normalize_code(p.code),
-    )
-
-
-def _normalize_code(code: str) -> str:
-    return "\n".join(line.strip() for line in code.splitlines() if line.strip())
+    return (frozenset(p.affected_columns), frozenset(p.addresses_violations))
 
 
 def propose_for_group(
@@ -104,6 +122,7 @@ def propose_for_group(
     specs_by_col: dict[str, FormatSpec | None] | None = None,
     imputation_hints: dict[str, ImputationHint] | None = None,
     removable_by_column: dict[str, set] | None = None,
+    anomalies: dict[str, dict] | None = None,
 ) -> list[FixProposal]:
     chain = ChatOpenAI(model="gpt-5.4-mini", temperature=0).with_structured_output(FixGroupResponse)
     system = load_prompt("unified")
@@ -111,6 +130,9 @@ def propose_for_group(
         group_id, group, payload_by_name, reports_by_name, df, baseline,
         value_corrections or {}, imputation_hints or {},
     )
+    detected_anomalies = {c: a for c, a in (anomalies or {}).items() if c in group}
+    if detected_anomalies:
+        ctx["detected_anomalies"] = detected_anomalies
     if feedback:
         ctx["user_feedback_on_previous_response"] = feedback
     response = _invoke_with_retry(chain, system, ctx, input_violation_ids, group)
@@ -554,6 +576,10 @@ def _namespace_proposal(group_id: str, proposal: FixProposal) -> FixProposal:
     return proposal.model_copy(update={
         "id": f"{group_id}_{proposal.id}",
         "depends_on": [f"{group_id}_{d}" for d in proposal.depends_on],
+        "code": "\n".join(describe_operation(o) for o in proposal.operations),
+        "affected_columns": sorted({
+            getattr(o, "column", "") for o in proposal.operations if getattr(o, "column", "")
+        }) or proposal.affected_columns,
     })
 
 

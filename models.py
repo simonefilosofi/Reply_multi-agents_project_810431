@@ -119,6 +119,34 @@ class ValidationReport(BaseModel):
     violations: list[FormatViolation] = Field(default_factory=list)
 
 
+OperationKind = Literal[
+    "replace_values",
+    "normalize_numeric",
+    "normalize_date",
+    "strip_whitespace",
+    "collapse_casing",
+    "round_decimals",
+    "cast_dtype",
+    "impute_from_lookup",
+    "drop_column",
+    "drop_duplicate_rows",
+]
+
+
+class ValueMapping(BaseModel):
+    value: str
+    replacement: str | None = None
+
+
+class Operation(BaseModel):
+    kind: OperationKind
+    column: str = ""
+    mapping: list[ValueMapping] = Field(default_factory=list)
+    digits: int = 2
+    dtype: str = ""
+    subset: list[str] = Field(default_factory=list)
+
+
 class FixProposal(BaseModel):
     id: str
     description: str
@@ -126,7 +154,8 @@ class FixProposal(BaseModel):
     addresses_violations: list[str] = Field(default_factory=list)
     affected_columns: list[str] = Field(default_factory=list)
     estimated_rows_affected: int = 0
-    code: str
+    operations: list[Operation] = Field(default_factory=list)
+    code: str = ""
     depends_on: list[str] = Field(default_factory=list)
 
 

@@ -1,19 +1,18 @@
-"""Locally executes accepted FixProposal code bodies against the pipeline dataset, in dependency order. Each proposal's `code` is wrapped as the body of clean_data(df) and invoked in a namespace exposing pd, np, and the per-column value_corrections map promised by the unified prompt. A proposal whose result breaks a deterministic post-fix invariant is rejected rather than applied. Returns the cleaned dataframe and a per-proposal status list (applied / skipped / error / rejected)."""
+"""Applies accepted FixProposals to the pipeline dataset in dependency order by executing their typed operations. No proposal carries executable code: each is a validated sequence of catalogue operations, so remediation is deterministic and replayable. A proposal whose result breaks a post-fix invariant is rejected rather than applied. Returns the cleaned dataframe and a per-proposal status list (applied / skipped / error / rejected)."""
 from __future__ import annotations
-
-import textwrap
 
 import numpy as np
 import pandas as pd
 
 from models import FixProposal, ImputationHint
 from tools.fix_invariants import check_invariants
+from tools.operations import apply_operations
 
 
 def execute_fixes(
     df: pd.DataFrame,
     accepted: list[FixProposal],
-    value_corrections: dict[str, dict[str, str | None]],
+    value_corrections: dict[str, dict[str, str | None]] | None = None,
     imputation_hints: dict[str, ImputationHint] | None = None,
     removable_by_column: dict[str, set] | None = None,
 ) -> tuple[pd.DataFrame, list[dict]]:
@@ -23,48 +22,34 @@ def execute_fixes(
     current = df.copy()
     applied: set[str] = set()
     applied_fingerprints: set[tuple] = set()
-    for p in ordered:
-        missing = [d for d in p.depends_on if d not in applied]
+
+    for proposal in ordered:
+        missing = [d for d in proposal.depends_on if d not in applied]
         if missing:
-            statuses.append({"id": p.id, "status": "skipped", "reason": f"missing deps: {missing}"})
+            statuses.append({"id": proposal.id, "status": "skipped", "reason": f"missing deps: {missing}"})
             continue
-        fp = _fingerprint(p)
-        if fp in applied_fingerprints:
-            statuses.append({"id": p.id, "status": "skipped", "reason": "duplicate of an earlier applied fix"})
-            applied.add(p.id)
+        fingerprint = _fingerprint(proposal)
+        if fingerprint in applied_fingerprints:
+            statuses.append({"id": proposal.id, "status": "skipped", "reason": "duplicate of an earlier applied fix"})
+            applied.add(proposal.id)
             continue
         before = current
         try:
-            wrapped = f"def clean_data(df):\n{textwrap.indent(p.code, '    ')}\n"
-            namespace: dict = {
-                "pd": pd, "np": np,
-                "value_corrections": value_corrections,
-                "imputation_hints": hints_view,
-            }
-            exec(wrapped, namespace)
-            result = namespace["clean_data"](current.copy())
-        except Exception as e:
-            statuses.append({"id": p.id, "status": "error", "error": f"{type(e).__name__}: {e}"})
+            result = apply_operations(current, proposal.operations, hints_view)
+        except Exception as error:
+            statuses.append({"id": proposal.id, "status": "error", "error": f"{type(error).__name__}: {error}"})
             current = before
             continue
-        if not isinstance(result, pd.DataFrame):
-            statuses.append({
-                "id": p.id,
-                "status": "error",
-                "error": f"clean_data must return a DataFrame, got {type(result).__name__} (likely missing 'return df')",
-            })
-            current = before
-            continue
-        breaches = check_invariants(before, result, p.code, hints_view, removable_by_column)
+        breaches = check_invariants(before, result, proposal, hints_view, removable_by_column)
         if breaches:
-            statuses.append({"id": p.id, "status": "rejected", "invariant_violations": breaches})
+            statuses.append({"id": proposal.id, "status": "rejected", "invariant_violations": breaches})
             current = before
             continue
         current = result
-        applied.add(p.id)
-        applied_fingerprints.add(fp)
+        applied.add(proposal.id)
+        applied_fingerprints.add(fingerprint)
         statuses.append({
-            "id": p.id,
+            "id": proposal.id,
             "status": "applied",
             "rows_changed": int(_rows_changed(before, current)),
             "shape_before": list(before.shape),
@@ -77,12 +62,11 @@ def _hints_to_dicts(hints: dict[str, ImputationHint]) -> dict[str, dict]:
     return {col: hint.model_dump() for col, hint in hints.items()}
 
 
-def _fingerprint(p: FixProposal) -> tuple:
-    return (
-        frozenset(p.affected_columns),
-        frozenset(p.addresses_violations),
-        "\n".join(line.strip() for line in p.code.splitlines() if line.strip()),
-    )
+def _fingerprint(proposal: FixProposal) -> tuple:
+    return tuple(sorted(
+        (operation.kind, getattr(operation, "column", ""), str(sorted(operation.model_dump().items())))
+        for operation in proposal.operations
+    ))
 
 
 def _order_by_deps(proposals: list[FixProposal]) -> list[FixProposal]:
@@ -98,8 +82,8 @@ def _order_by_deps(proposals: list[FixProposal]) -> list[FixProposal]:
             visit(dep)
         ordered.append(by_id[pid])
 
-    for p in proposals:
-        visit(p.id)
+    for proposal in proposals:
+        visit(proposal.id)
     return ordered
 
 

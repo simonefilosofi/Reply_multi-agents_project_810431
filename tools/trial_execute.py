@@ -1,13 +1,11 @@
-"""Sandboxed dry-run for a single FixProposal: executes the proposal's code body against a copy of the dataframe, re-runs the format validator on the affected columns, checks the deterministic post-fix invariants, and returns a structured trial outcome consumed by the per-proposal self-review step in the Unified Remediation agent."""
+"""Sandboxed dry-run for a single FixProposal: executes the proposal's typed operations against a copy of the dataframe, re-runs the format validator on the affected columns, checks the deterministic post-fix invariants, and returns a structured trial outcome consumed by the per-proposal self-review step in the Unified Remediation agent."""
 from __future__ import annotations
 
-import textwrap
-
-import numpy as np
 import pandas as pd
 
 from models import FixProposal, FormatSpec, ImputationHint, ValidationReport
 from tools.fix_invariants import check_invariants
+from tools.operations import apply_operations
 from tools.validate_format import validate_format
 
 
@@ -26,14 +24,7 @@ def trial_execute(
     before = df.copy()
     hints_view = {col: h.model_dump() for col, h in (imputation_hints or {}).items()}
     try:
-        wrapped = f"def clean_data(df):\n{textwrap.indent(proposal.code, '    ')}\n"
-        namespace: dict = {
-            "pd": pd, "np": np,
-            "value_corrections": value_corrections,
-            "imputation_hints": hints_view,
-        }
-        exec(wrapped, namespace)
-        after = namespace["clean_data"](before.copy())
+        after = apply_operations(before, proposal.operations, hints_view)
     except Exception as e:
         return {
             "status": "error",
@@ -64,7 +55,7 @@ def trial_execute(
     )
     return {
         "status": "applied",
-        "invariant_violations": check_invariants(before, after, proposal.code, hints_view, removable_by_column),
+        "invariant_violations": check_invariants(before, after, proposal, hints_view, removable_by_column),
         "rows_changed": int(rows_changed),
         "shape_before": list(before.shape),
         "shape_after": list(after.shape),
