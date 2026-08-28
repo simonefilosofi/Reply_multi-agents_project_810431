@@ -270,8 +270,8 @@ def _build_payload(state: PipelineState, residual: list[ValidationReport], quali
             {
                 "column_name": a.column_name,
                 "method": a.method,
-                "detected": int(a.stats.get("outlier_count") or a.stats.get("rare_values_count") or len(a.anomalies)),
-                "sampled": len(a.anomalies),
+                "detected": int(a.stats.get("detected", len(a.anomalies))),
+                "sampled": int(a.stats.get("sampled", len(a.anomalies))),
                 "comment": a.comment,
                 "examples": [e.value for e in a.anomalies[:5]],
             }
