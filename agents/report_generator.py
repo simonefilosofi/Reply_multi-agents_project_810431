@@ -1,4 +1,4 @@
-"""Final reporting node: recomputes the residual format violations on the remediated dataset, derives the three-point quality metrics and the aggregate reliability score, asks the LLM for the narrative sections, and emits both a structured JSON artefact, which preserves the text verbatim, and a PDF, whose core font is latin-1 and therefore receives a transliterated copy. Implements the Report Generator agent."""
+"""Final reporting node: recomputes the residual violations on the remediated dataset across every category - format, completeness and cross-column consistency - so that the before/after comparison comes from like-for-like measurements, derives the three-point quality metrics and the aggregate reliability score, asks the LLM for the narrative sections, and emits both a structured JSON artefact, which preserves the text verbatim, and a PDF, whose core font is latin-1 and therefore receives a transliterated copy. Implements the Report Generator agent."""
 from __future__ import annotations
 
 import json
@@ -9,9 +9,11 @@ from fpdf import FPDF
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
-from models import DateFormat, EnumFormat, RangeFormat, RegexFormat, ValidationReport
+from models import DateFormat, EnumFormat, FormatViolation, RangeFormat, RegexFormat, ValidationReport
 from state import PipelineState
-from tools.reliability_score import compute_metrics, reliability_score
+from tools.completeness import completeness_report
+from tools.cross_column_checks import candidate_predictors, cross_column_reports
+from tools.reliability_score import compute_metrics, reliability_score, violation_counts
 from tools.validate_format import validate_format
 from utils.prompts import load_prompt
 
@@ -67,7 +69,29 @@ def _residual_reports(state: PipelineState) -> list[ValidationReport]:
         if spec is None:
             continue
         reports.append(validate_format(column, state.dataset[column], spec))
+    reports.extend(_residual_completeness(state))
+    reports.extend(cross_column_reports(
+        state.dataset, candidate_predictors(state.payload, set(state.dataset.columns), state.dataset)
+    ))
     return reports
+
+
+def _residual_completeness(state: PipelineState) -> list[ValidationReport]:
+    report = completeness_report(state.dataset)
+    entries = [
+        ValidationReport(
+            column_name=column,
+            violations=[FormatViolation(
+                column_name=column,
+                row_index=-1,
+                value=stats["nulls"],
+                expected_pattern="missing value",
+            )],
+        )
+        for column, stats in report["by_column"].items()
+        if stats["nulls"]
+    ]
+    return entries
 
 
 def _spec_from_dict(spec: dict | None):
@@ -211,6 +235,8 @@ def _build_payload(state: PipelineState, residual: list[ValidationReport], quali
             if r.violations
         ],
         "completeness": state.completeness,
+        "violations_by_kind_detected": violation_counts(state.validation_reports),
+        "violations_by_kind_residual": violation_counts(residual),
         "naming_violations": [
             {"column_name": r.column_name, "suggested_name": v.value}
             for r in state.validation_reports

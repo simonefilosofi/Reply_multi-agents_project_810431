@@ -1,9 +1,10 @@
-"""Casts a column to a target dtype only when no non-null value would be lost, reporting the row indices that block the cast instead of coercing them to NaN. Backs the non-destructive dtype enforcement performed by the NaN handler."""
+"""Casts a column to a target dtype only when no non-null value would be lost, normalising human numeric and date notation first so that a value written as an amount or a local-format date is not mistaken for uncastable, reporting the row indices that block the cast instead of coercing them to NaN. Backs the non-destructive dtype enforcement performed by the NaN handler."""
 from __future__ import annotations
 
 import pandas as pd
 
 from tools.normalize_date_format import normalize_date_format
+from tools.normalize_numeric_format import normalize_numeric_format
 
 _DATE_TOKENS = ("date", "time")
 _FLOAT_TOKENS = ("float", "double", "decimal")
@@ -26,9 +27,9 @@ def _convert(series: pd.Series, target: str) -> pd.Series | None:
         if any(token in target for token in _DATE_TOKENS):
             return normalize_date_format(series)
         if "int" in target:
-            return pd.to_numeric(series, errors="coerce").astype("Int64")
+            return pd.to_numeric(normalize_numeric_format(series), errors="coerce").astype("Int64")
         if any(token in target for token in _FLOAT_TOKENS):
-            return pd.to_numeric(series, errors="coerce")
+            return pd.to_numeric(normalize_numeric_format(series), errors="coerce")
         if "bool" in target:
             return series.astype("boolean")
         if "string" in target or target == "object":

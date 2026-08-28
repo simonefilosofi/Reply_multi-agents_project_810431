@@ -1,14 +1,15 @@
-"""Validates column values against per-column FormatSpecs inferred from the actual sample (with baseline as a hint), flags violations, asks an LLM to propose targeted per-value corrections, discarding wholesale deletion proposals when they cover so much of a column that the inferred spec is the unreliable party so the Unified Remediation agent can emit value-preserving replace fixes instead of generic imputations, and deterministically mines functional dependencies between related columns to surface NaN-imputation hints (lookup mappings) for the Unified agent. Merges new violations with reports already on state (e.g. nullability reports from the NaN handler)."""
+"""Validates column values against per-column FormatSpecs inferred from the actual sample (with baseline as a hint), flags violations without re-reporting rows an upstream node already flagged, asks an LLM to propose targeted per-value corrections, discarding wholesale deletion proposals when they cover so much of a column that the inferred spec is the unreliable party so the Unified Remediation agent can emit value-preserving replace fixes instead of generic imputations, deterministically mines functional dependencies between related columns to surface both cross-column consistency violations and NaN-imputation hints (lookup mappings) for the Unified agent. Merges new violations with reports already on state (e.g. nullability reports from the NaN handler)."""
 from __future__ import annotations
 
 from collections import defaultdict
 
 import pandas as pd
 
-from models import BaselineFile, ColumnPayload, FormatViolation, ImputationHint, ValidationReport
+from models import BaselineFile, ColumnPayload, EnumFormat, FormatViolation, ImputationHint, RangeFormat, RegexFormat, ValidationReport
 from state import PipelineState
 from tools.baseline_accessors import find_spec_by_hint
 from tools.correct_violations import correct_violations
+from tools.cross_column_checks import candidate_predictors, cross_column_reports
 from tools.infer_format_spec import infer_format_spec
 from tools.match_canonical import compact_format_summary
 from tools.mine_functional_deps import mine_functional_deps
@@ -21,6 +22,9 @@ _VALID_SAMPLE_SIZE = 10
 _MAX_UNIQUE_OFFENDERS = 100
 _EXTENDED_SAMPLE_SIZE = 150
 _MAX_DELETION_SHARE = 0.02
+_MAX_PREDICTOR_CARDINALITY = 0.2
+_MAX_FALLBACK_PREDICTORS = 5
+_MIN_FILL_RATE_FOR_IMPUTATION = 0.1
 
 
 def format_consistency_node(state: PipelineState) -> PipelineState:
@@ -45,6 +49,7 @@ def format_consistency_node(state: PipelineState) -> PipelineState:
             extended_sample=extended_sample,
         )
         spec, source = _resolve_spec(profiler_spec, llm_spec)
+        spec, source = _enforce_dtype_consistency(spec, source, payload, profiler_spec)
         inferred_specs[col] = {
             "source": source,
             "profiler_spec": profiler_spec.model_dump() if profiler_spec else None,
@@ -54,6 +59,7 @@ def format_consistency_node(state: PipelineState) -> PipelineState:
             continue
 
         report = validate_format(col, state.dataset[col], spec)
+        report.violations = _drop_already_reported(report.violations, col, state.validation_reports)
         nan_count = int(state.dataset[col].isna().sum())
         if nan_count > 0 and col not in nullability_cols:
             report.violations.append(FormatViolation(
@@ -73,14 +79,37 @@ def format_consistency_node(state: PipelineState) -> PipelineState:
             if corrections:
                 value_corrections[col] = corrections
 
-    merged = _merge_reports(state.validation_reports, new_reports)
-    imputation_hints = _mine_imputation_hints(state.dataset, payload_by_col, merged)
+    consistency_reports = [
+        r.model_copy(update={
+            "violations": _drop_already_reported(r.violations, r.column_name, new_reports)
+        })
+        for r in cross_column_reports(
+            state.dataset,
+            candidate_predictors(state.payload, set(state.surviving_columns), state.dataset),
+        )
+    ]
+    consistency_reports = [r for r in consistency_reports if r.violations]
+    merged = _merge_reports(state.validation_reports, new_reports + consistency_reports)
+    imputation_hints = _mine_imputation_hints(state.dataset, payload_by_col, merged, state.dataset)
     return state.model_copy(update={
         "validation_reports": merged,
         "value_corrections": value_corrections,
         "inferred_format_specs": inferred_specs,
         "imputation_hints": imputation_hints,
     })
+
+
+def _drop_already_reported(
+    violations: list[FormatViolation], col: str, existing: list[ValidationReport]
+) -> list[FormatViolation]:
+    reported_rows = {
+        v.row_index
+        for r in existing if r.column_name == col
+        for v in r.violations if v.row_index >= 0
+    }
+    if not reported_rows:
+        return violations
+    return [v for v in violations if v.row_index not in reported_rows]
 
 
 def _drop_unsafe_deletions(corrections: dict, series: pd.Series, spec) -> dict:
@@ -115,11 +144,15 @@ def _mine_imputation_hints(
     df: pd.DataFrame,
     payload_by_col: dict[str, ColumnPayload],
     reports: list[ValidationReport],
+    source: pd.DataFrame | None = None,
 ) -> dict[str, ImputationHint]:
-    nan_columns = _columns_with_nan_violations(reports)
+    nan_columns = {
+        c for c in _columns_with_nan_violations(reports)
+        if c in df.columns and df[c].notna().mean() > _MIN_FILL_RATE_FOR_IMPUTATION
+    }
     if not nan_columns:
         return {}
-    candidate_predictors = _candidate_predictors(payload_by_col, nan_columns)
+    candidate_predictors = _candidate_predictors(payload_by_col, nan_columns, source)
     return mine_functional_deps(df, list(nan_columns), candidate_predictors)
 
 
@@ -134,7 +167,9 @@ def _columns_with_nan_violations(reports: list[ValidationReport]) -> set[str]:
 
 
 def _candidate_predictors(
-    payload_by_col: dict[str, ColumnPayload], targets: set[str]
+    payload_by_col: dict[str, ColumnPayload],
+    targets: set[str],
+    df: pd.DataFrame | None = None,
 ) -> dict[str, list[str]]:
     candidates: dict[str, list[str]] = defaultdict(list)
     for target in targets:
@@ -146,7 +181,32 @@ def _candidate_predictors(
             if r != target and r not in seen:
                 candidates[target].append(r)
                 seen.add(r)
+        if not candidates[target] and df is not None:
+            candidates[target] = _low_cardinality_columns(df, target)
     return candidates
+
+
+def _low_cardinality_columns(df: pd.DataFrame, target: str) -> list[str]:
+    ranked = []
+    for column in df.columns:
+        if column == target or df[column].notna().sum() == 0:
+            continue
+        ratio = df[column].nunique(dropna=True) / int(df[column].notna().sum())
+        if ratio <= _MAX_PREDICTOR_CARDINALITY:
+            ranked.append((ratio, column))
+    return [column for _, column in sorted(ranked)[:_MAX_FALLBACK_PREDICTORS]]
+
+
+def _enforce_dtype_consistency(spec, source: str, payload: ColumnPayload, profiler_spec):
+    dtype = (payload.dtype or "").lower()
+    numeric = any(t in dtype for t in ("int", "float", "double", "decimal", "numeric"))
+    temporal = any(t in dtype for t in ("date", "time"))
+    if numeric and isinstance(spec, (RegexFormat, EnumFormat)):
+        fallback = profiler_spec if isinstance(profiler_spec, RangeFormat) else None
+        return fallback, "dtype-guard: numeric column cannot use a textual spec"
+    if temporal and isinstance(spec, (RegexFormat, EnumFormat, RangeFormat)):
+        return None, "dtype-guard: temporal column cannot use a textual spec"
+    return spec, source
 
 
 def _resolve_spec(profiler_spec, llm_spec):

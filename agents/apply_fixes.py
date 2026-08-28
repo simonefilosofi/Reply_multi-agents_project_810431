@@ -1,4 +1,4 @@
-"""Applies the FixProposals approved at the human gate to the pipeline dataset via the local executor, then deterministically collapses any values left differing only by casing or whitespace, recording which fix ids landed and surfacing executor failures on state.errors. Implements the Apply step between the Unified Remediation agent and the final duplicate-row pass."""
+"""Applies the FixProposals approved at the human gate to the pipeline dataset via the local executor, then deterministically collapses any values left differing only by casing or whitespace and re-applies the dtype proposed by the Semantic agent, since remediation may have removed exactly the values that blocked the cast upstream, recording which fix ids landed and surfacing executor failures on state.errors. Implements the Apply step between the Unified Remediation agent and the final duplicate-row pass."""
 from __future__ import annotations
 
 import pandas as pd
@@ -7,6 +7,7 @@ from models import EnumFormat, FormatSpec
 from state import PipelineState
 from tools.apply_casing import collapse_casing_variants
 from tools.execute_fixes import execute_fixes
+from tools.safe_cast import safe_cast
 from tools.fix_invariants import removable_values
 
 
@@ -28,6 +29,7 @@ def apply_fixes_node(state: PipelineState) -> PipelineState:
     )
 
     cleaned = _collapse_casing(cleaned, state)
+    cleaned = _enforce_dtypes(cleaned, state)
     failures = [
         f"apply_fixes:{s['id']}: {s.get('error') or s.get('invariant_violations')}"
         for s in statuses
@@ -38,6 +40,19 @@ def apply_fixes_node(state: PipelineState) -> PipelineState:
         "applied_fix_ids": [s["id"] for s in statuses if s["status"] == "applied"],
         "errors": state.errors + failures,
     })
+
+
+def _enforce_dtypes(df: pd.DataFrame, state: PipelineState) -> pd.DataFrame:
+    for column in state.payload:
+        name = column.column_name
+        if name not in df.columns or not column.dtype:
+            continue
+        if column.dtype == str(df[name].dtype):
+            continue
+        cast, blocking = safe_cast(df[name], column.dtype)
+        if not blocking:
+            df[name] = cast
+    return df
 
 
 def _collapse_casing(df: pd.DataFrame, state: PipelineState) -> pd.DataFrame:

@@ -1,4 +1,4 @@
-"""Detects exact and near-duplicate columns via pairwise similarity, fills gaps from sibling columns, and elects the canonical name for each group. Similarity is measured on the string form and again on the numeric form, so that columns differing only by zero-padding or storage type are still recognised as duplicates. The election is deterministic whenever exactly one group member already satisfies the baseline naming convention; the LLM is consulted only to break ties or when no member conforms, and its answer is normalised and validated before use."""
+"""Detects exact and near-duplicate columns via pairwise similarity, fills gaps from sibling columns, and elects the canonical name for each group. Similarity is measured on the string form and again on the numeric form, so that columns differing only by zero-padding or storage type are still recognised as duplicates. Validation reports follow the columns: those of dropped members are discarded and the survivor's are renamed. The election is deterministic whenever exactly one group member already satisfies the baseline naming convention; the LLM is consulted only to break ties or when no member conforms, and its answer is normalised and validated before use."""
 from __future__ import annotations
 
 import json
@@ -86,10 +86,16 @@ def duplicate_column_node(state: PipelineState) -> PipelineState:
         for p in state.payload
         if p.column_name not in dropped
     ]
+    new_reports = [
+        r.model_copy(update={"column_name": renames.get(r.column_name, r.column_name)})
+        for r in state.validation_reports
+        if r.column_name not in dropped
+    ]
     return state.model_copy(update={
         "dataset": new_df,
         "surviving_columns": list(new_df.columns),
         "payload": new_payload,
+        "validation_reports": new_reports,
         "duplicate_resolutions": resolutions,
     })
 

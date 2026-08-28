@@ -1,4 +1,4 @@
-"""Deterministic functional-dependency miner used by the Format & Consistency agent to surface relational NaN-imputation hints. For each target column with at least one NaN, scans single and pair predictors drawn from the column's related-columns + canonical-hint-stem siblings, computes purity (share of predictor groups that map to a single target value) and coverage (share of target NaNs the predictor can reach), and emits the strongest ImputationHint above the dominant threshold. Tries both a raw-key path (fast hash via pandas .map) and a normalized-key path (lowercase + strip) — picking whichever produces the better (purity, coverage) score, with raw favored on ties since it implies the data was already clean."""
+"""Deterministic functional-dependency miner used by the Format & Consistency agent to surface relational NaN-imputation hints. For each target column with at least one NaN, scans single and pair predictors drawn from the column's related-columns + canonical-hint-stem siblings, computes purity (share of rows whose target equals the dominant value for their predictor key, so that a single outlier does not disqualify an otherwise reliable dependency) and coverage (share of target NaNs the predictor can reach), and emits the strongest ImputationHint above the dominant threshold. Tries both a raw-key path (fast hash via pandas .map) and a normalized-key path (lowercase + strip) — picking whichever produces the better (purity, coverage) score, with raw favored on ties since it implies the data was already clean."""
 from __future__ import annotations
 
 import pandas as pd
@@ -81,15 +81,15 @@ def _try_single(
     pair = df[[predictor, target]].dropna()
     if pair.empty:
         return None
-    keys = _normalize(pair[predictor], path)
-    grouped = pair[target].groupby(keys.astype(str)).agg(["nunique", "first"])
-    if grouped.empty:
+    keys = _normalize(pair[predictor], path).astype(str)
+    grouped = pair[target].groupby(keys)
+    if not len(grouped):
         return None
-    pure = grouped["nunique"] == 1
-    purity = float(pure.sum() / len(grouped))
+    dominant = grouped.agg(lambda values: values.value_counts().idxmax())
+    purity = float((pair[target] == keys.map(dominant)).mean())
     if purity < dominant_threshold:
         return None
-    mapping = {str(k): _jsonable(v) for k, v in grouped.loc[pure, "first"].items()}
+    mapping = {str(k): _jsonable(v) for k, v in dominant.items()}
     pred_for_nans = _normalize(df.loc[nan_mask, predictor], path).astype(str)
     coverable = df.loc[nan_mask, predictor].notna() & pred_for_nans.isin(mapping.keys())
     coverage = float(coverable.sum() / n_nan) if n_nan else 0.0

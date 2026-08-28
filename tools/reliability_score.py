@@ -6,8 +6,32 @@ import pandas as pd
 from models import GlobalConventions, ValidationReport
 from tools.validate_column_names import is_conforming
 
-_NON_FORMAT_PATTERNS = {"not nullable", "missing value"}
+_COMPLETENESS_PATTERNS = {"not nullable", "missing value"}
 _SCHEMA_PATTERN_PREFIXES = ("naming convention", "sparse column")
+_CONSISTENCY_PATTERN_PREFIX = "cross-column"
+
+
+def classify_violation(pattern) -> str:
+    text = str(pattern or "")
+    if pattern in _COMPLETENESS_PATTERNS:
+        return "completeness"
+    if text.startswith(_SCHEMA_PATTERN_PREFIXES):
+        return "schema"
+    if text.startswith(_CONSISTENCY_PATTERN_PREFIX):
+        return "consistency"
+    return "format"
+
+
+def violation_counts(reports) -> dict[str, int]:
+    counts = {"format": 0, "completeness": 0, "schema": 0, "consistency": 0}
+    for report in reports:
+        for violation in report.violations:
+            kind = classify_violation(violation.expected_pattern)
+            if kind == "completeness":
+                counts[kind] += int(violation.value) if str(violation.value).isdigit() else 1
+            else:
+                counts[kind] += 1
+    return counts
 
 
 def compute_metrics(
@@ -17,6 +41,7 @@ def compute_metrics(
     typed_columns: int | None = None,
 ) -> dict:
     cells = int(df.size)
+    rows = int(len(df))
     metrics: dict = {
         "null_by_column": {str(c): int(df[c].isna().sum()) for c in df.columns},
         "rows": int(len(df)),
@@ -28,16 +53,19 @@ def compute_metrics(
         "schema_conformity": _schema_conformity(df, conventions, typed_columns),
     }
     if validation_reports is not None:
-        violations = _format_violation_count(validation_reports)
-        metrics["format_violations"] = violations
-        metrics["validity"] = _ratio(max(cells - violations, 0), cells)
+        counts = violation_counts(validation_reports)
+        metrics["violations_by_kind"] = counts
+        metrics["format_violations"] = counts["format"]
+        metrics["validity"] = _ratio(max(cells - counts["format"], 0), cells)
+        if counts["consistency"]:
+            metrics["consistency"] = _ratio(max(rows - counts["consistency"], 0), rows)
     return metrics
 
 
 def reliability_score(metrics: dict) -> dict:
     components = {
         key: metrics[key]
-        for key in ("completeness", "validity", "uniqueness", "schema_conformity")
+        for key in ("completeness", "validity", "consistency", "uniqueness", "schema_conformity")
         if metrics.get(key) is not None
     }
     if not components:
@@ -49,13 +77,7 @@ def reliability_score(metrics: dict) -> dict:
 
 
 def _format_violation_count(reports: list[ValidationReport]) -> int:
-    return sum(
-        1
-        for report in reports
-        for violation in report.violations
-        if violation.expected_pattern not in _NON_FORMAT_PATTERNS
-        and not str(violation.expected_pattern or "").startswith(_SCHEMA_PATTERN_PREFIXES)
-    )
+    return violation_counts(reports)["format"]
 
 
 def _schema_conformity(
