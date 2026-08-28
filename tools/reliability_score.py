@@ -7,8 +7,9 @@ from models import GlobalConventions, ValidationReport
 from tools.validate_column_names import is_conforming
 
 _COMPLETENESS_PATTERNS = {"not nullable", "missing value"}
-_SCHEMA_PATTERN_PREFIXES = ("naming convention", "sparse column")
+_SCHEMA_PATTERN_PREFIXES = ("naming convention", "sparse column", "duplicate-column divergence")
 _CONSISTENCY_PATTERN_PREFIX = "cross-column"
+_UNIQUENESS_PATTERN_PREFIX = "duplicate records"
 
 
 def classify_violation(pattern) -> str:
@@ -19,11 +20,13 @@ def classify_violation(pattern) -> str:
         return "schema"
     if text.startswith(_CONSISTENCY_PATTERN_PREFIX):
         return "consistency"
+    if text.startswith(_UNIQUENESS_PATTERN_PREFIX):
+        return "uniqueness"
     return "format"
 
 
 def violation_counts(reports) -> dict[str, int]:
-    counts = {"format": 0, "completeness": 0, "schema": 0, "consistency": 0}
+    counts = {"format": 0, "completeness": 0, "schema": 0, "consistency": 0, "uniqueness": 0}
     for report in reports:
         for violation in report.violations:
             kind = classify_violation(violation.expected_pattern)

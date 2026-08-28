@@ -464,7 +464,12 @@ def _aggregate_violations(
 
 
 _MISSING_PATTERNS = {"not nullable", "missing value"}
-_SCHEMA_ONLY_PREFIXES = ("naming convention", "sparse column")
+_SCHEMA_ONLY_PREFIXES = (
+    "naming convention",
+    "sparse column",
+    "duplicate-column divergence",
+    "duplicate records",
+)
 
 
 def _classify_violation(pattern: str) -> str:

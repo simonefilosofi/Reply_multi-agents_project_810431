@@ -46,6 +46,9 @@ class PipelineState(BaseModel):
     approved_fix_ids: list[str] = Field(default_factory=list)
     applied_fix_ids: list[str] = Field(default_factory=list)
 
+    # duplicate-row ledger (exact removals and key collisions)
+    duplicate_rows: dict = Field(default_factory=dict)
+
     # completeness analysis (per column, per row, dataset-wide, sparse columns)
     completeness: dict = Field(default_factory=dict)
 

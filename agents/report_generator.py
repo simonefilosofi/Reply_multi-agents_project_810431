@@ -13,6 +13,7 @@ from models import DateFormat, EnumFormat, FormatViolation, RangeFormat, RegexFo
 from state import PipelineState
 from tools.completeness import completeness_report
 from tools.cross_column_checks import candidate_predictors, cross_column_reports
+from tools.duplicate_rows import duplicate_row_analysis
 from tools.reliability_score import compute_metrics, reliability_score, violation_counts
 from tools.validate_format import validate_format
 from utils.prompts import load_prompt
@@ -70,10 +71,28 @@ def _residual_reports(state: PipelineState) -> list[ValidationReport]:
             continue
         reports.append(validate_format(column, state.dataset[column], spec))
     reports.extend(_residual_completeness(state))
+    reports.extend(_residual_duplicates(state))
     reports.extend(cross_column_reports(
         state.dataset, candidate_predictors(state.payload, set(state.dataset.columns), state.dataset)
     ))
     return reports
+
+
+def _residual_duplicates(state: PipelineState) -> list[ValidationReport]:
+    analysis = duplicate_row_analysis(state.dataset)
+    return [
+        ValidationReport(
+            column_name=key,
+            violations=[FormatViolation(
+                column_name=key,
+                row_index=-1,
+                value=stats["keys_with_conflicting_data"],
+                expected_pattern=f"duplicate records: {stats['keys_with_conflicting_data']} keys still collide",
+            )],
+        )
+        for key, stats in analysis["key_collisions"].items()
+        if stats["keys_with_conflicting_data"]
+    ]
 
 
 def _residual_completeness(state: PipelineState) -> list[ValidationReport]:
@@ -221,9 +240,13 @@ def _build_payload(state: PipelineState, residual: list[ValidationReport], quali
                 "canonical_name": r.canonical_name,
                 "dropped": r.dropped,
                 "rationale": r.rationale,
+                "cells_backfilled": r.cells_backfilled,
+                "cells_overwritten": r.cells_overwritten,
+                "values_lost": r.values_lost,
             }
             for r in state.duplicate_resolutions
         ],
+        "duplicate_rows": state.duplicate_rows,
         "format_violations_detected": [
             {"column_name": r.column_name, "violation_count": _violation_count(r)}
             for r in state.validation_reports

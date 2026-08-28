@@ -96,6 +96,9 @@ class DuplicateResolution(BaseModel):
     canonical_name: str
     rationale: str
     dropped: list[str]
+    cells_backfilled: int = 0
+    cells_overwritten: dict[str, int] = Field(default_factory=dict)
+    values_lost: dict[str, list] = Field(default_factory=dict)
 
 
 class ColumnClassification(BaseModel):

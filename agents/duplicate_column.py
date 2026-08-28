@@ -8,13 +8,15 @@ import pandas as pd
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
-from models import DuplicateResolution
+from models import DuplicateResolution, FormatViolation, ValidationReport
 from state import PipelineState
 from tools.validate_column_names import is_conforming, normalize_column_name, uniquify
 from utils.prompts import load_prompt
 
 
 _SIMILARITY_THRESHOLD = 0.80
+_DIVERGENCE_ALERT_RATIO = 0.01
+_MAX_LOST_VALUES = 10
 
 
 class _NameElection(BaseModel):
@@ -39,6 +41,7 @@ def duplicate_column_node(state: PipelineState) -> PipelineState:
     taken: set[str] = {c for c in df.columns}
 
     new_df = df.copy()
+    divergence_reports: list[ValidationReport] = []
     dropped: set[str] = set()
     renames: dict[str, str] = {}
     resolutions: list[DuplicateResolution] = []
@@ -52,12 +55,17 @@ def duplicate_column_node(state: PipelineState) -> PipelineState:
         )
         taken.add(election.canonical_name)
 
+        overwritten: dict[str, int] = {}
+        lost: dict[str, list] = {}
+        backfilled = 0
         for c in group:
             if c == data_survivor:
                 continue
+            overwritten[c], lost[c] = _divergence(new_df[data_survivor], new_df[c])
             mask = new_df[data_survivor].isna() & new_df[c].notna()
             if not mask.any():
                 continue
+            backfilled += int(mask.sum())
             if new_df[data_survivor].dtype != new_df[c].dtype:
                 new_df[data_survivor] = new_df[data_survivor].astype(object)
             new_df.loc[mask, data_survivor] = new_df.loc[mask, c]
@@ -72,6 +80,12 @@ def duplicate_column_node(state: PipelineState) -> PipelineState:
             canonical_name=election.canonical_name,
             rationale=election.rationale,
             dropped=[c for c in group if c != data_survivor],
+            cells_backfilled=backfilled,
+            cells_overwritten={k: v for k, v in overwritten.items() if v},
+            values_lost={k: v for k, v in lost.items() if v},
+        ))
+        divergence_reports.extend(_divergence_reports(
+            election.canonical_name, data_survivor, overwritten, lost, len(new_df)
         ))
 
     new_df = new_df.drop(columns=list(dropped))
@@ -90,7 +104,7 @@ def duplicate_column_node(state: PipelineState) -> PipelineState:
         r.model_copy(update={"column_name": renames.get(r.column_name, r.column_name)})
         for r in state.validation_reports
         if r.column_name not in dropped
-    ]
+    ] + divergence_reports
     return state.model_copy(update={
         "dataset": new_df,
         "surviving_columns": list(new_df.columns),
@@ -194,3 +208,39 @@ def _baseline_columns_for_domain(state: PipelineState) -> list[str]:
         for col_name in dataset.columns.keys():
             seen.setdefault(col_name, None)
     return list(seen.keys())
+
+
+def _divergence(survivor: pd.Series, other: pd.Series) -> tuple[int, list]:
+    comparable = survivor.notna() & other.notna()
+    if not comparable.any():
+        return 0, []
+    differing = comparable & (survivor.astype(str) != other.astype(str))
+    if not differing.any():
+        return 0, []
+    only_in_other = set(other[differing].astype(str)) - set(survivor.astype(str))
+    return int(differing.sum()), sorted(only_in_other)[:_MAX_LOST_VALUES]
+
+
+def _divergence_reports(
+    canonical_name: str,
+    survivor: str,
+    overwritten: dict[str, int],
+    lost: dict[str, list],
+    rows: int,
+) -> list[ValidationReport]:
+    total = sum(overwritten.values())
+    if not rows or total / rows <= _DIVERGENCE_ALERT_RATIO:
+        return []
+    return [ValidationReport(
+        column_name=canonical_name,
+        violations=[FormatViolation(
+            column_name=canonical_name,
+            row_index=-1,
+            value=total,
+            expected_pattern=(
+                f"duplicate-column divergence: {survivor} differs from its siblings on "
+                f"{total} cells ({total / rows:.1%}); values only present in the dropped "
+                f"columns: {sorted({v for values in lost.values() for v in values})[:5]}"
+            ),
+        )],
+    )]
