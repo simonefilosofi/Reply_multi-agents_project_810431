@@ -35,6 +35,7 @@ _PLACEHOLDERS: list = [
     "in attesa", "non pervenuto", "non rilevato", "non classificato",
     -1, 0, 999, -999, 9999, -9999, 99999, -99999,
 ]
+_SENTINEL_MIN_DIGITS = 4
 _PLACEHOLDER_LOOKUP = {p.lower().strip() if isinstance(p, str) else p for p in _PLACEHOLDERS}
 
 
@@ -60,7 +61,7 @@ def semantic_node(state: PipelineState) -> PipelineState:
     if state.dataset is None:
         return state
 
-    df = state.dataset.copy()
+    df = state.dataset
     all_columns = list(df.columns)
 
     domain_catalog = column_catalog_all_domains(state.baseline) if state.baseline else {}
@@ -78,7 +79,8 @@ def semantic_node(state: PipelineState) -> PipelineState:
 
         suggestion = programmatic_match(col, domain_catalog, aliases) if domain_catalog else None
         suggested_spec = find_spec_by_hint(state.baseline, suggestion) if state.baseline else None
-        placeholder_cands = _detect_placeholder_candidates(series, suggested_spec)
+        sentinels = _detect_numeric_sentinels(series)
+        placeholder_cands = _detect_placeholder_candidates(series, suggested_spec, sentinels)
         canonical_cands = _retrieve_canonical_candidates(
             col, str(series.dtype), sample, state.baseline, description
         )
@@ -105,8 +107,7 @@ def semantic_node(state: PipelineState) -> PipelineState:
             else None
         )
         dtype = _resolve_dtype(canonical_hint, series, result.dtype)
-        df[col] = _cast_series(series, dtype)
-        final_placeholders = _merge_placeholders(placeholder_cands, result.placeholders)
+        final_placeholders = _merge_placeholders(placeholder_cands, result.placeholders, sentinels)
         payload.append(ColumnPayload(
             column_name=col,
             description=result.column_meaning,
@@ -119,12 +120,27 @@ def semantic_node(state: PipelineState) -> PipelineState:
             canonical_candidates=canonical_cands,
         ))
 
-    return state.model_copy(update={"payload": payload, "dataset": df})
+    return state.model_copy(update={"payload": payload})
 
 
-def _detect_placeholder_candidates(series: pd.Series, spec: ColumnSchema | None) -> list:
-    matches: list = []
-    seen: set = set()
+def _detect_numeric_sentinels(series: pd.Series) -> list:
+    numeric = pd.to_numeric(series, errors="coerce").dropna()
+    if numeric.empty:
+        return []
+    extremes = {numeric.min(), numeric.max()}
+    sentinels: list = []
+    for value in extremes:
+        digits = str(abs(int(value)))
+        if len(digits) >= _SENTINEL_MIN_DIGITS and set(digits) == {"9"}:
+            original = series[pd.to_numeric(series, errors="coerce") == value].dropna()
+            if not original.empty:
+                sentinels.append(original.iloc[0])
+    return sentinels
+
+
+def _detect_placeholder_candidates(series: pd.Series, spec: ColumnSchema | None, sentinels: list) -> list:
+    matches: list = list(sentinels)
+    seen: set = set(sentinels)
     for value in series.dropna().unique():
         key = value.lower().strip() if isinstance(value, str) else value
         if key in _PLACEHOLDER_LOOKUP and value not in seen:
@@ -168,8 +184,8 @@ def _summarize_spec(canonical_id: str | None, spec: ColumnSchema | None) -> dict
     }
 
 
-def _merge_placeholders(detected: list, llm_kept: list) -> list:
-    auto = [v for v in detected if isinstance(v, str)]
+def _merge_placeholders(detected: list, llm_kept: list, sentinels: list) -> list:
+    auto = [v for v in detected if isinstance(v, str)] + list(sentinels)
     merged: list = []
     seen: set = set()
     for v in auto + list(llm_kept):
@@ -193,23 +209,6 @@ def _resolve_dtype(canonical_hint: str, series: pd.Series, llm_dtype: str) -> st
             return descriptor["dtype"]
     return infer_and_validate_dtype(series, llm_suggestion=llm_dtype)
 
-
-def _cast_series(series: pd.Series, dtype: str) -> pd.Series:
-    target = dtype.lower()
-    try:
-        if "int" in target:
-            return pd.to_numeric(series, errors="coerce").astype("Int64")
-        if "float" in target or "double" in target or "decimal" in target:
-            return pd.to_numeric(series, errors="coerce")
-        if "date" in target or "time" in target:
-            return pd.to_datetime(series, errors="coerce")
-        if "bool" in target:
-            return series.astype("boolean")
-        if "string" in target or target == "object":
-            return series.astype("string")
-        return series.astype(dtype)
-    except (ValueError, TypeError):
-        return series
 
 
 def _describe_columns(df: pd.DataFrame, columns: list[str]) -> dict[str, str]:

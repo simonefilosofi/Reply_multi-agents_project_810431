@@ -1,4 +1,4 @@
-"""Replaces disguised NaNs in every column using the per-column placeholder lists from the payload, then flags columns whose canonical spec says is_nullable=false but where NaNs remain after replacement, surfacing them as aggregated ValidationReport entries on state.validation_reports."""
+"""Replaces disguised NaNs in every column using the per-column placeholder lists from the payload, then enforces the dtype proposed by the Semantic agent without losing data: a column is cast only when every non-null value survives, and blocking values are reported as violations instead of being coerced away. Finally flags columns whose canonical spec says is_nullable=false but where NaNs remain, surfacing everything as ValidationReport entries on state.validation_reports."""
 from __future__ import annotations
 
 import pandas as pd
@@ -7,6 +7,7 @@ from models import FormatViolation, ValidationReport
 from state import PipelineState
 from tools.baseline_accessors import find_spec_by_hint
 from tools.detect_placeholders import detect_placeholders
+from tools.safe_cast import safe_cast
 
 
 def nan_handler_node(state: PipelineState) -> PipelineState:
@@ -18,10 +19,34 @@ def nan_handler_node(state: PipelineState) -> PipelineState:
         if p.column_name in df.columns and p.placeholders:
             df[p.column_name] = detect_placeholders(df[p.column_name], p.placeholders)
 
+    df, coercion_reports = _enforce_dtypes(df, state)
     nullability_reports = _check_nullability(df, state)
-    merged = _merge_reports(state.validation_reports, nullability_reports)
+    merged = _merge_reports(state.validation_reports, coercion_reports + nullability_reports)
 
     return state.model_copy(update={"dataset": df, "validation_reports": merged})
+
+
+def _enforce_dtypes(df: pd.DataFrame, state: PipelineState) -> tuple[pd.DataFrame, list[ValidationReport]]:
+    reports: list[ValidationReport] = []
+    for p in state.payload:
+        if p.column_name not in df.columns or not p.dtype:
+            continue
+        if p.dtype == str(df[p.column_name].dtype):
+            continue
+        cast, blocking = safe_cast(df[p.column_name], p.dtype)
+        if not blocking:
+            df[p.column_name] = cast
+            continue
+        reports.append(ValidationReport(
+            column_name=p.column_name,
+            violations=[FormatViolation(
+                column_name=p.column_name,
+                row_index=i,
+                value=df[p.column_name].loc[i],
+                expected_pattern=f"not coercible to {p.dtype}",
+            ) for i in blocking],
+        ))
+    return df, reports
 
 
 def _check_nullability(df: pd.DataFrame, state: PipelineState) -> list[ValidationReport]:
