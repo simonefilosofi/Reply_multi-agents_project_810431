@@ -43,6 +43,7 @@ class PipelineState(BaseModel):
     # remediation proposals + approvals
     proposed_fixes: list[FixProposal] = Field(default_factory=list)
     fix_groups: dict[str, list[str]] = Field(default_factory=dict)
+    approved_fix_ids: list[str] = Field(default_factory=list)
     applied_fix_ids: list[str] = Field(default_factory=list)
 
     # pipeline control
