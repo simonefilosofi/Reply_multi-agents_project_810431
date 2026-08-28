@@ -15,6 +15,7 @@ def execute_fixes(
     accepted: list[FixProposal],
     value_corrections: dict[str, dict[str, str | None]],
     imputation_hints: dict[str, ImputationHint] | None = None,
+    removable_by_column: dict[str, set] | None = None,
 ) -> tuple[pd.DataFrame, list[dict]]:
     hints_view = _hints_to_dicts(imputation_hints or {})
     ordered = _order_by_deps(accepted)
@@ -54,7 +55,7 @@ def execute_fixes(
             })
             current = before
             continue
-        breaches = check_invariants(before, result, p.code, hints_view)
+        breaches = check_invariants(before, result, p.code, hints_view, removable_by_column)
         if breaches:
             statuses.append({"id": p.id, "status": "rejected", "invariant_violations": breaches})
             current = before

@@ -1,4 +1,4 @@
-"""Validates column values against per-column FormatSpecs inferred from the actual sample (with baseline as a hint), flags violations, asks an LLM to propose targeted per-value corrections so the Unified Remediation agent can emit value-preserving replace fixes instead of generic imputations, and deterministically mines functional dependencies between related columns to surface NaN-imputation hints (lookup mappings) for the Unified agent. Merges new violations with reports already on state (e.g. nullability reports from the NaN handler)."""
+"""Validates column values against per-column FormatSpecs inferred from the actual sample (with baseline as a hint), flags violations, asks an LLM to propose targeted per-value corrections, discarding wholesale deletion proposals when they cover so much of a column that the inferred spec is the unreliable party so the Unified Remediation agent can emit value-preserving replace fixes instead of generic imputations, and deterministically mines functional dependencies between related columns to surface NaN-imputation hints (lookup mappings) for the Unified agent. Merges new violations with reports already on state (e.g. nullability reports from the NaN handler)."""
 from __future__ import annotations
 
 from collections import defaultdict
@@ -20,6 +20,7 @@ from tools.validate_format import validate_format
 _VALID_SAMPLE_SIZE = 10
 _MAX_UNIQUE_OFFENDERS = 100
 _EXTENDED_SAMPLE_SIZE = 150
+_MAX_DELETION_SHARE = 0.02
 
 
 def format_consistency_node(state: PipelineState) -> PipelineState:
@@ -68,6 +69,7 @@ def format_consistency_node(state: PipelineState) -> PipelineState:
             expected_pattern = format_violations[0].expected_pattern or ""
             valid_sample = _valid_sample(state.dataset[col], unique_offenders)
             corrections = correct_violations(payload, expected_pattern, unique_offenders, valid_sample)
+            corrections = _drop_unsafe_deletions(corrections, state.dataset[col], spec)
             if corrections:
                 value_corrections[col] = corrections
 
@@ -79,6 +81,17 @@ def format_consistency_node(state: PipelineState) -> PipelineState:
         "inferred_format_specs": inferred_specs,
         "imputation_hints": imputation_hints,
     })
+
+
+def _drop_unsafe_deletions(corrections: dict, series: pd.Series, spec) -> dict:
+    deletions = [value for value, replacement in corrections.items() if replacement is None]
+    if not deletions:
+        return corrections
+    populated = int(series.notna().sum())
+    affected = int(series.astype(str).isin(deletions).sum())
+    if not populated or affected / populated <= _MAX_DELETION_SHARE:
+        return corrections
+    return {value: replacement for value, replacement in corrections.items() if replacement is not None}
 
 
 def _naming_reports(state: PipelineState) -> list[ValidationReport]:

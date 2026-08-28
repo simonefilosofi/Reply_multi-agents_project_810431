@@ -21,6 +21,7 @@ def trial_execute(
     specs_by_col: dict[str, FormatSpec | None],
     pre_reports_by_col: dict[str, ValidationReport],
     imputation_hints: dict[str, ImputationHint] | None = None,
+    removable_by_column: dict[str, set] | None = None,
 ) -> dict:
     before = df.copy()
     hints_view = {col: h.model_dump() for col, h in (imputation_hints or {}).items()}
@@ -63,7 +64,7 @@ def trial_execute(
     )
     return {
         "status": "applied",
-        "invariant_violations": check_invariants(before, after, proposal.code, hints_view),
+        "invariant_violations": check_invariants(before, after, proposal.code, hints_view, removable_by_column),
         "rows_changed": int(rows_changed),
         "shape_before": list(before.shape),
         "shape_after": list(after.shape),

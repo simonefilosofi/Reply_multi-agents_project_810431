@@ -46,6 +46,9 @@ class PipelineState(BaseModel):
     approved_fix_ids: list[str] = Field(default_factory=list)
     applied_fix_ids: list[str] = Field(default_factory=list)
 
+    # completeness analysis (per column, per row, dataset-wide, sparse columns)
+    completeness: dict = Field(default_factory=dict)
+
     # quality snapshots keyed by measurement point (raw, detected, final)
     quality_snapshots: dict[str, dict] = Field(default_factory=dict)
 

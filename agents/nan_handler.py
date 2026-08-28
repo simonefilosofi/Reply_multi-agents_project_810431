@@ -1,4 +1,4 @@
-"""Replaces disguised NaNs in every column using the per-column placeholder lists from the payload, then enforces the dtype proposed by the Semantic agent without losing data: a column is cast only when every non-null value survives, and blocking values are reported as violations instead of being coerced away. Finally flags columns whose canonical spec says is_nullable=false but where NaNs remain, surfacing everything as ValidationReport entries on state.validation_reports. Records the "detected" quality snapshot, the true state of the dataset once disguised nulls are unmasked."""
+"""Replaces disguised NaNs in every column using the per-column placeholder lists from the payload, then enforces the dtype proposed by the Semantic agent without losing data: a column is cast only when every non-null value survives, and blocking values are reported as violations instead of being coerced away. Finally flags columns whose canonical spec says is_nullable=false but where NaNs remain, surfacing everything as ValidationReport entries on state.validation_reports. Records the "detected" quality snapshot and the full completeness analysis - per-column and dataset-wide fill rates, missing values per row, and columns sparse enough to be removal candidates - measured once disguised nulls are unmasked."""
 from __future__ import annotations
 
 import pandas as pd
@@ -6,6 +6,7 @@ import pandas as pd
 from models import FormatViolation, ValidationReport
 from state import PipelineState
 from tools.baseline_accessors import find_spec_by_hint
+from tools.completeness import completeness_report
 from tools.detect_placeholders import detect_placeholders
 from tools.reliability_score import compute_metrics
 from tools.safe_cast import safe_cast
@@ -22,7 +23,11 @@ def nan_handler_node(state: PipelineState) -> PipelineState:
 
     df, coercion_reports = _enforce_dtypes(df, state)
     nullability_reports = _check_nullability(df, state)
-    merged = _merge_reports(state.validation_reports, coercion_reports + nullability_reports)
+    completeness = completeness_report(df)
+    sparse_reports = _sparse_reports(completeness)
+    merged = _merge_reports(
+        state.validation_reports, coercion_reports + nullability_reports + sparse_reports
+    )
 
     snapshots = {
         **state.quality_snapshots,
@@ -32,7 +37,23 @@ def nan_handler_node(state: PipelineState) -> PipelineState:
         "dataset": df,
         "validation_reports": merged,
         "quality_snapshots": snapshots,
+        "completeness": completeness,
     })
+
+
+def _sparse_reports(completeness: dict) -> list[ValidationReport]:
+    return [
+        ValidationReport(
+            column_name=entry["column"],
+            violations=[FormatViolation(
+                column_name=entry["column"],
+                row_index=-1,
+                value=entry["nulls"],
+                expected_pattern=f"sparse column: {entry['null_rate']:.1%} null",
+            )],
+        )
+        for entry in completeness["sparse_columns"]
+    ]
 
 
 def _conventions(state: PipelineState):

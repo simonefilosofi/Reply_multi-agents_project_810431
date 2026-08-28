@@ -7,7 +7,7 @@ from models import GlobalConventions, ValidationReport
 from tools.validate_column_names import is_conforming
 
 _NON_FORMAT_PATTERNS = {"not nullable", "missing value"}
-_SCHEMA_PATTERN_PREFIX = "naming convention"
+_SCHEMA_PATTERN_PREFIXES = ("naming convention", "sparse column")
 
 
 def compute_metrics(
@@ -54,7 +54,7 @@ def _format_violation_count(reports: list[ValidationReport]) -> int:
         for report in reports
         for violation in report.violations
         if violation.expected_pattern not in _NON_FORMAT_PATTERNS
-        and not str(violation.expected_pattern or "").startswith(_SCHEMA_PATTERN_PREFIX)
+        and not str(violation.expected_pattern or "").startswith(_SCHEMA_PATTERN_PREFIXES)
     )
 
 

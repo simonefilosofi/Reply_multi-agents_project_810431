@@ -1,4 +1,4 @@
-"""Detects exact and near-duplicate columns via pairwise similarity, fills gaps from sibling columns, and elects the canonical name for each group. The election is deterministic whenever exactly one group member already satisfies the baseline naming convention; the LLM is consulted only to break ties or when no member conforms, and its answer is normalised and validated before use."""
+"""Detects exact and near-duplicate columns via pairwise similarity, fills gaps from sibling columns, and elects the canonical name for each group. Similarity is measured on the string form and again on the numeric form, so that columns differing only by zero-padding or storage type are still recognised as duplicates. The election is deterministic whenever exactly one group member already satisfies the baseline naming convention; the LLM is consulted only to break ties or when no member conforms, and its answer is normalised and validated before use."""
 from __future__ import annotations
 
 import json
@@ -151,7 +151,16 @@ def _similarity(a: pd.Series, b: pd.Series) -> float:
         return 0.0
     a_n = a[overlap].astype("string").str.strip().str.lower()
     b_n = b[overlap].astype("string").str.strip().str.lower()
-    return float((a_n == b_n).mean())
+    return max(float((a_n == b_n).mean()), _numeric_similarity(a[overlap], b[overlap]))
+
+
+def _numeric_similarity(a: pd.Series, b: pd.Series) -> float:
+    a_num = pd.to_numeric(a, errors="coerce")
+    b_num = pd.to_numeric(b, errors="coerce")
+    comparable = a_num.notna() & b_num.notna()
+    if not comparable.any():
+        return 0.0
+    return float((a_num[comparable] == b_num[comparable]).mean()) * float(comparable.mean())
 
 
 def _llm_pick(chain, system: str, group: list[str], domain: str, baseline_columns: list[str]) -> _NameElection:

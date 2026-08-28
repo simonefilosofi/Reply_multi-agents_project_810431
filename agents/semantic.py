@@ -107,7 +107,7 @@ def semantic_node(state: PipelineState) -> PipelineState:
             else None
         )
         dtype = _resolve_dtype(canonical_hint, series, result.dtype)
-        final_placeholders = _merge_placeholders(placeholder_cands, result.placeholders, sentinels)
+        final_placeholders = _merge_placeholders(placeholder_cands, result.placeholders, sentinels, dtype)
         payload.append(ColumnPayload(
             column_name=col,
             description=result.column_meaning,
@@ -184,16 +184,30 @@ def _summarize_spec(canonical_id: str | None, spec: ColumnSchema | None) -> dict
     }
 
 
-def _merge_placeholders(detected: list, llm_kept: list, sentinels: list) -> list:
-    auto = [v for v in detected if isinstance(v, str)] + list(sentinels)
+def _merge_placeholders(detected: list, llm_kept: list, sentinels: list, dtype: str) -> list:
+    curated = [
+        v for v in detected
+        if isinstance(v, str) and v not in sentinels and not _is_valid_for_dtype(v, dtype)
+    ]
+    vetted = [v for v in llm_kept if not _is_valid_for_dtype(v, dtype)]
     merged: list = []
     seen: set = set()
-    for v in auto + list(llm_kept):
+    for v in list(sentinels) + curated + vetted:
         key = v.lower().strip() if isinstance(v, str) else v
         if key not in seen:
             seen.add(key)
             merged.append(v)
     return merged
+
+
+def _is_valid_for_dtype(value, dtype: str) -> bool:
+    target = dtype.lower()
+    if any(token in target for token in ("int", "float", "double", "decimal", "numeric")):
+        candidate = str(value).strip().replace(",", ".") if isinstance(value, str) else value
+        return bool(pd.notna(pd.to_numeric(candidate, errors="coerce")))
+    if any(token in target for token in ("date", "time")):
+        return bool(pd.notna(pd.to_datetime(value, errors="coerce")))
+    return False
 
 
 def _validate_canonical_match(match: str | None) -> str:

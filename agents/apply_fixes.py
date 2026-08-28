@@ -7,6 +7,7 @@ from models import EnumFormat, FormatSpec
 from state import PipelineState
 from tools.apply_casing import collapse_casing_variants
 from tools.execute_fixes import execute_fixes
+from tools.fix_invariants import removable_values
 
 
 def apply_fixes_node(state: PipelineState) -> PipelineState:
@@ -23,6 +24,7 @@ def apply_fixes_node(state: PipelineState) -> PipelineState:
         approved,
         state.value_corrections,
         imputation_hints=state.imputation_hints,
+        removable_by_column=removable_values(state.payload, state.validation_reports),
     )
 
     cleaned = _collapse_casing(cleaned, state)

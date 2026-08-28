@@ -19,6 +19,7 @@ from models import (
 from state import PipelineState
 from tools.baseline_accessors import find_spec_by_hint
 from tools.match_canonical import compact_format_summary
+from tools.fix_invariants import removable_values
 from tools.trial_execute import trial_execute
 from utils.prompts import load_prompt
 
@@ -53,6 +54,7 @@ def unified_node(state: PipelineState) -> PipelineState:
             value_corrections=state.value_corrections,
             specs_by_col=specs_by_col,
             imputation_hints=state.imputation_hints,
+            removable_by_column=removable_values(state.payload, state.validation_reports),
         ))
 
     deduped = dedupe_proposals(all_proposals)
@@ -101,6 +103,7 @@ def propose_for_group(
     feedback: str = "",
     specs_by_col: dict[str, FormatSpec | None] | None = None,
     imputation_hints: dict[str, ImputationHint] | None = None,
+    removable_by_column: dict[str, set] | None = None,
 ) -> list[FixProposal]:
     chain = ChatOpenAI(model="gpt-5.4-mini", temperature=0).with_structured_output(FixGroupResponse)
     system = load_prompt("unified")
@@ -118,6 +121,7 @@ def propose_for_group(
         proposals=response.proposals,
         group=group,
         df=df,
+        removable_by_column=removable_by_column or {},
         value_corrections=value_corrections or {},
         specs_by_col=specs_by_col or {},
         reports_by_name=reports_by_name,
@@ -133,6 +137,7 @@ def _review_and_revise_proposals(
     proposals: list[FixProposal],
     group: list[str],
     df: pd.DataFrame,
+    removable_by_column: dict[str, set],
     value_corrections: dict[str, dict[str, str | None]],
     specs_by_col: dict[str, FormatSpec | None],
     reports_by_name: dict[str, ValidationReport],
@@ -148,6 +153,7 @@ def _review_and_revise_proposals(
             trial = trial_execute(
                 df, current, value_corrections, specs_by_col, reports_by_name,
                 imputation_hints=imputation_hints,
+                removable_by_column=removable_by_column,
             )
             breaches = trial.get("invariant_violations") or []
             if breaches:
@@ -182,7 +188,8 @@ def _review_and_revise_proposals(
                 "depends_on": proposal.depends_on,
             })
         if current is not None and not _breaks_invariants(
-            current, df, value_corrections, specs_by_col, reports_by_name, imputation_hints
+            current, df, value_corrections, specs_by_col, reports_by_name, imputation_hints,
+            removable_by_column,
         ):
             finalized.append(current)
     return finalized
@@ -195,10 +202,12 @@ def _breaks_invariants(
     specs_by_col: dict[str, FormatSpec | None],
     reports_by_name: dict[str, ValidationReport],
     imputation_hints: dict[str, ImputationHint],
+    removable_by_column: dict[str, set],
 ) -> bool:
     trial = trial_execute(
         df, proposal, value_corrections, specs_by_col, reports_by_name,
         imputation_hints=imputation_hints,
+        removable_by_column=removable_by_column,
     )
     return bool(trial.get("invariant_violations"))
 
@@ -431,7 +440,7 @@ def _aggregate_violations(
     by_pattern: dict[str, list] = defaultdict(list)
     row_indices: list[int] = []
     for v in report.violations:
-        if str(v.expected_pattern or "").startswith(_SCHEMA_ONLY_PREFIX):
+        if str(v.expected_pattern or "").startswith(_SCHEMA_ONLY_PREFIXES):
             continue
         by_pattern[v.expected_pattern or "unspecified"].append(v)
         if v.row_index >= 0:
@@ -455,7 +464,7 @@ def _aggregate_violations(
 
 
 _MISSING_PATTERNS = {"not nullable", "missing value"}
-_SCHEMA_ONLY_PREFIX = "naming convention"
+_SCHEMA_ONLY_PREFIXES = ("naming convention", "sparse column")
 
 
 def _classify_violation(pattern: str) -> str:

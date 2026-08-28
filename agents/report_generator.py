@@ -121,13 +121,26 @@ def _origin_columns(state: PipelineState) -> dict[str, str]:
     return {r.canonical_name: r.data_survivor for r in state.duplicate_resolutions}
 
 
+_AGGREGATED_PATTERNS = ("not nullable", "missing value")
+
+
+def _violation_count(report: ValidationReport) -> int:
+    total = 0
+    for violation in report.violations:
+        if violation.expected_pattern in _AGGREGATED_PATTERNS:
+            total += int(violation.value) if str(violation.value).isdigit() else 1
+        elif not str(violation.expected_pattern or "").startswith(("naming convention", "sparse column")):
+            total += 1
+    return total
+
+
 def _count_violations(reports: list[ValidationReport]) -> int:
     return sum(
         1
         for report in reports
         for violation in report.violations
         if violation.expected_pattern not in ("not nullable", "missing value")
-        and not str(violation.expected_pattern or "").startswith("naming convention")
+        and not str(violation.expected_pattern or "").startswith(("naming convention", "sparse column"))
     )
 
 
@@ -188,15 +201,16 @@ def _build_payload(state: PipelineState, residual: list[ValidationReport], quali
             for r in state.duplicate_resolutions
         ],
         "format_violations_detected": [
-            {"column_name": r.column_name, "violation_count": len(r.violations)}
+            {"column_name": r.column_name, "violation_count": _violation_count(r)}
             for r in state.validation_reports
             if r.violations
         ],
         "format_violations_residual": [
-            {"column_name": r.column_name, "violation_count": len(r.violations)}
+            {"column_name": r.column_name, "violation_count": _violation_count(r)}
             for r in residual
             if r.violations
         ],
+        "completeness": state.completeness,
         "naming_violations": [
             {"column_name": r.column_name, "suggested_name": v.value}
             for r in state.validation_reports
