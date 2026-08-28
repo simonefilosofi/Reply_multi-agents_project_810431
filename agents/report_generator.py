@@ -1,10 +1,11 @@
-"""Final reporting node: recomputes the residual violations on the remediated dataset across every category - format, completeness and cross-column consistency - so that the before/after comparison comes from like-for-like measurements, derives the three-point quality metrics and the aggregate reliability score, asks the LLM for the narrative sections, and emits both a structured JSON artefact, which preserves the text verbatim, and a PDF, whose core font is latin-1 and therefore receives a transliterated copy. Implements the Report Generator agent."""
+"""Final reporting node: recomputes the residual violations on the remediated dataset across every category - format, completeness and cross-column consistency - so that the before/after comparison comes from like-for-like measurements, derives the three-point quality metrics and the aggregate reliability score, asks the LLM for the narrative sections, and emits the cleaned dataset, a cell-level audit trail of every change, a structured JSON artefact which preserves the text verbatim, and a PDF, whose core font is latin-1 and therefore receives a transliterated copy. Implements the Report Generator agent."""
 from __future__ import annotations
 
 import json
 from datetime import datetime
 from pathlib import Path
 
+import pandas as pd
 from fpdf import FPDF
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
@@ -48,6 +49,7 @@ def report_generator_node(state: PipelineState) -> PipelineState:
     ])
 
     out = _output_path(state)
+    _write_artefacts(state, out)
     out.with_suffix(".json").write_text(
         json.dumps({**payload, "narrative": result.model_dump()}, ensure_ascii=False, indent=2, default=str),
         encoding="utf-8",
@@ -76,6 +78,17 @@ def _residual_reports(state: PipelineState) -> list[ValidationReport]:
         state.dataset, candidate_predictors(state.payload, set(state.dataset.columns), state.dataset)
     ))
     return reports
+
+
+def _changes_summary(change_log: list[dict]) -> dict:
+    if not change_log:
+        return {"total_cells_changed": 0, "by_column": {}, "by_source": {}}
+    frame = pd.DataFrame(change_log)
+    return {
+        "total_cells_changed": len(frame),
+        "by_column": frame["column"].value_counts().to_dict(),
+        "by_source": frame["source"].value_counts().to_dict(),
+    }
 
 
 def _residual_duplicates(state: PipelineState) -> list[ValidationReport]:
@@ -247,6 +260,7 @@ def _build_payload(state: PipelineState, residual: list[ValidationReport], quali
             for r in state.duplicate_resolutions
         ],
         "duplicate_rows": state.duplicate_rows,
+        "changes_summary": _changes_summary(state.change_log),
         "format_violations_detected": [
             {"column_name": r.column_name, "violation_count": _violation_count(r)}
             for r in state.validation_reports
@@ -300,6 +314,14 @@ def _build_payload(state: PipelineState, residual: list[ValidationReport], quali
 
 
 # ── pdf renderer ──────────────────────────────────────────────────────────────
+
+def _write_artefacts(state: PipelineState, out: Path) -> None:
+    if state.dataset is not None:
+        suffix = ".cleaned.csv" if state.applied_fix_ids else ".processed.csv"
+        state.dataset.to_csv(out.with_suffix(suffix), index=False)
+    if state.change_log:
+        pd.DataFrame(state.change_log).to_csv(out.with_suffix(".changes.csv"), index=False)
+
 
 def _output_path(state: PipelineState) -> Path:
     if state.dataset_path:

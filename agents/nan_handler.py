@@ -1,4 +1,4 @@
-"""Replaces disguised NaNs in every column using the per-column placeholder lists from the payload, then enforces the dtype proposed by the Semantic agent without losing data: a column is cast only when every non-null value survives, and blocking values are reported as violations instead of being coerced away. Finally flags columns whose canonical spec says is_nullable=false but where NaNs remain, surfacing everything as ValidationReport entries on state.validation_reports. Records the "detected" quality snapshot and the full completeness analysis - per-column and dataset-wide fill rates, missing values per row, and columns sparse enough to be removal candidates - measured once disguised nulls are unmasked."""
+"""Replaces disguised NaNs in every column using the per-column placeholder lists from the payload, then enforces the dtype proposed by the Semantic agent without losing data: a column is cast only when every non-null value survives, and blocking values are reported as violations instead of being coerced away. Finally flags columns whose canonical spec says is_nullable=false but where NaNs remain, surfacing everything as ValidationReport entries on state.validation_reports. Every value it clears and every type it enforces is appended to the audit trail. Records the "detected" quality snapshot and the full completeness analysis - per-column and dataset-wide fill rates, missing values per row, and columns sparse enough to be removal candidates - measured once disguised nulls are unmasked."""
 from __future__ import annotations
 
 import pandas as pd
@@ -6,6 +6,7 @@ import pandas as pd
 from models import FormatViolation, ValidationReport
 from state import PipelineState
 from tools.baseline_accessors import find_spec_by_hint
+from tools.change_log import diff_values_only
 from tools.completeness import completeness_report
 from tools.detect_placeholders import detect_placeholders
 from tools.reliability_score import compute_metrics
@@ -21,7 +22,10 @@ def nan_handler_node(state: PipelineState) -> PipelineState:
         if p.column_name in df.columns and p.placeholders:
             df[p.column_name] = detect_placeholders(df[p.column_name], p.placeholders)
 
+    placeholder_changes = diff_values_only(state.dataset, df, "nan_handler:placeholders")
+    before_cast = df.copy()
     df, coercion_reports = _enforce_dtypes(df, state)
+    cast_changes = diff_values_only(before_cast, df, "nan_handler")
     nullability_reports = _check_nullability(df, state)
     completeness = completeness_report(df)
     sparse_reports = _sparse_reports(completeness)
@@ -38,6 +42,7 @@ def nan_handler_node(state: PipelineState) -> PipelineState:
         "validation_reports": merged,
         "quality_snapshots": snapshots,
         "completeness": completeness,
+        "change_log": state.change_log + placeholder_changes + cast_changes,
     })
 
 

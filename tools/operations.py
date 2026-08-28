@@ -1,4 +1,4 @@
-"""Executable catalogue of remediation operations. A fix is expressed as a typed operation with validated parameters rather than as generated Python, so that every action is deterministic, reviewable, replayable, and structurally incapable of inventing data. Each entry maps an Operation to a pure dataframe transformation, and renders itself as a human-readable line for the report and the approval gate."""
+"""Executable catalogue of remediation operations. A fix is expressed as a typed operation with validated parameters rather than as generated Python, so that every action is deterministic, reviewable, replayable, and structurally incapable of inventing data. A replacement of None clears the value, which the post-fix invariants then hold to the deletion budget. Each entry maps an Operation to a pure dataframe transformation, and renders itself as a human-readable line for the report and the approval gate."""
 from __future__ import annotations
 
 import pandas as pd
@@ -56,7 +56,7 @@ def _transform(
     series: pd.Series, operation: Operation, hints: dict, df: pd.DataFrame
 ) -> pd.Series:
     if operation.kind == "replace_values":
-        mapping = {m.value: m.replacement for m in operation.mapping if m.replacement is not None}
+        mapping = {m.value: (m.replacement if m.replacement is not None else pd.NA) for m in operation.mapping}
         return series.replace(mapping) if mapping else series
     if operation.kind == "normalize_numeric":
         return normalize_numeric_format(series)

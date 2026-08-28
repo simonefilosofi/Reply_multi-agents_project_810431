@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from models import DuplicateResolution, FormatViolation, ValidationReport
 from state import PipelineState
+from tools.change_log import diff_values_only
 from tools.validate_column_names import is_conforming, normalize_column_name, uniquify
 from utils.prompts import load_prompt
 
@@ -105,8 +106,14 @@ def duplicate_column_node(state: PipelineState) -> PipelineState:
         for r in state.validation_reports
         if r.column_name not in dropped
     ] + divergence_reports
+    survivor_changes = diff_values_only(
+        df[[c for c in new_df.columns if c in df.columns]],
+        new_df[[c for c in new_df.columns if c in df.columns]],
+        "duplicate_column",
+    )
     return state.model_copy(update={
         "dataset": new_df,
+        "change_log": state.change_log + survivor_changes,
         "surviving_columns": list(new_df.columns),
         "payload": new_payload,
         "validation_reports": new_reports,

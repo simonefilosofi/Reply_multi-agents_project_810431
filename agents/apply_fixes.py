@@ -1,4 +1,4 @@
-"""Applies the FixProposals approved at the human gate to the pipeline dataset via the local executor, then deterministically collapses any values left differing only by casing or whitespace and re-applies the dtype proposed by the Semantic agent, since remediation may have removed exactly the values that blocked the cast upstream, recording which fix ids landed and surfacing executor failures on state.errors. Implements the Apply step between the Unified Remediation agent and the final duplicate-row pass."""
+"""Applies the FixProposals approved at the human gate to the pipeline dataset via the local executor, then deterministically collapses any values left differing only by casing or whitespace and re-applies the dtype proposed by the Semantic agent. Those two passes are automatic cleaning, not remediation: they run whether or not any fix was approved, since remediation may have removed exactly the values that blocked a cast upstream, recording which fix ids landed and surfacing executor failures on state.errors. Implements the Apply step between the Unified Remediation agent and the final duplicate-row pass."""
 from __future__ import annotations
 
 import pandas as pd
@@ -6,37 +6,49 @@ import pandas as pd
 from models import EnumFormat, FormatSpec
 from state import PipelineState
 from tools.apply_casing import collapse_casing_variants
+from tools.change_log import diff_cells
 from tools.execute_fixes import execute_fixes
 from tools.safe_cast import safe_cast
 from tools.fix_invariants import removable_values
 
 
 def apply_fixes_node(state: PipelineState) -> PipelineState:
-    if state.dataset is None or not state.approved_fix_ids:
+    if state.dataset is None:
         return state
 
     approved_ids = set(state.approved_fix_ids)
     approved = [p for p in state.proposed_fixes if p.id in approved_ids]
-    if not approved:
-        return state
+    statuses: list[dict] = []
+    cleaned = state.dataset
 
-    cleaned, statuses = execute_fixes(
-        state.dataset,
-        approved,
-        state.value_corrections,
-        imputation_hints=state.imputation_hints,
-        removable_by_column=removable_values(state.payload, state.validation_reports),
-    )
+    if approved:
+        cleaned, statuses = execute_fixes(
+            state.dataset,
+            approved,
+            state.value_corrections,
+            imputation_hints=state.imputation_hints,
+            removable_by_column=removable_values(state.payload, state.validation_reports),
+        )
 
-    cleaned = _collapse_casing(cleaned, state)
-    cleaned = _enforce_dtypes(cleaned, state)
+    after_fixes = cleaned
+    cleaned = _collapse_casing(cleaned.copy(), state)
+    casing_changes, _ = diff_cells(after_fixes, cleaned, "collapse_casing")
+    before_cast = cleaned.copy()
+    cleaned = _enforce_dtypes(cleaned.copy(), state)
+    cast_changes, _ = diff_cells(before_cast, cleaned, "enforce_dtype")
     failures = [
         f"apply_fixes:{s['id']}: {s.get('error') or s.get('invariant_violations')}"
         for s in statuses
         if s["status"] in ("error", "rejected")
     ]
+    change_log = state.change_log + [
+        change
+        for status in statuses
+        for change in status.get("changes", [])
+    ] + casing_changes + cast_changes
     return state.model_copy(update={
         "dataset": cleaned,
+        "change_log": change_log,
         "applied_fix_ids": [s["id"] for s in statuses if s["status"] == "applied"],
         "errors": state.errors + failures,
     })

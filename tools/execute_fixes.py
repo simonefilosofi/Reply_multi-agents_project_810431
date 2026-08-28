@@ -1,10 +1,11 @@
-"""Applies accepted FixProposals to the pipeline dataset in dependency order by executing their typed operations. No proposal carries executable code: each is a validated sequence of catalogue operations, so remediation is deterministic and replayable. A proposal whose result breaks a post-fix invariant is rejected rather than applied. Returns the cleaned dataframe and a per-proposal status list (applied / skipped / error / rejected)."""
+"""Applies accepted FixProposals to the pipeline dataset in dependency order by executing their typed operations. No proposal carries executable code: each is a validated sequence of catalogue operations, so remediation is deterministic and replayable. A proposal whose result breaks a post-fix invariant is rejected rather than applied. Returns the cleaned dataframe and a per-proposal status list (applied / skipped / error / rejected) carrying the cell-level changes each proposal produced."""
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
 
 from models import FixProposal, ImputationHint
+from tools.change_log import diff_cells
 from tools.fix_invariants import check_invariants
 from tools.operations import apply_operations
 
@@ -45,6 +46,7 @@ def execute_fixes(
             statuses.append({"id": proposal.id, "status": "rejected", "invariant_violations": breaches})
             current = before
             continue
+        changes, changed_cells = diff_cells(before, result, proposal.id)
         current = result
         applied.add(proposal.id)
         applied_fingerprints.add(fingerprint)
@@ -52,6 +54,8 @@ def execute_fixes(
             "id": proposal.id,
             "status": "applied",
             "rows_changed": int(_rows_changed(before, current)),
+            "cells_changed": changed_cells,
+            "changes": changes,
             "shape_before": list(before.shape),
             "shape_after": list(current.shape),
         })

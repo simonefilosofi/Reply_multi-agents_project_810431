@@ -3,7 +3,9 @@ from __future__ import annotations
 
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
+
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
@@ -14,9 +16,11 @@ from agents.format_consistency import format_consistency_node
 from agents.nan_handler import nan_handler_node
 from agents.profiler import profiler_node
 from agents.semantic import semantic_node
+from agents.apply_fixes import apply_fixes_node
+from agents.duplicate_row import duplicate_row_node
+from agents.report_generator import report_generator_node
 from agents.unified import propose_for_group, unified_node
 from state import PipelineState
-from tools.execute_fixes import execute_fixes
 
 st.set_page_config(page_title="NoiPA DQ — pipeline test", layout="wide")
 st.title("NoiPA DQ — Profiler, Semantic, NaN, Duplicate-Column, Format, Unified")
@@ -154,7 +158,7 @@ else:
     if numeric_reports:
         st.markdown("#### Numeric Outliers (IQR)")
         for r in numeric_reports:
-            with st.expander(f"`{r.column_name}` — {r.stats.get('outlier_count', len(r.anomalies))} outliers"):
+            with st.expander(f"`{r.column_name}` — {r.stats.get('detected', len(r.anomalies))} outliers"):
                 if r.comment:
                     st.info(r.comment)
                 c1, c2, c3 = st.columns(3)
@@ -174,7 +178,7 @@ else:
     if cat_reports:
         st.markdown("#### Rare Categories")
         for r in cat_reports:
-            with st.expander(f"`{r.column_name}` — {r.stats.get('rare_values_count', len(r.anomalies))} rare value(s) out of {r.stats.get('distinct_values', '?')} distinct"):
+            with st.expander(f"`{r.column_name}` — {r.stats.get('detected', len(r.anomalies))} rare value(s) out of {r.stats.get('distinct_values', '?')} distinct"):
                 if r.comment:
                     st.info(r.comment)
                 top = r.stats.get("top_values", [])
@@ -241,7 +245,7 @@ for proposal in state.proposed_fixes:
         if proposal.depends_on:
             st.caption(f"Depends on: {', '.join(proposal.depends_on)}")
         st.markdown(f"_{proposal.rationale}_")
-        st.code(proposal.code, language="python")
+        st.code(proposal.code, language="text")
 
         btns = st.columns(3)
         if btns[0].button("Accept", key=f"acc_{proposal.id}"):
@@ -282,21 +286,21 @@ st.json({
 if accepted and st.button("Apply accepted fixes"):
     before_df = state.dataset.copy()
     with st.spinner("Executing fixes..."):
-        cleaned_df, statuses = execute_fixes(
-            state.dataset, accepted, state.value_corrections,
-            imputation_hints=state.imputation_hints,
+        applied_state = apply_fixes_node(
+            state.model_copy(update={"approved_fix_ids": [p.id for p in accepted]})
         )
-    st.session_state.pipeline_state = state.model_copy(update={
-        "dataset": cleaned_df,
-        "applied_fix_ids": [s["id"] for s in statuses if s["status"] == "applied"],
-    })
-    st.session_state.execution = {"statuses": statuses, "before": before_df}
+    st.session_state.pipeline_state = applied_state
+    st.session_state.execution = {
+        "applied": applied_state.applied_fix_ids,
+        "rejected": applied_state.errors,
+        "before": before_df,
+    }
     st.rerun()
 
 execution = st.session_state.execution
 if execution is not None:
     st.subheader("Execution result")
-    st.json(execution["statuses"])
+    st.json({"applied": execution.get("applied", []), "rejected": execution.get("rejected", [])})
     before_df = execution["before"]
     after_df = st.session_state.pipeline_state.dataset
     diff = [
@@ -313,3 +317,53 @@ if execution is not None:
     st.dataframe(diff, use_container_width=True)
     st.subheader("Cleaned dataset preview")
     st.dataframe(after_df.head(20))
+
+
+final_state: PipelineState = st.session_state.pipeline_state
+if final_state is not None and final_state.dataset is not None:
+    st.divider()
+    st.subheader("Download")
+    st.caption(
+        "Available as soon as the pipeline has run. Before approving any fix this is the "
+        "dataset as the detection stages left it; after approving, it includes the applied "
+        "remediations. The full report also runs the duplicate-row pass and writes the PDF "
+        "and JSON next to the dataset."
+    )
+    name = Path(final_state.dataset_path or "dataset").stem
+    applied_count = len(final_state.applied_fix_ids)
+    pending_count = len([p for p in final_state.proposed_fixes if p.id not in final_state.applied_fix_ids])
+    suffix = "cleaned" if applied_count else "processed"
+
+    if applied_count:
+        st.success(f"{applied_count} fix applied, {len(final_state.change_log)} cells changed.")
+    else:
+        st.warning(
+            "No fix has been applied yet: this file still contains every violation the "
+            "pipeline detected. Accept the proposals above and press Apply first."
+        )
+    if pending_count:
+        st.caption(f"{pending_count} proposal(s) not applied.")
+
+    columns = st.columns(3)
+    columns[0].download_button(
+        f"Dataset ({suffix}, {applied_count} fix applied)",
+        final_state.dataset.to_csv(index=False).encode("utf-8"),
+        file_name=f"{name}.{suffix}.csv",
+        mime="text/csv",
+    )
+    if final_state.change_log:
+        columns[1].download_button(
+            f"Change log ({len(final_state.change_log)} cells)",
+            pd.DataFrame(final_state.change_log).to_csv(index=False).encode("utf-8"),
+            file_name=f"{name}.changes.csv",
+            mime="text/csv",
+        )
+    if columns[2].button("Generate full report"):
+        with st.spinner("Deduplicating rows and writing the report..."):
+            reported = report_generator_node(duplicate_row_node(final_state))
+        st.session_state.pipeline_state = reported
+        st.success(f"Report written next to {reported.dataset_path or 'the dataset'}")
+
+    if final_state.change_log:
+        st.subheader("What changed, cell by cell")
+        st.dataframe(pd.DataFrame(final_state.change_log), use_container_width=True)
