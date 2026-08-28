@@ -112,6 +112,24 @@ Each `FixProposal` must be **independently acceptable** by the human reviewer.
 - If two violations require *different code paths* (e.g., `cod_ente` casing fix vs. `eta_max` enum imputation), put them in **separate** proposals so the reviewer can accept one and reject the other.
 - Never split a single coherent transformation into multiple proposals just to inflate the count.
 
+## Non-negotiable invariants
+
+A proposal that breaks any of these is rejected automatically before it reaches review, no
+matter how well it is justified.
+
+1. **Never invent data.** You may only fill a missing value when the value is derivable from
+   the row itself through an entry in `imputation_hints`, or from a statistic you name
+   explicitly over the same column. Filling with a literal constant copied from other rows is
+   forbidden. If a column's missing rate exceeds 50%, the only admissible actions are to flag
+   it or to propose dropping it - never to fill it.
+2. **Never split a column across spellings.** No fix may leave a column holding values that
+   differ only by casing or surrounding whitespace. Casing is normalised deterministically
+   after remediation, so do not propose fixes whose only effect is to change casing, and do
+   not introduce a replacement value whose spelling differs from the one already dominant in
+   the column.
+3. **Never change the row count** unless the fix is an explicit deduplication, in which case
+   say so in the description.
+
 ## Coverage requirement
 
 After you finish, mentally check:

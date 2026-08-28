@@ -1,4 +1,4 @@
-"""Locally executes accepted FixProposal code bodies against the pipeline dataset, in dependency order. Each proposal's `code` is wrapped as the body of clean_data(df) and invoked in a namespace exposing pd, np, and the per-column value_corrections map promised by the unified prompt. Returns the cleaned dataframe and a per-proposal status list (applied / skipped / error)."""
+"""Locally executes accepted FixProposal code bodies against the pipeline dataset, in dependency order. Each proposal's `code` is wrapped as the body of clean_data(df) and invoked in a namespace exposing pd, np, and the per-column value_corrections map promised by the unified prompt. A proposal whose result breaks a deterministic post-fix invariant is rejected rather than applied. Returns the cleaned dataframe and a per-proposal status list (applied / skipped / error / rejected)."""
 from __future__ import annotations
 
 import textwrap
@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 
 from models import FixProposal, ImputationHint
+from tools.fix_invariants import check_invariants
 
 
 def execute_fixes(
@@ -51,6 +52,11 @@ def execute_fixes(
                 "status": "error",
                 "error": f"clean_data must return a DataFrame, got {type(result).__name__} (likely missing 'return df')",
             })
+            current = before
+            continue
+        breaches = check_invariants(before, result, p.code, hints_view)
+        if breaches:
+            statuses.append({"id": p.id, "status": "rejected", "invariant_violations": breaches})
             current = before
             continue
         current = result

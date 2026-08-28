@@ -1,7 +1,11 @@
-"""Applies the FixProposals approved at the human gate to the pipeline dataset via the local executor, recording which fix ids landed and surfacing executor failures on state.errors. Implements the Apply step between the Unified Remediation agent and the final duplicate-row pass."""
+"""Applies the FixProposals approved at the human gate to the pipeline dataset via the local executor, then deterministically collapses any values left differing only by casing or whitespace, recording which fix ids landed and surfacing executor failures on state.errors. Implements the Apply step between the Unified Remediation agent and the final duplicate-row pass."""
 from __future__ import annotations
 
+import pandas as pd
+
+from models import EnumFormat, FormatSpec
 from state import PipelineState
+from tools.apply_casing import collapse_casing_variants
 from tools.execute_fixes import execute_fixes
 
 
@@ -21,9 +25,28 @@ def apply_fixes_node(state: PipelineState) -> PipelineState:
         imputation_hints=state.imputation_hints,
     )
 
-    failures = [f"apply_fixes:{s['id']}: {s['error']}" for s in statuses if s["status"] == "error"]
+    cleaned = _collapse_casing(cleaned, state)
+    failures = [
+        f"apply_fixes:{s['id']}: {s.get('error') or s.get('invariant_violations')}"
+        for s in statuses
+        if s["status"] in ("error", "rejected")
+    ]
     return state.model_copy(update={
         "dataset": cleaned,
         "applied_fix_ids": [s["id"] for s in statuses if s["status"] == "applied"],
         "errors": state.errors + failures,
     })
+
+
+def _collapse_casing(df: pd.DataFrame, state: PipelineState) -> pd.DataFrame:
+    for column in df.columns:
+        df[column] = collapse_casing_variants(df[column], _enum_spec(state, column))
+    return df
+
+
+def _enum_spec(state: PipelineState, column: str) -> FormatSpec | None:
+    info = state.inferred_format_specs.get(column) or {}
+    spec = info.get("final_spec")
+    if not spec or spec.get("type") != "enum":
+        return None
+    return EnumFormat(**spec)

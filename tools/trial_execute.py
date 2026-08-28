@@ -1,4 +1,4 @@
-"""Sandboxed dry-run for a single FixProposal: executes the proposal's code body against a copy of the dataframe, re-runs the format validator on the affected columns, and returns a structured trial outcome consumed by the per-proposal self-review step in the Unified Remediation agent."""
+"""Sandboxed dry-run for a single FixProposal: executes the proposal's code body against a copy of the dataframe, re-runs the format validator on the affected columns, checks the deterministic post-fix invariants, and returns a structured trial outcome consumed by the per-proposal self-review step in the Unified Remediation agent."""
 from __future__ import annotations
 
 import textwrap
@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 
 from models import FixProposal, FormatSpec, ImputationHint, ValidationReport
+from tools.fix_invariants import check_invariants
 from tools.validate_format import validate_format
 
 
@@ -41,6 +42,7 @@ def trial_execute(
             "shape_after": list(before.shape),
             "diff_sample": [],
             "violation_delta": {},
+            "invariant_violations": [],
         }
     if not isinstance(after, pd.DataFrame):
         return {
@@ -51,6 +53,7 @@ def trial_execute(
             "shape_after": list(before.shape),
             "diff_sample": [],
             "violation_delta": {},
+            "invariant_violations": [],
         }
 
     rows_changed = _rows_changed(before, after, proposal.affected_columns)
@@ -60,6 +63,7 @@ def trial_execute(
     )
     return {
         "status": "applied",
+        "invariant_violations": check_invariants(before, after, proposal.code, hints_view),
         "rows_changed": int(rows_changed),
         "shape_before": list(before.shape),
         "shape_after": list(after.shape),

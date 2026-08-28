@@ -149,6 +149,17 @@ def _review_and_revise_proposals(
                 df, current, value_corrections, specs_by_col, reports_by_name,
                 imputation_hints=imputation_hints,
             )
+            breaches = trial.get("invariant_violations") or []
+            if breaches:
+                replacement = regenerate(_invariant_feedback_for(current, breaches))
+                if replacement is None:
+                    current = None
+                    break
+                current = replacement.model_copy(update={
+                    "id": proposal.id,
+                    "depends_on": proposal.depends_on,
+                })
+                continue
             review_ctx = {
                 "proposal": current.model_dump(),
                 "trial": trial,
@@ -170,8 +181,36 @@ def _review_and_revise_proposals(
                 "id": proposal.id,
                 "depends_on": proposal.depends_on,
             })
-        finalized.append(current)
+        if current is not None and not _breaks_invariants(
+            current, df, value_corrections, specs_by_col, reports_by_name, imputation_hints
+        ):
+            finalized.append(current)
     return finalized
+
+
+def _breaks_invariants(
+    proposal: FixProposal,
+    df: pd.DataFrame,
+    value_corrections: dict[str, dict[str, str | None]],
+    specs_by_col: dict[str, FormatSpec | None],
+    reports_by_name: dict[str, ValidationReport],
+    imputation_hints: dict[str, ImputationHint],
+) -> bool:
+    trial = trial_execute(
+        df, proposal, value_corrections, specs_by_col, reports_by_name,
+        imputation_hints=imputation_hints,
+    )
+    return bool(trial.get("invariant_violations"))
+
+
+def _invariant_feedback_for(proposal: FixProposal, breaches: list[str]) -> str:
+    return (
+        f"Proposal {proposal.id} was rejected: it breaks non-negotiable invariants. "
+        + " ".join(breaches)
+        + " Rewrite it so that no missing value is filled without an imputation hint, "
+        "no column ends up holding values that differ only by casing, and the row count "
+        "is preserved unless the fix is an explicit deduplication."
+    )
 
 
 def _regenerate_proposal(
@@ -392,6 +431,8 @@ def _aggregate_violations(
     by_pattern: dict[str, list] = defaultdict(list)
     row_indices: list[int] = []
     for v in report.violations:
+        if str(v.expected_pattern or "").startswith(_SCHEMA_ONLY_PREFIX):
+            continue
         by_pattern[v.expected_pattern or "unspecified"].append(v)
         if v.row_index >= 0:
             row_indices.append(v.row_index)
@@ -414,6 +455,7 @@ def _aggregate_violations(
 
 
 _MISSING_PATTERNS = {"not nullable", "missing value"}
+_SCHEMA_ONLY_PREFIX = "naming convention"
 
 
 def _classify_violation(pattern: str) -> str:
