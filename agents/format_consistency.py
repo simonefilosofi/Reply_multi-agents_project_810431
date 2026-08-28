@@ -13,6 +13,7 @@ from tools.infer_format_spec import infer_format_spec
 from tools.match_canonical import compact_format_summary
 from tools.mine_functional_deps import mine_functional_deps
 from tools.profile_format_spec import profile_format_spec
+from tools.validate_column_names import naming_regex, validate_column_names
 from tools.validate_format import validate_format
 
 
@@ -27,7 +28,7 @@ def format_consistency_node(state: PipelineState) -> PipelineState:
 
     payload_by_col = {p.column_name: p for p in state.payload}
     nullability_cols = _columns_with_nullability_violation(state.validation_reports)
-    new_reports: list[ValidationReport] = []
+    new_reports: list[ValidationReport] = _naming_reports(state)
     value_corrections: dict[str, dict[str, str | None]] = {}
     inferred_specs: dict[str, dict] = {}
     for col in state.surviving_columns:
@@ -78,6 +79,23 @@ def format_consistency_node(state: PipelineState) -> PipelineState:
         "inferred_format_specs": inferred_specs,
         "imputation_hints": imputation_hints,
     })
+
+
+def _naming_reports(state: PipelineState) -> list[ValidationReport]:
+    conventions = state.baseline.global_conventions if state.baseline else None
+    pattern = naming_regex(conventions)
+    return [
+        ValidationReport(
+            column_name=column,
+            violations=[FormatViolation(
+                column_name=column,
+                row_index=-1,
+                value=suggested,
+                expected_pattern=f"naming convention: {pattern}",
+            )],
+        )
+        for column, suggested in validate_column_names(state.surviving_columns, conventions)
+    ]
 
 
 def _mine_imputation_hints(

@@ -1,4 +1,4 @@
-"""Checks each value in a column against a per-column FormatSpec. Dispatches over RegexFormat (full-match against pattern), EnumFormat (membership against allowed values), RangeFormat (numeric bounds), and DateFormat (parseability against an strftime pattern via pd.to_datetime), surfacing each violation through a uniform expected_pattern string consumed by the Format & Consistency agent."""
+"""Checks each value in a column against a per-column FormatSpec. Dispatches over RegexFormat (full-match against pattern), EnumFormat (membership against allowed values), RangeFormat (numeric bounds), and DateFormat (parseability against an strftime pattern via pd.to_datetime). A column already stored as datetime64 carries no textual layout, so its DateFormat check is skipped: the pattern would only describe how pandas renders the value, not whether the datum is valid. Each violation is surfaced through a uniform expected_pattern string consumed by the Format & Consistency agent."""
 from __future__ import annotations
 
 import re
@@ -23,6 +23,8 @@ def validate_format(
     spec: FormatSpec | None,
 ) -> ValidationReport:
     if spec is None:
+        return ValidationReport(column_name=col_name)
+    if isinstance(spec, DateFormat) and pd.api.types.is_datetime64_any_dtype(series):
         return ValidationReport(column_name=col_name)
 
     is_valid, expected = _checker_for(spec)

@@ -1,4 +1,4 @@
-"""Detects exact and near-duplicate columns via pairwise similarity, fills gaps from sibling columns, and elects the canonical name via LLM over the full group."""
+"""Detects exact and near-duplicate columns via pairwise similarity, fills gaps from sibling columns, and elects the canonical name for each group. The election is deterministic whenever exactly one group member already satisfies the baseline naming convention; the LLM is consulted only to break ties or when no member conforms, and its answer is normalised and validated before use."""
 from __future__ import annotations
 
 import json
@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from models import DuplicateResolution
 from state import PipelineState
+from tools.validate_column_names import is_conforming, normalize_column_name, uniquify
 from utils.prompts import load_prompt
 
 
@@ -34,6 +35,9 @@ def duplicate_column_node(state: PipelineState) -> PipelineState:
     system = load_prompt("duplicate_column")
     baseline_columns = _baseline_columns_for_domain(state)
 
+    conventions = state.baseline.global_conventions if state.baseline else None
+    taken: set[str] = {c for c in df.columns}
+
     new_df = df.copy()
     dropped: set[str] = set()
     renames: dict[str, str] = {}
@@ -43,12 +47,19 @@ def duplicate_column_node(state: PipelineState) -> PipelineState:
         nan_counts = {c: new_df[c].isna().sum() for c in group}
         min_nan = min(nan_counts.values())
         data_survivor = next(c for c, n in nan_counts.items() if n == min_nan)
-        election = _llm_pick(chain, system, group, state.detected_domain, baseline_columns)
+        election = _elect_canonical_name(
+            group, chain, system, state.detected_domain, baseline_columns, conventions, taken
+        )
+        taken.add(election.canonical_name)
 
         for c in group:
             if c == data_survivor:
                 continue
             mask = new_df[data_survivor].isna() & new_df[c].notna()
+            if not mask.any():
+                continue
+            if new_df[data_survivor].dtype != new_df[c].dtype:
+                new_df[data_survivor] = new_df[data_survivor].astype(object)
             new_df.loc[mask, data_survivor] = new_df.loc[mask, c]
 
         dropped.update(c for c in group if c != data_survivor)
@@ -81,6 +92,32 @@ def duplicate_column_node(state: PipelineState) -> PipelineState:
         "payload": new_payload,
         "duplicate_resolutions": resolutions,
     })
+
+
+def _elect_canonical_name(
+    group: list[str],
+    chain,
+    system: str,
+    domain: str,
+    baseline_columns: list[str],
+    conventions,
+    taken: set[str],
+) -> _NameElection:
+    conforming = [c for c in group if is_conforming(c, conventions)]
+    if len(conforming) == 1:
+        return _NameElection(
+            canonical_name=conforming[0],
+            rationale="Only group member conforming to the baseline naming convention.",
+        )
+
+    candidates = conforming or group
+    election = _llm_pick(chain, system, candidates, domain, baseline_columns)
+    name = election.canonical_name
+    if not is_conforming(name, conventions):
+        name = normalize_column_name(name, conventions)
+    if name not in group:
+        name = uniquify(name, taken - set(group))
+    return _NameElection(canonical_name=name, rationale=election.rationale)
 
 
 def _find_groups(columns: list[str], df: pd.DataFrame) -> list[list[str]]:
