@@ -1,4 +1,4 @@
-"""Replaces disguised NaNs in every column using the per-column placeholder lists from the payload, then enforces the dtype proposed by the Semantic agent without losing data: a column is cast only when every non-null value survives, and blocking values are reported as violations instead of being coerced away. Finally flags columns whose canonical spec says is_nullable=false but where NaNs remain, surfacing everything as ValidationReport entries on state.validation_reports."""
+"""Replaces disguised NaNs in every column using the per-column placeholder lists from the payload, then enforces the dtype proposed by the Semantic agent without losing data: a column is cast only when every non-null value survives, and blocking values are reported as violations instead of being coerced away. Finally flags columns whose canonical spec says is_nullable=false but where NaNs remain, surfacing everything as ValidationReport entries on state.validation_reports. Records the "detected" quality snapshot, the true state of the dataset once disguised nulls are unmasked."""
 from __future__ import annotations
 
 import pandas as pd
@@ -7,6 +7,7 @@ from models import FormatViolation, ValidationReport
 from state import PipelineState
 from tools.baseline_accessors import find_spec_by_hint
 from tools.detect_placeholders import detect_placeholders
+from tools.reliability_score import compute_metrics
 from tools.safe_cast import safe_cast
 
 
@@ -23,7 +24,19 @@ def nan_handler_node(state: PipelineState) -> PipelineState:
     nullability_reports = _check_nullability(df, state)
     merged = _merge_reports(state.validation_reports, coercion_reports + nullability_reports)
 
-    return state.model_copy(update={"dataset": df, "validation_reports": merged})
+    snapshots = {
+        **state.quality_snapshots,
+        "detected": compute_metrics(df, conventions=_conventions(state)),
+    }
+    return state.model_copy(update={
+        "dataset": df,
+        "validation_reports": merged,
+        "quality_snapshots": snapshots,
+    })
+
+
+def _conventions(state: PipelineState):
+    return state.baseline.global_conventions if state.baseline else None
 
 
 def _enforce_dtypes(df: pd.DataFrame, state: PipelineState) -> tuple[pd.DataFrame, list[ValidationReport]]:

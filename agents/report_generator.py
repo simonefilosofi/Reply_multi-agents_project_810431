@@ -1,3 +1,4 @@
+"""Final reporting node: recomputes the residual format violations on the remediated dataset, derives the three-point quality metrics and the aggregate reliability score, asks the LLM for the narrative sections, and emits both a structured JSON artefact, which preserves the text verbatim, and a PDF, whose core font is latin-1 and therefore receives a transliterated copy. Implements the Report Generator agent."""
 from __future__ import annotations
 
 import json
@@ -8,8 +9,19 @@ from fpdf import FPDF
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
+from models import DateFormat, EnumFormat, RangeFormat, RegexFormat, ValidationReport
 from state import PipelineState
+from tools.reliability_score import compute_metrics, reliability_score
+from tools.validate_format import validate_format
 from utils.prompts import load_prompt
+
+
+_SPEC_TYPES = {
+    "enum": EnumFormat,
+    "regex": RegexFormat,
+    "range": RangeFormat,
+    "date": DateFormat,
+}
 
 
 class _ReportResponse(BaseModel):
@@ -21,7 +33,9 @@ class _ReportResponse(BaseModel):
 
 
 def report_generator_node(state: PipelineState) -> PipelineState:
-    payload = _build_payload(state)
+    residual = _residual_reports(state)
+    quality = _quality_section(state, residual)
+    payload = _build_payload(state, residual, quality)
     system = load_prompt("report_generator")
     chain = ChatOpenAI(model="gpt-5.4-mini", temperature=0).with_structured_output(_ReportResponse)
 
@@ -30,15 +44,112 @@ def report_generator_node(state: PipelineState) -> PipelineState:
         {"role": "user", "content": json.dumps(payload, ensure_ascii=False, default=str)},
     ])
 
-    pdf = _render_pdf(state, result)
     out = _output_path(state)
+    out.with_suffix(".json").write_text(
+        json.dumps({**payload, "narrative": result.model_dump()}, ensure_ascii=False, indent=2, default=str),
+        encoding="utf-8",
+    )
+    pdf = _render_pdf(state, result, quality)
     pdf.output(str(out))
-    return state
+    return state.model_copy(update={"quality_snapshots": quality["snapshots"]})
 
 
 # ── payload ───────────────────────────────────────────────────────────────────
 
-def _build_payload(state: PipelineState) -> dict:
+def _residual_reports(state: PipelineState) -> list[ValidationReport]:
+    if state.dataset is None:
+        return []
+    reports: list[ValidationReport] = []
+    for column, info in state.inferred_format_specs.items():
+        if column not in state.dataset.columns:
+            continue
+        spec = _spec_from_dict(info.get("final_spec"))
+        if spec is None:
+            continue
+        reports.append(validate_format(column, state.dataset[column], spec))
+    return reports
+
+
+def _spec_from_dict(spec: dict | None):
+    if not spec:
+        return None
+    return _SPEC_TYPES[spec["type"]](**spec) if spec.get("type") in _SPEC_TYPES else None
+
+
+def _quality_section(state: PipelineState, residual: list[ValidationReport]) -> dict:
+    conventions = state.baseline.global_conventions if state.baseline else None
+    final = compute_metrics(state.dataset, residual, conventions) if state.dataset is not None else {}
+    snapshots = {**state.quality_snapshots, "final": final}
+    detected = snapshots.get("detected", {})
+    comparable = _comparable_detected(state, detected)
+    if comparable:
+        comparable = {
+            **comparable,
+            "format_violations": _count_violations(state.validation_reports),
+            "validity": _validity(comparable, state.validation_reports),
+        }
+        snapshots["detected_comparable"] = comparable
+    return {
+        "snapshots": snapshots,
+        "reliability_before": reliability_score(comparable or detected),
+        "reliability_after": reliability_score(final),
+        "hidden_defects_unmasked": _hidden_defects(snapshots),
+    }
+
+
+def _comparable_detected(state: PipelineState, detected: dict) -> dict:
+    if not detected or state.dataset is None:
+        return detected
+    null_by_column = detected.get("null_by_column") or {}
+    origin = _origin_columns(state)
+    kept = [origin.get(str(c), str(c)) for c in state.dataset.columns]
+    kept = [c for c in kept if c in null_by_column]
+    if not kept:
+        return detected
+    rows = detected.get("rows", 0)
+    cells = rows * len(kept)
+    nulls = sum(null_by_column[c] for c in kept)
+    return {
+        **detected,
+        "columns_compared": len(kept),
+        "null_cells": nulls,
+        "completeness": round(max(cells - nulls, 0) / cells, 4) if cells else None,
+    }
+
+
+def _origin_columns(state: PipelineState) -> dict[str, str]:
+    return {r.canonical_name: r.data_survivor for r in state.duplicate_resolutions}
+
+
+def _count_violations(reports: list[ValidationReport]) -> int:
+    return sum(
+        1
+        for report in reports
+        for violation in report.violations
+        if violation.expected_pattern not in ("not nullable", "missing value")
+        and not str(violation.expected_pattern or "").startswith("naming convention")
+    )
+
+
+def _validity(metrics: dict, reports: list[ValidationReport]) -> float | None:
+    cells = metrics.get("rows", 0) * metrics.get("columns", 0)
+    if not cells:
+        return None
+    return round(max(cells - _count_violations(reports), 0) / cells, 4)
+
+
+def _hidden_defects(snapshots: dict) -> dict:
+    raw, detected = snapshots.get("raw"), snapshots.get("detected")
+    if not raw or not detected:
+        return {}
+    return {
+        "disguised_nulls_unmasked": int(detected.get("null_cells", 0) - raw.get("null_cells", 0)),
+        "apparent_completeness": raw.get("completeness"),
+        "true_completeness": detected.get("completeness"),
+    }
+
+
+def _build_payload(state: PipelineState, residual: list[ValidationReport], quality: dict) -> dict:
     shape = {}
     null_summary = []
     if state.dataset is not None:
@@ -76,19 +187,50 @@ def _build_payload(state: PipelineState) -> dict:
             }
             for r in state.duplicate_resolutions
         ],
-        "classifications": [
-            {
-                "column_name": c.column_name,
-                "normalized_name": c.normalized_name,
-                "description": c.description,
-            }
-            for c in state.classifications
-        ],
-        "format_violations": [
+        "format_violations_detected": [
             {"column_name": r.column_name, "violation_count": len(r.violations)}
             for r in state.validation_reports
             if r.violations
         ],
+        "format_violations_residual": [
+            {"column_name": r.column_name, "violation_count": len(r.violations)}
+            for r in residual
+            if r.violations
+        ],
+        "naming_violations": [
+            {"column_name": r.column_name, "suggested_name": v.value}
+            for r in state.validation_reports
+            for v in r.violations
+            if str(v.expected_pattern or "").startswith("naming convention")
+        ],
+        "anomalies": [
+            {
+                "column_name": a.column_name,
+                "method": a.method,
+                "detected": int(a.stats.get("outlier_count") or a.stats.get("rare_values_count") or len(a.anomalies)),
+                "sampled": len(a.anomalies),
+                "comment": a.comment,
+                "examples": [e.value for e in a.anomalies[:5]],
+            }
+            for a in state.anomaly_reports
+        ],
+        "proposed_remediations": [
+            {
+                "id": p.id,
+                "description": p.description,
+                "rationale": p.rationale,
+                "affected_columns": p.affected_columns,
+                "estimated_rows_affected": p.estimated_rows_affected,
+                "applied": p.id in state.applied_fix_ids,
+            }
+            for p in state.proposed_fixes
+        ],
+        "applied_fix_ids": state.applied_fix_ids,
+        "value_corrections": {
+            col: {k: v for k, v in list(mapping.items())[:20]}
+            for col, mapping in state.value_corrections.items()
+        },
+        "quality": quality,
         "surviving_columns": state.surviving_columns,
         "errors": state.errors,
     }
@@ -102,20 +244,38 @@ def _output_path(state: PipelineState) -> Path:
     return Path("report.pdf")
 
 
+_PDF_SUBSTITUTIONS = {
+    "\u20ac": "EUR",
+    "\u2019": "'",
+    "\u2018": "'",
+    "\u201c": '"',
+    "\u201d": '"',
+    "\u2013": "-",
+    "\u2014": "-",
+    "\u2026": "...",
+}
+
+
+def _pdf_safe(text: str) -> str:
+    for source, target in _PDF_SUBSTITUTIONS.items():
+        text = text.replace(source, target)
+    return text.encode("latin-1", "replace").decode("latin-1")
+
+
 def _section(pdf: FPDF, title: str) -> None:
     pdf.set_font("Helvetica", "B", 12)
     pdf.set_fill_color(220, 220, 220)
-    pdf.cell(0, 8, title, new_x="LMARGIN", new_y="NEXT", fill=True)
+    pdf.cell(0, 8, _pdf_safe(title), new_x="LMARGIN", new_y="NEXT", fill=True)
     pdf.ln(3)
 
 
 def _body(pdf: FPDF, text: str) -> None:
     pdf.set_font("Helvetica", "", 10)
-    pdf.multi_cell(0, 6, text)
+    pdf.multi_cell(0, 6, _pdf_safe(text))
     pdf.ln(4)
 
 
-def _render_pdf(state: PipelineState, report: _ReportResponse) -> FPDF:
+def _render_pdf(state: PipelineState, report: _ReportResponse, quality: dict) -> FPDF:
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
@@ -125,9 +285,12 @@ def _render_pdf(state: PipelineState, report: _ReportResponse) -> FPDF:
     pdf.cell(0, 12, "Data Quality Report", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", "", 9)
     pdf.cell(0, 5, f"Generated : {datetime.now().strftime('%Y-%m-%d %H:%M')}", new_x="LMARGIN", new_y="NEXT")
-    pdf.cell(0, 5, f"Dataset   : {state.dataset_path or 'N/A'}", new_x="LMARGIN", new_y="NEXT")
-    pdf.cell(0, 5, f"Domain    : {state.detected_domain or 'N/A'}", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 5, _pdf_safe(f"Dataset   : {state.dataset_path or 'N/A'}"), new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 5, _pdf_safe(f"Domain    : {state.detected_domain or 'N/A'}"), new_x="LMARGIN", new_y="NEXT")
     pdf.ln(8)
+
+    _section(pdf, "Reliability Score")
+    _body(pdf, _score_text(quality))
 
     _section(pdf, "Executive Summary")
     _body(pdf, report.executive_summary)
@@ -145,3 +308,37 @@ def _render_pdf(state: PipelineState, report: _ReportResponse) -> FPDF:
     _body(pdf, report.recommendations)
 
     return pdf
+
+
+def _score_text(quality: dict) -> str:
+    before, after = quality["reliability_before"], quality["reliability_after"]
+    lines = [
+        f"Reliability score before remediation : {_fmt(before.get('score'))}",
+        f"Reliability score after remediation  : {_fmt(after.get('score'))}",
+        "",
+        "Components (before -> after):",
+    ]
+    for key in ("completeness", "validity", "uniqueness", "schema_conformity"):
+        b = before.get("components", {}).get(key)
+        a = after.get("components", {}).get(key)
+        if b is None and a is None:
+            continue
+        lines.append(f"  {key:18} {_fmt(b)} -> {_fmt(a)}")
+    lines.append("")
+    lines.append(
+        "Completeness is compared on the columns that survived deduplication, so that "
+        "removing a redundant full column is not read as a loss."
+    )
+    hidden = quality.get("hidden_defects_unmasked") or {}
+    if hidden:
+        lines += [
+            "",
+            f"Disguised nulls unmasked by the pipeline: {hidden.get('disguised_nulls_unmasked')}",
+            f"Apparent completeness of the raw file  : {_fmt(hidden.get('apparent_completeness'))}",
+            f"True completeness once unmasked        : {_fmt(hidden.get('true_completeness'))}",
+        ]
+    return "\n".join(lines)
+
+
+def _fmt(value: float | None) -> str:
+    return "n/a" if value is None else f"{value:.4f}"

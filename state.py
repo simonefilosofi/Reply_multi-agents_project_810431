@@ -46,6 +46,9 @@ class PipelineState(BaseModel):
     approved_fix_ids: list[str] = Field(default_factory=list)
     applied_fix_ids: list[str] = Field(default_factory=list)
 
+    # quality snapshots keyed by measurement point (raw, detected, final)
+    quality_snapshots: dict[str, dict] = Field(default_factory=dict)
+
     # pipeline control
     errors: list[str] = Field(default_factory=list)
 

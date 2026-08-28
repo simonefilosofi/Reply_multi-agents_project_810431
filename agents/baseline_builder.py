@@ -1,4 +1,4 @@
-"""Loads noipa_schema_registry.json, resolves $refs against shared_column_definitions, validates the resolved structure into BaselineFile, and writes baseline.json. Implements the Baseline Builder agent node."""
+"""Loads noipa_schema_registry.json, resolves $refs against shared_column_definitions, validates the resolved structure into BaselineFile, and writes baseline.json. Also records the "raw" quality snapshot, the apparent state of the dataset before any placeholder is unmasked. Implements the Baseline Builder agent node."""
 from __future__ import annotations
 
 import json
@@ -15,6 +15,7 @@ from models import (
     RegexFormat,
 )
 from state import PipelineState
+from tools.reliability_score import compute_metrics
 
 
 _REGISTRY_PATH = Path("noipa_schema_registry.json")
@@ -25,7 +26,13 @@ _REF_PREFIX = "#/shared_column_definitions/"
 def baseline_builder_node(state: PipelineState) -> PipelineState:
     baseline = _load_registry(_REGISTRY_PATH)
     _BASELINE_OUTPUT.write_text(baseline.model_dump_json(indent=2), encoding="utf-8")
-    return state.model_copy(update={"baseline": baseline})
+    update: dict = {"baseline": baseline}
+    if state.dataset is not None:
+        update["quality_snapshots"] = {
+            **state.quality_snapshots,
+            "raw": compute_metrics(state.dataset, conventions=baseline.global_conventions),
+        }
+    return state.model_copy(update=update)
 
 
 def _load_registry(path: Path) -> BaselineFile:
