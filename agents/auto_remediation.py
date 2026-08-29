@@ -7,6 +7,8 @@ from models import ImputationHint, Operation, ValidationReport
 from state import PipelineState
 from tools.change_log import diff_cells
 from tools.decimal_precision import recorded_precision, rounds_cleanly
+from tools.mine_functional_deps import mine_functional_deps
+from tools.normalize_period_format import is_canonical
 from tools.derive_from_period import derivable_columns, derive
 from tools.operations import apply_operation
 
@@ -61,6 +63,19 @@ def auto_remediation_node(state: PipelineState) -> PipelineState:
                 "rationale": (
                     f"the column is recorded at {precision} decimals; the extra digits are "
                     f"floating-point noise and rounding leaves the totals unchanged"
+                ),
+            })
+
+    for period in _period_columns(state):
+        filled = _complete_period(df, period)
+        if filled:
+            applied.append({
+                "column": period,
+                "operation": "complete_period_from_dependency",
+                "cells_changed": filled,
+                "rationale": (
+                    f"values naming only a year were completed from a column that determines "
+                    f"{period} exactly"
                 ),
             })
 
@@ -139,3 +154,29 @@ def _refresh_completeness(
         if violations:
             refreshed.append(report.model_copy(update={"violations": violations}))
     return refreshed
+
+
+def _complete_period(df: pd.DataFrame, period: str) -> int:
+    """A value like 'Rata 2024' states the year and withholds the month, so normalisation cannot
+    touch it. Another column may still determine it exactly - a monthly run states the period it
+    covers - in which case the value is derived rather than guessed."""
+    incomplete = ~is_canonical(df[period]) & df[period].notna()
+    if not incomplete.any():
+        return 0
+
+    probe = df.copy()
+    probe[period] = df[period].where(~incomplete)
+    candidates = [c for c in df.columns if c != period]
+    hints = mine_functional_deps(probe, [period], {period: candidates})
+    hint = hints.get(period)
+    if hint is None or hint.purity < _AUTO_IMPUTE_PURITY:
+        return 0
+
+    completed = apply_operation(
+        probe, Operation(kind="impute_from_lookup", column=period), {period: hint.model_dump()}
+    )
+    recovered = incomplete & completed[period].notna()
+    if not recovered.any():
+        return 0
+    df[period] = df[period].where(~recovered, completed[period])
+    return int(recovered.sum())

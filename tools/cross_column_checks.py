@@ -29,7 +29,7 @@ def cross_column_reports(
         for predictor in predictors:
             if predictor not in df.columns or predictor == target:
                 continue
-            if not _usable_column(df[predictor]):
+            if not _usable_column(df[predictor], role="predictor"):
                 continue
             if not is_stable(df, predictor, target, clock):
                 continue
@@ -53,13 +53,24 @@ def _one_per_row(violations: list[FormatViolation]) -> list[FormatViolation]:
     return unique
 
 
-def _usable_column(series: pd.Series) -> bool:
+def _usable_column(series: pd.Series, role: str = "target") -> bool:
+    """A timestamp is set by the ingestion process, so nothing should imply it and it is never a
+    valid target. As a predictor it is legitimate - the month a file was processed determines the
+    period it covers - provided it is keyed by month, since the raw instant is nearly unique."""
     if _is_temporal(series):
-        return False
+        return role == "predictor"
     populated = int(series.notna().sum())
     if not populated:
         return False
     return series.nunique(dropna=True) / populated <= _MAX_PREDICTOR_CARDINALITY
+
+
+def period_key(series: pd.Series) -> pd.Series:
+    """Collapses a timestamp to the month it belongs to, leaving anything else untouched."""
+    if not _is_temporal(series):
+        return series
+    parsed = pd.to_datetime(series, errors="coerce", format="mixed")
+    return parsed.dt.strftime("%Y-%m")
 
 
 def _is_temporal(series: pd.Series) -> bool:
@@ -77,7 +88,10 @@ def _is_temporal(series: pd.Series) -> bool:
 def _check_dependency(
     df: pd.DataFrame, predictor: str, target: str, min_purity: float
 ) -> list[FormatViolation]:
-    usable = df[[predictor, target]].dropna()
+    usable = pd.DataFrame({
+        predictor: period_key(df[predictor]),
+        target: df[target],
+    }).dropna()
     if usable.empty:
         return []
 
@@ -154,7 +168,7 @@ def coherence_score(
         return None
     best: tuple[float, str] | None = None
     for predictor in df.columns:
-        if predictor == column or predictor in exclude or not _usable_column(df[predictor]):
+        if predictor == column or predictor in exclude or not _usable_column(df[predictor], role="predictor"):
             continue
         usable = df[[predictor, column]].dropna()
         if len(usable) < _MIN_ROWS_PER_GROUP * _MIN_GROUPS:

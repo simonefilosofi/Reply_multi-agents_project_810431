@@ -52,3 +52,8 @@ def _compose(year: str, month: str) -> str | None:
     if not month.isdigit() or not 1 <= int(month) <= 12:
         return None
     return f"{year}{int(month):02d}"
+
+
+def is_canonical(series: pd.Series) -> pd.Series:
+    """Which values already carry both a year and a month."""
+    return series.astype("string").str.strip().str.fullmatch(_CANONICAL.pattern).fillna(False)

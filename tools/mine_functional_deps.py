@@ -4,6 +4,7 @@ from __future__ import annotations
 import pandas as pd
 
 from models import ImputationHint
+from tools.cross_column_checks import period_key
 
 
 _DOMINANT_THRESHOLD = 0.95
@@ -180,7 +181,7 @@ def _try_pair(
 
 
 def _normalize(series: pd.Series, path: str) -> pd.Series:
-    s = series.astype("string")
+    s = period_key(series).astype("string")
     if path == "normalized":
         s = s.str.lower().str.strip()
     return s

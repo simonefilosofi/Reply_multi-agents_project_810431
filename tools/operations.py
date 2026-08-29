@@ -1,4 +1,4 @@
-"""Executable catalogue of remediation operations. A fix is expressed as a typed operation with validated parameters rather than as generated Python, so that every action is deterministic, reviewable, replayable, and structurally incapable of inventing data. A replacement of None clears the value, which the post-fix invariants then hold to the deletion budget. Each entry maps an Operation to a pure dataframe transformation, and renders itself both as a human-readable line and as the equivalent pandas expression, so a reviewer can see exactly what a proposal will do. The rendered Python is documentation: what runs is the catalogue below, never a generated string."""
+"""Executable catalogue of remediation operations. A fix is expressed as a typed operation with validated parameters rather than as generated Python, so that every action is deterministic, reviewable, replayable, and structurally incapable of inventing data. A replacement of None clears the value, which the post-fix invariants then hold to the deletion budget. Each entry maps an Operation to a pure dataframe transformation, The lookup key is built the same way the miner built it, so a timestamp predictor is matched by month rather than by instant. Each entry renders itself both as a human-readable line and as the equivalent pandas expression, so a reviewer can see exactly what a proposal will do. The rendered Python is documentation: what runs is the catalogue below, never a generated string."""
 from __future__ import annotations
 
 import pandas as pd
@@ -7,6 +7,7 @@ from models import Operation
 
 _RENDERED_MAPPINGS = 4
 from tools.apply_casing import collapse_casing_variants
+from tools.cross_column_checks import period_key
 from tools.normalize_date_format import normalize_date_format
 from tools.normalize_numeric_format import normalize_numeric_format
 from tools.normalize_period_format import normalize_period_format
@@ -95,7 +96,8 @@ def _impute(series: pd.Series, hint: dict | None, df: pd.DataFrame) -> pd.Series
     mapping = hint.get("mapping") or {}
     if len(predictors) != 1 or predictors[0] not in df.columns or not mapping:
         return series
-    return series.fillna(df[predictors[0]].astype("string").map(mapping))
+    keys = period_key(df[predictors[0]]).astype("string")
+    return series.fillna(keys.map(mapping))
 
 
 def _is_text(series: pd.Series) -> bool:
