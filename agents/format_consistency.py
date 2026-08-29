@@ -11,6 +11,7 @@ from tools.baseline_accessors import find_spec_by_hint
 from tools.duplicate_rows import duplicate_row_analysis
 from tools.reliability_score import checked_cells_by_column, compute_metrics
 from tools.correct_violations import correct_violations
+from tools.merge_reports import merge_reports
 from tools.cross_column_checks import candidate_predictors, cross_column_reports
 from tools.infer_format_spec import infer_format_spec
 from tools.match_canonical import compact_format_summary
@@ -67,6 +68,7 @@ def format_consistency_node(state: PipelineState) -> PipelineState:
         if nan_count > 0 and col not in nullability_cols:
             report.violations.append(FormatViolation(
                 column_name=col, row_index=-1, value=nan_count, expected_pattern="missing value",
+                kind="completeness", affected_rows=nan_count,
             ))
         if not report.violations:
             continue
@@ -87,7 +89,7 @@ def format_consistency_node(state: PipelineState) -> PipelineState:
         candidate_predictors(state.payload, set(state.surviving_columns), state.dataset),
         clock=time_column(state.dataset, inferred_specs),
     )
-    merged = _merge_reports(state.validation_reports, new_reports + consistency_reports)
+    merged = merge_reports(state.validation_reports, new_reports + consistency_reports)
     imputation_hints = _mine_imputation_hints(
         state.dataset, payload_by_col, merged, state.dataset, inferred_specs
     )
@@ -142,6 +144,7 @@ def _naming_reports(state: PipelineState) -> list[ValidationReport]:
                 row_index=-1,
                 value=suggested,
                 expected_pattern=f"naming convention: {pattern}",
+                kind="schema",
             )],
         )
         for column, suggested in validate_column_names(state.surviving_columns, conventions)
@@ -280,12 +283,3 @@ def _baseline_hint(baseline: BaselineFile | None, payload: ColumnPayload) -> str
         return None
     return compact_format_summary(schema.format)
 
-
-def _merge_reports(existing: list[ValidationReport], new: list[ValidationReport]) -> list[ValidationReport]:
-    by_col: dict[str, ValidationReport] = {r.column_name: r for r in existing}
-    for n in new:
-        if n.column_name in by_col:
-            by_col[n.column_name].violations.extend(n.violations)
-        else:
-            by_col[n.column_name] = n
-    return list(by_col.values())

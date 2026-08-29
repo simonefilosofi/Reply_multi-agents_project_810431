@@ -496,7 +496,7 @@ def _aggregate_violations(
     by_pattern: dict[str, list] = defaultdict(list)
     row_indices: list[int] = []
     for v in report.violations:
-        if str(v.expected_pattern or "").startswith(_SCHEMA_ONLY_PREFIXES):
+        if v.kind in _SCHEMA_ONLY_KINDS:
             continue
         by_pattern[v.expected_pattern or "unspecified"].append(v)
         if v.row_index >= 0:
@@ -512,9 +512,9 @@ def _aggregate_violations(
         examples = list({str(it.value) for it in items if it.row_index >= 0})[:_EXAMPLES_PER_VIOLATION]
         aggregated.append({
             "id": f"c{col_idx}_v{pat_idx + 1}",
-            "type": _classify_violation(pattern),
+            "type": _prompt_label(first),
             "expected_pattern": pattern,
-            "count": int(first.value) if pattern in _MISSING_PATTERNS else len(items),
+            "count": first.affected_rows if pattern in _MISSING_PATTERNS else len(items),
             "examples": examples,
         })
     aggregated += _remainder_entries(col_idx, ranked[_MAX_PATTERNS_PER_COLUMN:], len(aggregated))
@@ -528,7 +528,7 @@ def _remainder_entries(col_idx: int, tail: list, offset: int) -> list[dict]:
     frequent, fixable cases and leave a coverage obligation per stray row."""
     by_kind: dict[str, list] = defaultdict(list)
     for pattern, items in tail:
-        by_kind[_classify_violation(pattern)].extend(items)
+        by_kind[_prompt_label(items[0])].extend(items)
     entries = []
     for index, (kind, items) in enumerate(sorted(by_kind.items())):
         examples = list({str(it.value) for it in items if it.row_index >= 0})[:_EXAMPLES_PER_VIOLATION]
@@ -543,20 +543,18 @@ def _remainder_entries(col_idx: int, tail: list, offset: int) -> list[dict]:
 
 
 _MISSING_PATTERNS = {"not nullable", "missing value"}
-_SCHEMA_ONLY_PREFIXES = (
-    "naming convention",
-    "sparse column",
-    "duplicate-column divergence",
-    "duplicate records",
-)
+_SCHEMA_ONLY_KINDS = ("schema", "uniqueness")
 
 
-def _classify_violation(pattern: str) -> str:
+def _prompt_label(violation) -> str:
+    """The labels the prompt has always used, now derived from the typed kind rather than
+    re-parsed out of the message text. prompts/unified.md is unchanged."""
+    pattern = str(violation.expected_pattern or "")
     if pattern == "not nullable":
         return "not_nullable"
     if pattern == "missing value":
         return "missing_value"
-    if pattern.startswith("^") or pattern.endswith("$"):
+    if violation.kind == "format" and (pattern.startswith("^") or pattern.endswith("$")):
         return "regex_violation"
     return "format_violation"
 

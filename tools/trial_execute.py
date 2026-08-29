@@ -122,7 +122,7 @@ def _violation_delta(
         after_report = validate_format(col, after[col], spec) if spec is not None else ValidationReport(column_name=col)
         after_count = sum(
             1 for v in after_report.violations
-            if v.expected_pattern not in (None, "not nullable", "missing value")
+            if v.kind == "format"
         )
         delta[col] = {
             "format_violations_before": before_count,
@@ -138,7 +138,7 @@ def _format_violation_count(report: ValidationReport | None) -> int:
         return 0
     return sum(
         1 for v in report.violations
-        if v.expected_pattern not in (None, "not nullable", "missing value")
+        if v.kind == "format"
     )
 
 

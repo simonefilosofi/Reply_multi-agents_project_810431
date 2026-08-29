@@ -101,16 +101,22 @@ class DuplicateResolution(BaseModel):
     values_lost: dict[str, list] = Field(default_factory=dict)
 
 
+ViolationKind = Literal["format", "completeness", "schema", "consistency", "uniqueness"]
+
+
 class FormatViolation(BaseModel):
     column_name: str
     row_index: int
     value: Any
     expected_pattern: str | None
+    kind: ViolationKind
+    affected_rows: int = 1
 
 
 class ValidationReport(BaseModel):
     column_name: str
     violations: list[FormatViolation] = Field(default_factory=list)
+    detected_total: int | None = None
 
 
 OperationKind = Literal[

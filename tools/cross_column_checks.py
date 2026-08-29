@@ -100,6 +100,7 @@ def _check_dependency(
             column_name=target,
             row_index=int(index),
             value=row[target],
+            kind="consistency",
             expected_pattern=(
                 f"cross-column: {predictor}={row[predictor]!r} implies "
                 f"{target}={expected[row[predictor]]!r}"

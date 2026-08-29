@@ -8,6 +8,7 @@ from state import PipelineState
 from tools.baseline_accessors import find_spec_by_hint
 from tools.change_log import diff_values_only
 from tools.completeness import completeness_report
+from tools.merge_reports import merge_reports
 from tools.detect_placeholders import detect_placeholders
 from tools.reliability_score import compute_metrics
 from tools.safe_cast import safe_cast
@@ -29,7 +30,7 @@ def nan_handler_node(state: PipelineState) -> PipelineState:
     nullability_reports = _check_nullability(df, state)
     completeness = completeness_report(df)
     sparse_reports = _sparse_reports(completeness)
-    merged = _merge_reports(
+    merged = merge_reports(
         state.validation_reports, coercion_reports + nullability_reports + sparse_reports
     )
 
@@ -55,6 +56,8 @@ def _sparse_reports(completeness: dict) -> list[ValidationReport]:
                 row_index=-1,
                 value=entry["nulls"],
                 expected_pattern=f"sparse column: {entry['null_rate']:.1%} null",
+                kind="schema",
+                affected_rows=entry["nulls"],
             )],
         )
         for entry in completeness["sparse_columns"]
@@ -83,6 +86,7 @@ def _enforce_dtypes(df: pd.DataFrame, state: PipelineState) -> tuple[pd.DataFram
                 row_index=i,
                 value=df[p.column_name].loc[i],
                 expected_pattern=f"not coercible to {p.dtype}",
+                kind="format",
             ) for i in blocking],
         ))
     return df, reports
@@ -108,16 +112,9 @@ def _check_nullability(df: pd.DataFrame, state: PipelineState) -> list[Validatio
                 row_index=-1,
                 value=nan_count,
                 expected_pattern="not nullable",
+                kind="completeness",
+                affected_rows=nan_count,
             )],
         ))
     return reports
 
-
-def _merge_reports(existing: list[ValidationReport], new: list[ValidationReport]) -> list[ValidationReport]:
-    by_col: dict[str, ValidationReport] = {r.column_name: r for r in existing}
-    for n in new:
-        if n.column_name in by_col:
-            by_col[n.column_name].violations.extend(n.violations)
-        else:
-            by_col[n.column_name] = n
-    return list(by_col.values())

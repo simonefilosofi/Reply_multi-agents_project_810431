@@ -34,6 +34,7 @@ def validate_format(
             row_index=int(idx),
             value=val,
             expected_pattern=expected,
+            kind="format",
         )
         for idx, val in series.items()
         if pd.notna(val) and not is_valid(val)

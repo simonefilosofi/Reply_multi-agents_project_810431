@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from models import FormatViolation, ValidationReport
 from state import PipelineState
+from tools.merge_reports import merge_reports
 from tools.duplicate_rows import duplicate_row_analysis
 
 
@@ -18,7 +19,7 @@ def duplicate_row_node(state: PipelineState) -> PipelineState:
     analysis["rows_removed"] = before - len(df)
 
     reports = _collision_reports(analysis)
-    merged = _merge_reports(state.validation_reports, reports)
+    merged = merge_reports(state.validation_reports, reports)
     return state.model_copy(update={
         "dataset": df,
         "duplicate_rows": analysis,
@@ -34,6 +35,8 @@ def _collision_reports(analysis: dict) -> list[ValidationReport]:
                 column_name=key,
                 row_index=-1,
                 value=stats["keys_with_conflicting_data"],
+                kind="uniqueness",
+                affected_rows=stats["keys_with_conflicting_data"],
                 expected_pattern=(
                     f"duplicate records: {stats['keys_with_conflicting_data']} values of "
                     f"{key} appear on more than one record with differing data "
@@ -45,12 +48,3 @@ def _collision_reports(analysis: dict) -> list[ValidationReport]:
         if stats["keys_with_conflicting_data"]
     ]
 
-
-def _merge_reports(existing: list[ValidationReport], new: list[ValidationReport]) -> list[ValidationReport]:
-    by_col = {r.column_name: r for r in existing}
-    for report in new:
-        if report.column_name in by_col:
-            by_col[report.column_name].violations.extend(report.violations)
-        else:
-            by_col[report.column_name] = report
-    return list(by_col.values())

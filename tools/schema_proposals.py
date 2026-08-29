@@ -16,9 +16,9 @@ def schema_proposals(reports: list[ValidationReport], columns: list[str]) -> lis
             continue
         for violation in report.violations:
             pattern = str(violation.expected_pattern or "")
-            if pattern.startswith(_SPARSE_PREFIX):
+            if violation.kind == "schema" and pattern.startswith(_SPARSE_PREFIX):
                 proposals.append(_drop_proposal(report.column_name, violation, pattern))
-            elif pattern.startswith(_NAMING_PREFIX) and violation.value:
+            elif violation.kind == "schema" and pattern.startswith(_NAMING_PREFIX) and violation.value:
                 proposals.append(_rename_proposal(report.column_name, violation, present))
     return [p for p in proposals if p is not None]
 

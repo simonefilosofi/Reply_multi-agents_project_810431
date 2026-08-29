@@ -101,7 +101,7 @@ def duplicate_column_node(state: PipelineState) -> PipelineState:
         if p.column_name not in dropped
     ]
     new_reports = [
-        r.model_copy(update={"column_name": renames.get(r.column_name, r.column_name)})
+        _rename_report(r, renames.get(r.column_name, r.column_name))
         for r in state.validation_reports
         if r.column_name not in dropped
     ] + divergence_reports
@@ -275,6 +275,8 @@ def _divergence_reports(
             column_name=canonical_name,
             row_index=-1,
             value=total,
+            kind="schema",
+            affected_rows=total,
             expected_pattern=(
                 f"duplicate-column divergence: {survivor} differs from its siblings on "
                 f"{total} cells ({total / rows:.1%}); values only present in the dropped "
@@ -282,3 +284,16 @@ def _divergence_reports(
             ),
         )],
     )]
+
+
+def _rename_report(report: ValidationReport, name: str) -> ValidationReport:
+    """A shallow model_copy renames the report but leaves the nested violations pointing at the
+    old column, and hands back the same list object, so the original report changes whenever the
+    copy does."""
+    if name == report.column_name:
+        return report
+    return ValidationReport(
+        column_name=name,
+        detected_total=report.detected_total,
+        violations=[v.model_copy(update={"column_name": name}) for v in report.violations],
+    )

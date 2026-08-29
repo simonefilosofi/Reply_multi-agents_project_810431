@@ -18,6 +18,7 @@ def _report(distinct_patterns: int) -> ValidationReport:
                 row_index=index,
                 value="nord",
                 expected_pattern=f"cross-column: provincia='P{index}' implies regione='sud'",
+                kind="consistency",
             )
             for index in range(distinct_patterns)
         ],
