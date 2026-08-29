@@ -195,8 +195,11 @@ def _candidate_predictors(
             if r != target and r not in seen:
                 candidates[target].append(r)
                 seen.add(r)
-        if not candidates[target] and df is not None:
-            candidates[target] = _low_cardinality_columns(df, target)
+        if df is not None:
+            for column in _low_cardinality_columns(df, target):
+                if column not in seen:
+                    candidates[target].append(column)
+                    seen.add(column)
     return candidates
 
 

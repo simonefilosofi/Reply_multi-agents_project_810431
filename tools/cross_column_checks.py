@@ -86,6 +86,9 @@ def _check_dependency(
 
 
 def candidate_predictors(payload, columns: set[str], df: pd.DataFrame) -> dict[str, list[str]]:
+    """Columns the LLM flagged as related, plus every low-cardinality column: the model's
+    list is a hint, never the whole search space, because a dependency it forgets to mention
+    would otherwise never be looked for."""
     candidates: dict[str, list[str]] = {}
     by_name = {p.column_name: p for p in payload}
     for target in columns:
@@ -93,7 +96,8 @@ def candidate_predictors(payload, columns: set[str], df: pd.DataFrame) -> dict[s
         if entry is None:
             continue
         related = [c for c in entry.related_columns if c != target and c in df.columns]
-        candidates[target] = related or _low_cardinality_columns(df, target)
+        mined = _low_cardinality_columns(df, target)
+        candidates[target] = list(dict.fromkeys(related + mined))
     return candidates
 
 
