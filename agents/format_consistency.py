@@ -13,6 +13,7 @@ from tools.cross_column_checks import candidate_predictors, cross_column_reports
 from tools.infer_format_spec import infer_format_spec
 from tools.match_canonical import compact_format_summary
 from tools.mine_functional_deps import mine_functional_deps
+from tools.temporal_stability import is_stable, time_column
 from tools.profile_format_spec import profile_format_spec
 from tools.validate_column_names import naming_regex, validate_column_names
 from tools.validate_format import validate_format
@@ -86,11 +87,14 @@ def format_consistency_node(state: PipelineState) -> PipelineState:
         for r in cross_column_reports(
             state.dataset,
             candidate_predictors(state.payload, set(state.surviving_columns), state.dataset),
+            clock=time_column(state.dataset, inferred_specs),
         )
     ]
     consistency_reports = [r for r in consistency_reports if r.violations]
     merged = _merge_reports(state.validation_reports, new_reports + consistency_reports)
-    imputation_hints = _mine_imputation_hints(state.dataset, payload_by_col, merged, state.dataset)
+    imputation_hints = _mine_imputation_hints(
+        state.dataset, payload_by_col, merged, state.dataset, inferred_specs
+    )
     return state.model_copy(update={
         "validation_reports": merged,
         "value_corrections": value_corrections,
@@ -145,6 +149,7 @@ def _mine_imputation_hints(
     payload_by_col: dict[str, ColumnPayload],
     reports: list[ValidationReport],
     source: pd.DataFrame | None = None,
+    specs: dict | None = None,
 ) -> dict[str, ImputationHint]:
     nan_columns = {
         c for c in _columns_with_nan_violations(reports)
@@ -153,7 +158,16 @@ def _mine_imputation_hints(
     if not nan_columns:
         return {}
     candidate_predictors = _candidate_predictors(payload_by_col, nan_columns, source)
-    return mine_functional_deps(df, list(nan_columns), candidate_predictors)
+    hints = mine_functional_deps(df, list(nan_columns), candidate_predictors)
+    clock = time_column(df, specs)
+    return {
+        column: hint.model_copy(update={
+            "temporally_stable": all(
+                is_stable(df, predictor, column, clock) for predictor in hint.predictor_columns
+            )
+        })
+        for column, hint in hints.items()
+    }
 
 
 def _columns_with_nan_violations(reports: list[ValidationReport]) -> set[str]:

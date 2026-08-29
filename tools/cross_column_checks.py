@@ -1,9 +1,10 @@
-"""Deterministic cross-column consistency checks. Mines high-purity functional dependencies between related columns, ignoring columns that are timestamps or near-unique on either side of the dependency: a key cannot be a semantic determinant, and a timestamp is set by the ingestion process rather than implied by another field and reports the rows that contradict the dominant mapping, so that a value inconsistent with its own key (a tax code paired with the wrong tax name, a province paired with the wrong region) is surfaced as a violation the Unified agent can repair. Backs the Consistency Validation performed by the Format & Consistency agent."""
+"""Deterministic cross-column consistency checks. Mines high-purity functional dependencies between related columns, ignoring dependencies that shift over time, and columns that are timestamps or near-unique on either side: a key cannot be a semantic determinant, and a timestamp is set by the ingestion process rather than implied by another field and reports the rows that contradict the dominant mapping, so that a value inconsistent with its own key (a tax code paired with the wrong tax name, a province paired with the wrong region) is surfaced as a violation the Unified agent can repair. Backs the Consistency Validation performed by the Format & Consistency agent."""
 from __future__ import annotations
 
 import pandas as pd
 
 from models import FormatViolation, ValidationReport
+from tools.temporal_stability import is_stable
 
 _MAX_FALLBACK_PREDICTORS = 5
 
@@ -18,6 +19,7 @@ def cross_column_reports(
     df: pd.DataFrame,
     candidate_predictors: dict[str, list[str]],
     min_purity: float = _MIN_PURITY,
+    clock: str | None = None,
 ) -> list[ValidationReport]:
     reports: dict[str, list[FormatViolation]] = {}
     for target, predictors in candidate_predictors.items():
@@ -27,6 +29,8 @@ def cross_column_reports(
             if predictor not in df.columns or predictor == target:
                 continue
             if not _usable_column(df[predictor]):
+                continue
+            if not is_stable(df, predictor, target, clock):
                 continue
             violations = _check_dependency(df, predictor, target, min_purity)
             if violations:
