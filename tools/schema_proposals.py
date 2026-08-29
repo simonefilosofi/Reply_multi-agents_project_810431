@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from models import FixProposal, Operation, ValidationReport
+from tools.operations import describe_operation
 
 _SPARSE_PREFIX = "sparse column"
 _NAMING_PREFIX = "naming convention"
@@ -24,6 +25,7 @@ def schema_proposals(reports: list[ValidationReport], columns: list[str]) -> lis
 
 def _drop_proposal(column: str, violation, pattern: str) -> FixProposal:
     rate = pattern.split(":", 1)[1].strip() if ":" in pattern else "almost entirely"
+    operation = Operation(kind="drop_column", column=column)
     return FixProposal(
         id=f"schema_drop_{column}",
         description=f"Drop '{column}': it is {rate} and carries almost no information.",
@@ -34,7 +36,8 @@ def _drop_proposal(column: str, violation, pattern: str) -> FixProposal:
         addresses_violations=[f"sparse:{column}"],
         affected_columns=[column],
         estimated_rows_affected=int(violation.value or 0),
-        operations=[Operation(kind="drop_column", column=column)],
+        operations=[operation],
+        code=describe_operation(operation),
     )
 
 
@@ -42,6 +45,7 @@ def _rename_proposal(column: str, violation, present: set[str]) -> FixProposal |
     suggested = str(violation.value)
     if not suggested or suggested in present or suggested == column:
         return None
+    operation = Operation(kind="rename_column", column=column, new_name=suggested)
     return FixProposal(
         id=f"schema_rename_{column}",
         description=f"Rename '{column}' to '{suggested}' to match the naming convention.",
@@ -51,5 +55,6 @@ def _rename_proposal(column: str, violation, present: set[str]) -> FixProposal |
         ),
         addresses_violations=[f"naming:{column}"],
         affected_columns=[column],
-        operations=[Operation(kind="rename_column", column=column, new_name=suggested)],
+        operations=[operation],
+        code=describe_operation(operation),
     )

@@ -1,9 +1,11 @@
-"""Executable catalogue of remediation operations. A fix is expressed as a typed operation with validated parameters rather than as generated Python, so that every action is deterministic, reviewable, replayable, and structurally incapable of inventing data. A replacement of None clears the value, which the post-fix invariants then hold to the deletion budget. Each entry maps an Operation to a pure dataframe transformation, and renders itself as a human-readable line for the report and the approval gate."""
+"""Executable catalogue of remediation operations. A fix is expressed as a typed operation with validated parameters rather than as generated Python, so that every action is deterministic, reviewable, replayable, and structurally incapable of inventing data. A replacement of None clears the value, which the post-fix invariants then hold to the deletion budget. Each entry maps an Operation to a pure dataframe transformation, and renders itself both as a human-readable line and as the equivalent pandas expression, so a reviewer can see exactly what a proposal will do. The rendered Python is documentation: what runs is the catalogue below, never a generated string."""
 from __future__ import annotations
 
 import pandas as pd
 
 from models import Operation
+
+_RENDERED_MAPPINGS = 4
 from tools.apply_casing import collapse_casing_variants
 from tools.normalize_date_format import normalize_date_format
 from tools.normalize_numeric_format import normalize_numeric_format
@@ -98,3 +100,46 @@ def _impute(series: pd.Series, hint: dict | None, df: pd.DataFrame) -> pd.Series
 
 def _is_text(series: pd.Series) -> bool:
     return pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series)
+
+
+def operations_as_python(operations: list[Operation]) -> str:
+    return "\n".join(_as_python(operation) for operation in operations)
+
+
+def _as_python(operation: Operation) -> str:
+    column = operation.column
+    if operation.kind == "replace_values":
+        pairs = ", ".join(
+            f"{m.value!r}: {m.replacement!r}" for m in operation.mapping[:_RENDERED_MAPPINGS]
+        )
+        rest = len(operation.mapping) - _RENDERED_MAPPINGS
+        note = f"  # +{rest} more mappings" if rest > 0 else ""
+        return f'df["{column}"] = df["{column}"].replace({{{pairs}}}){note}'
+    if operation.kind == "normalize_numeric":
+        return f'df["{column}"] = normalize_numeric_format(df["{column}"])'
+    if operation.kind == "normalize_date":
+        return f'df["{column}"] = normalize_date_format(df["{column}"])'
+    if operation.kind == "normalize_period":
+        return f'df["{column}"] = normalize_period_format(df["{column}"])'
+    if operation.kind == "strip_whitespace":
+        return f'df["{column}"] = df["{column}"].astype("string").str.strip()'
+    if operation.kind == "collapse_casing":
+        return f'df["{column}"] = collapse_casing_variants(df["{column}"])'
+    if operation.kind == "round_decimals":
+        return f'df["{column}"] = pd.to_numeric(df["{column}"], errors="coerce").round({operation.digits})'
+    if operation.kind == "cast_dtype":
+        return f'df["{column}"], blocking = safe_cast(df["{column}"], "{operation.dtype}")'
+    if operation.kind == "impute_from_lookup":
+        return (
+            f'lookup = imputation_hints["{column}"]["mapping"]\n'
+            f'predictor = imputation_hints["{column}"]["predictor_columns"][0]\n'
+            f'df["{column}"] = df["{column}"].fillna(df[predictor].astype("string").map(lookup))'
+        )
+    if operation.kind == "drop_column":
+        return f'df = df.drop(columns=["{column}"])'
+    if operation.kind == "rename_column":
+        return f'df = df.rename(columns={{"{column}": "{operation.new_name}"}})'
+    if operation.kind == "drop_duplicate_rows":
+        subset = f"subset={operation.subset}" if operation.subset else ""
+        return f"df = df.drop_duplicates({subset})"
+    return f"# unsupported operation: {operation.kind}"

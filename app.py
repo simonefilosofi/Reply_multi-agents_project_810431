@@ -22,6 +22,7 @@ from agents.duplicate_row import duplicate_row_node
 from agents.report_generator import report_generator_node
 from agents.unified import propose_for_group, unified_node
 from state import PipelineState
+from tools.operations import operations_as_python
 
 st.set_page_config(page_title="NoiPA DQ — pipeline test", layout="wide")
 st.title("NoiPA DQ — Profiler, Semantic, NaN, Duplicate-Column, Format, Unified")
@@ -257,7 +258,11 @@ for proposal in state.proposed_fixes:
         if proposal.depends_on:
             st.caption(f"Depends on: {', '.join(proposal.depends_on)}")
         st.markdown(f"_{proposal.rationale}_")
-        st.code(proposal.code, language="text")
+        st.code(operations_as_python(proposal.operations), language="python")
+        st.caption(
+            "Equivalent pandas expression, shown so you can see exactly what the proposal "
+            "does. The pipeline executes the typed operations, not this text."
+        )
 
         btns = st.columns(3)
         if btns[0].button("Accept", key=f"acc_{proposal.id}"):

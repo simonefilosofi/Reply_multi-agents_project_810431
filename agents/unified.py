@@ -45,7 +45,10 @@ def unified_node(state: PipelineState) -> PipelineState:
     actionable = [g for g in groups if any(reports_by_name.get(c, _empty_report(c)).violations for c in g)]
     if not actionable:
         return state.model_copy(update={
-            "proposed_fixes": schema_proposals(state.validation_reports, list(state.dataset.columns)),
+            "proposed_fixes": [
+                _with_readable_code(p)
+                for p in schema_proposals(state.validation_reports, list(state.dataset.columns))
+            ],
             "fix_groups": {},
         })
 
@@ -75,8 +78,16 @@ def unified_node(state: PipelineState) -> PipelineState:
     schema = schema_proposals(state.validation_reports, list(state.dataset.columns))
     deduped = _drop_redundant_schema_fixes(dedupe_proposals(all_proposals), schema)
     return state.model_copy(update={
-        "proposed_fixes": schema + deduped,
+        "proposed_fixes": [_with_readable_code(p) for p in schema + deduped],
         "fix_groups": fix_groups,
+    })
+
+
+def _with_readable_code(proposal: FixProposal) -> FixProposal:
+    if proposal.code or not proposal.operations:
+        return proposal
+    return proposal.model_copy(update={
+        "code": "\n".join(describe_operation(o) for o in proposal.operations)
     })
 
 

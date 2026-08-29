@@ -16,6 +16,7 @@ from tools.completeness import completeness_report
 from tools.cross_column_checks import candidate_predictors, cross_column_reports
 from tools.temporal_stability import time_column
 from tools.duplicate_rows import duplicate_row_analysis
+from tools.operations import describe_operation, operations_as_python
 from tools.reliability_score import compute_metrics, reliability_score, violation_counts
 from tools.validate_format import validate_format
 from utils.prompts import load_prompt
@@ -302,6 +303,8 @@ def _build_payload(state: PipelineState, residual: list[ValidationReport], quali
                 "rationale": p.rationale,
                 "affected_columns": p.affected_columns,
                 "estimated_rows_affected": p.estimated_rows_affected,
+                "operations": [describe_operation(o) for o in p.operations],
+                "equivalent_python": operations_as_python(p.operations),
                 "applied": p.id in state.applied_fix_ids,
             }
             for p in state.proposed_fixes
