@@ -1,4 +1,4 @@
-"""Row-level duplicate analysis: identifies the columns that behave as record keys, counts exact duplicate rows, and finds records that collide on a key while differing elsewhere. Backs the Duplicate Detection performed by the Duplicate Row agent, which removes only exact duplicates and leaves key collisions for human review."""
+"""Row-level duplicate analysis: identifies the columns that behave as record keys, counts exact duplicate rows, and finds records that collide on a key while differing elsewhere, counting both the keys and the rows those conflicts lock up. Backs the Duplicate Detection performed by the Duplicate Row agent, which removes only exact duplicates and leaves key collisions for human review."""
 from __future__ import annotations
 
 import pandas as pd
@@ -28,11 +28,12 @@ def duplicate_row_analysis(df: pd.DataFrame) -> dict:
         duplicated_keys = df[key][df[key].duplicated(keep=False) & df[key].notna()]
         if duplicated_keys.empty:
             continue
-        conflicting = _conflicting_keys(df, key, duplicated_keys.unique())
+        conflicting, rows_in_conflicting_groups = _conflicting_keys(df, key, duplicated_keys.unique())
         collisions[key] = {
             "duplicated_keys": int(duplicated_keys.nunique()),
             "affected_rows": int(duplicated_keys.shape[0]),
             "keys_with_conflicting_data": len(conflicting),
+            "rows_in_conflicting_groups": rows_in_conflicting_groups,
             "examples": [str(value) for value in conflicting[:_MAX_REPORTED_KEYS]],
         }
     return {
@@ -42,11 +43,13 @@ def duplicate_row_analysis(df: pd.DataFrame) -> dict:
     }
 
 
-def _conflicting_keys(df: pd.DataFrame, key: str, values) -> list:
+def _conflicting_keys(df: pd.DataFrame, key: str, values) -> tuple[list, int]:
     conflicting = []
+    rows_locked = 0
     others = [c for c in df.columns if c != key]
     for value in values:
         block = df.loc[df[key] == value, others]
         if len(block.drop_duplicates()) > 1:
             conflicting.append(value)
-    return conflicting
+            rows_locked += len(block)
+    return conflicting, rows_locked

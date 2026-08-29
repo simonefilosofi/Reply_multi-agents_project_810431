@@ -1,4 +1,4 @@
-"""Validates column values against per-column FormatSpecs inferred from the actual sample (with baseline as a hint), flags violations without re-reporting rows an upstream node already flagged, asks an LLM to propose targeted per-value corrections, discarding wholesale deletion proposals when they cover so much of a column that the inferred spec is the unreliable party so the Unified Remediation agent can emit value-preserving replace fixes instead of generic imputations, deterministically mines functional dependencies to surface cross-column consistency violations and NaN-imputation hints. The hint search covers every column that actually has gaps, not only those an inferred spec happened to flag, so it does not depend on what the model chose to describe. Merges new violations with reports already on state (e.g. nullability reports from the NaN handler)."""
+"""Validates column values against per-column FormatSpecs inferred from the actual sample (with baseline as a hint), flags violations without re-reporting rows an upstream node already flagged, asks an LLM to propose targeted per-value corrections, discarding wholesale deletion proposals when they cover so much of a column that the inferred spec is the unreliable party so the Unified Remediation agent can emit value-preserving replace fixes instead of generic imputations, deterministically mines functional dependencies to surface cross-column consistency violations and NaN-imputation hints. The hint search covers every column that actually has gaps, not only those an inferred spec happened to flag, so it does not depend on what the model chose to describe. Merges new violations with reports already on state (e.g. nullability reports from the NaN handler), and records the pre_remediation quality snapshot: the last point at which the dataset is fully measured but not yet altered, which is what the report compares the remediated result against."""
 from __future__ import annotations
 
 from collections import defaultdict
@@ -8,6 +8,8 @@ import pandas as pd
 from models import BaselineFile, ColumnPayload, EnumFormat, FormatViolation, ImputationHint, RangeFormat, RegexFormat, ValidationReport
 from state import PipelineState
 from tools.baseline_accessors import find_spec_by_hint
+from tools.duplicate_rows import duplicate_row_analysis
+from tools.reliability_score import checked_cells_by_column, compute_metrics
 from tools.correct_violations import correct_violations
 from tools.cross_column_checks import candidate_predictors, cross_column_reports
 from tools.infer_format_spec import infer_format_spec
@@ -80,26 +82,28 @@ def format_consistency_node(state: PipelineState) -> PipelineState:
             if corrections:
                 value_corrections[col] = corrections
 
-    consistency_reports = [
-        r.model_copy(update={
-            "violations": _drop_already_reported(r.violations, r.column_name, new_reports)
-        })
-        for r in cross_column_reports(
-            state.dataset,
-            candidate_predictors(state.payload, set(state.surviving_columns), state.dataset),
-            clock=time_column(state.dataset, inferred_specs),
-        )
-    ]
-    consistency_reports = [r for r in consistency_reports if r.violations]
+    consistency_reports = cross_column_reports(
+        state.dataset,
+        candidate_predictors(state.payload, set(state.surviving_columns), state.dataset),
+        clock=time_column(state.dataset, inferred_specs),
+    )
     merged = _merge_reports(state.validation_reports, new_reports + consistency_reports)
     imputation_hints = _mine_imputation_hints(
         state.dataset, payload_by_col, merged, state.dataset, inferred_specs
+    )
+    pre_remediation = compute_metrics(
+        state.dataset,
+        merged,
+        state.baseline.global_conventions if state.baseline else None,
+        checked_cells=checked_cells_by_column(state.dataset, inferred_specs),
+        duplicate_analysis=duplicate_row_analysis(state.dataset),
     )
     return state.model_copy(update={
         "validation_reports": merged,
         "value_corrections": value_corrections,
         "inferred_format_specs": inferred_specs,
         "imputation_hints": imputation_hints,
+        "quality_snapshots": {**state.quality_snapshots, "pre_remediation": pre_remediation},
     })
 
 

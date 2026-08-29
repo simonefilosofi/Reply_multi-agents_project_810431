@@ -15,6 +15,7 @@ from models import (
     RegexFormat,
 )
 from state import PipelineState
+from tools.duplicate_rows import duplicate_row_analysis
 from tools.reliability_score import compute_metrics
 
 
@@ -30,7 +31,11 @@ def baseline_builder_node(state: PipelineState) -> PipelineState:
     if state.dataset is not None:
         update["quality_snapshots"] = {
             **state.quality_snapshots,
-            "raw": compute_metrics(state.dataset, conventions=baseline.global_conventions),
+            "raw": compute_metrics(
+                state.dataset,
+                conventions=baseline.global_conventions,
+                duplicate_analysis=duplicate_row_analysis(state.dataset),
+            ),
         }
     return state.model_copy(update=update)
 

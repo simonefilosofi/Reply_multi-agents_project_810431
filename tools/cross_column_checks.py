@@ -1,4 +1,4 @@
-"""Deterministic cross-column consistency checks. Mines high-purity functional dependencies between related columns, ignoring dependencies that shift over time, and columns that are timestamps or near-unique on either side: a key cannot be a semantic determinant, and a timestamp is set by the ingestion process rather than implied by another field and reports the rows that contradict the dominant mapping, so that a value inconsistent with its own key (a tax code paired with the wrong tax name, a province paired with the wrong region) is surfaced as a violation the Unified agent can repair. Backs the Consistency Validation performed by the Format & Consistency agent."""
+"""Deterministic cross-column consistency checks. Mines high-purity functional dependencies between related columns, ignoring dependencies that shift over time, and columns that are timestamps or near-unique on either side: a key cannot be a semantic determinant, and a timestamp is set by the ingestion process rather than implied by another field and reports the rows that contradict the dominant mapping, so that a value inconsistent with its own key (a tax code paired with the wrong tax name, a province paired with the wrong region) is surfaced as a violation the Unified agent can repair. A row is reported once however many predictors condemn it, which both keeps the consistency count equal to a row count and bounds the output at one violation per row. Backs the Consistency Validation performed by the Format & Consistency agent."""
 from __future__ import annotations
 
 import pandas as pd
@@ -11,7 +11,6 @@ _MAX_FALLBACK_PREDICTORS = 8
 _MIN_PURITY = 0.9
 _MIN_GROUPS = 3
 _MIN_ROWS_PER_GROUP = 2
-_MAX_VIOLATIONS_PER_PAIR = 200
 _MAX_PREDICTOR_CARDINALITY = 0.2
 
 
@@ -36,9 +35,20 @@ def cross_column_reports(
             if violations:
                 reports.setdefault(target, []).extend(violations)
     return [
-        ValidationReport(column_name=column, violations=violations[:_MAX_VIOLATIONS_PER_PAIR])
+        ValidationReport(column_name=column, violations=_one_per_row(violations))
         for column, violations in reports.items()
     ]
+
+
+def _one_per_row(violations: list[FormatViolation]) -> list[FormatViolation]:
+    seen: set[int] = set()
+    unique: list[FormatViolation] = []
+    for violation in violations:
+        if violation.row_index in seen:
+            continue
+        seen.add(violation.row_index)
+        unique.append(violation)
+    return unique
 
 
 def _usable_column(series: pd.Series) -> bool:

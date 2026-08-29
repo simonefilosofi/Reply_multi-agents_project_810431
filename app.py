@@ -1,4 +1,4 @@
-"""Minimal Streamlit harness to manually exercise the Profiler, Semantic, NaN-Handler, Duplicate-Column, Format-Consistency, and Unified-Remediation agents on an uploaded CSV. Renders an approval gate where the user can Accept, Reject, or Edit-with-feedback each proposed fix."""
+"""Minimal Streamlit harness to manually exercise the Baseline-Builder, Profiler, Semantic, NaN-Handler, Duplicate-Column, Format-Consistency, and Unified-Remediation agents on an uploaded CSV. The baseline builder runs first so that the naming conventions reach the metrics and the raw quality snapshot exists, without which the report cannot show how many nulls were disguised. Renders an approval gate where the user can Accept, Reject, or Edit-with-feedback each proposed fix."""
 from __future__ import annotations
 
 from dotenv import load_dotenv
@@ -11,6 +11,7 @@ import pandas as pd
 import streamlit as st
 
 from agents.anomaly_detector import anomaly_detector_node
+from agents.baseline_builder import baseline_builder_node
 from agents.duplicate_column import duplicate_column_node
 from agents.format_consistency import format_consistency_node
 from agents.nan_handler import nan_handler_node
@@ -46,6 +47,8 @@ if st.button("Run pipeline"):
     snapshots: dict = {}
     state = PipelineState(dataset=df, dataset_path=uploaded.name)
 
+    with st.spinner("Baseline builder..."):
+        state = baseline_builder_node(state)
     with st.spinner("Profiler..."):
         state = profiler_node(state)
     with st.spinner("Semantic..."):

@@ -17,7 +17,7 @@ from tools.cross_column_checks import candidate_predictors, cross_column_reports
 from tools.temporal_stability import time_column
 from tools.duplicate_rows import duplicate_row_analysis
 from tools.operations import describe_operation, operations_as_python
-from tools.reliability_score import compute_metrics, reliability_score, violation_counts
+from tools.reliability_score import DIMENSIONS, checked_cells_by_column, compare, compute_metrics, violation_counts
 from tools.validate_format import validate_format
 from utils.prompts import load_prompt
 
@@ -138,77 +138,142 @@ def _spec_from_dict(spec: dict | None):
 
 def _quality_section(state: PipelineState, residual: list[ValidationReport]) -> dict:
     conventions = state.baseline.global_conventions if state.baseline else None
-    final = compute_metrics(state.dataset, residual, conventions) if state.dataset is not None else {}
+    final = (
+        compute_metrics(
+            state.dataset,
+            residual,
+            conventions,
+            checked_cells=checked_cells_by_column(state.dataset, state.inferred_format_specs),
+            duplicate_analysis=duplicate_row_analysis(state.dataset),
+        )
+        if state.dataset is not None
+        else {}
+    )
     snapshots = {**state.quality_snapshots, "final": final}
-    detected = snapshots.get("detected", {})
-    comparable = _comparable_detected(state, detected)
-    if comparable:
-        comparable = {
-            **comparable,
-            "format_violations": _count_violations(state.validation_reports),
-            "validity": _validity(comparable, state.validation_reports),
-        }
-        snapshots["detected_comparable"] = comparable
+    scoped_before, scoped_after = _like_for_like_snapshots(
+        state, snapshots.get("pre_remediation", {}), residual, conventions
+    )
+    if scoped_before:
+        snapshots["pre_remediation_scoped"] = scoped_before
+        snapshots["final_scoped"] = scoped_after
+    delivered = compare(snapshots.get("raw") or scoped_before or snapshots.get("detected", {}), final)
+    like_for_like = compare(scoped_before, scoped_after) if scoped_before else {}
     return {
         "snapshots": snapshots,
-        "reliability_before": reliability_score(comparable or detected),
-        "reliability_after": reliability_score(final),
+        "as_delivered": delivered,
+        "like_for_like": like_for_like,
+        "dimensions_compared": delivered["dimensions"],
+        "dimensions_excluded": [d for d in DIMENSIONS if d not in delivered["dimensions"]],
+        "reliability_before": delivered["before"],
+        "reliability_after": delivered["after"],
         "hidden_defects_unmasked": _hidden_defects(snapshots),
     }
 
 
-def _comparable_detected(state: PipelineState, detected: dict) -> dict:
-    if not detected or state.dataset is None:
-        return detected
-    null_by_column = detected.get("null_by_column") or {}
-    origin = _origin_columns(state)
-    kept = [origin.get(str(c), str(c)) for c in state.dataset.columns]
-    kept = [c for c in kept if c in null_by_column]
-    if not kept:
-        return detected
-    rows = detected.get("rows", 0)
+def _like_for_like_snapshots(
+    state: PipelineState, before: dict, residual: list[ValidationReport], conventions
+) -> tuple[dict, dict]:
+    """Measures both ends of the run on the same columns: the pre-remediation snapshot restricted
+    to the columns that survive, and the remediated dataset restricted to those same columns.
+    Scoping only the earlier side would compare a subset against the whole and call the result
+    like-for-like."""
+    if not before or state.dataset is None:
+        return {}, {}
+    null_by_column = before.get("null_by_column") or {}
+    origins = _origin_columns(state)
+    pairs = [(origins.get(str(c), str(c)), str(c)) for c in state.dataset.columns]
+    pairs = [(origin, current) for origin, current in pairs if origin in null_by_column]
+    if not pairs:
+        return {}, {}
+
+    current_names = [current for _, current in pairs]
+    sub = state.dataset[current_names]
+    after = compute_metrics(
+        sub,
+        [report for report in residual if report.column_name in set(current_names)],
+        conventions,
+        checked_cells=checked_cells_by_column(sub, state.inferred_format_specs),
+        duplicate_analysis=duplicate_row_analysis(sub),
+    )
+    return _scope_metrics(before, [origin for origin, _ in pairs]), after
+
+
+def _scope_metrics(before: dict, kept: list[str]) -> dict:
+    null_by_column = before.get("null_by_column") or {}
+    rows = before.get("rows", 0)
     cells = rows * len(kept)
-    nulls = sum(null_by_column[c] for c in kept)
+    nulls = sum(null_by_column[column] for column in kept)
+    selected = set(kept)
+    checked = {
+        column: count
+        for column, count in (before.get("checked_cells_by_column") or {}).items()
+        if column in selected
+    }
+    checked_total = sum(checked.values())
+    format_violations = sum(
+        count
+        for column, count in (before.get("format_violations_by_column") or {}).items()
+        if column in selected
+    )
+    inconsistent = min(
+        sum(
+            count
+            for column, count in (before.get("inconsistent_rows_by_column") or {}).items()
+            if column in selected
+        ),
+        before.get("inconsistent_rows", 0),
+    )
+    defects = {
+        column: labels
+        for column, labels in (before.get("structural_defects") or {}).items()
+        if column in kept
+    }
     return {
-        **detected,
+        **before,
+        "columns": len(kept),
         "columns_compared": len(kept),
         "null_cells": nulls,
+        "structural_defects": defects,
+        "columns_with_structural_defects": len(defects),
+        "columns_badly_named": sum(1 for labels in defects.values() if "naming" in labels),
+        "columns_sparse": sum(1 for labels in defects.values() if "sparse" in labels),
+        "columns_redundant": sum(1 for labels in defects.values() if "redundant" in labels),
+        "checked_cells": checked_total or None,
+        "checked_cells_by_column": checked,
+        "format_violations": format_violations,
+        "inconsistent_rows": inconsistent,
         "completeness": round(max(cells - nulls, 0) / cells, 4) if cells else None,
+        "schema_conformity": round((len(kept) - len(defects)) / len(kept), 4),
+        "validity": (
+            round(max(checked_total - format_violations, 0) / checked_total, 4)
+            if checked_total
+            else None
+        ),
+        "consistency": round(max(rows - inconsistent, 0) / rows, 4) if rows else None,
     }
 
 
 def _origin_columns(state: PipelineState) -> dict[str, str]:
-    return {r.canonical_name: r.data_survivor for r in state.duplicate_resolutions}
-
-
-_AGGREGATED_PATTERNS = ("not nullable", "missing value")
+    """Maps a column of the remediated dataset back to the name it carried in the pre-remediation
+    snapshot, which is taken after the duplicate-column election and therefore already uses
+    canonical names. Only the renames applied by approved fixes happened after that point, so
+    only they need inverting; reaching further back, to the column that originally held the
+    data, names something the snapshot does not contain and drops the column from the
+    comparison."""
+    origins: dict[str, str] = {}
+    applied = set(state.applied_fix_ids)
+    for proposal in state.proposed_fixes:
+        if proposal.id not in applied:
+            continue
+        for operation in proposal.operations:
+            if operation.kind == "rename_column" and operation.new_name:
+                origins[operation.new_name] = origins.get(operation.column, operation.column)
+    return origins
 
 
 def _violation_count(report: ValidationReport) -> int:
-    total = 0
-    for violation in report.violations:
-        if violation.expected_pattern in _AGGREGATED_PATTERNS:
-            total += int(violation.value) if str(violation.value).isdigit() else 1
-        elif not str(violation.expected_pattern or "").startswith(("naming convention", "sparse column")):
-            total += 1
-    return total
-
-
-def _count_violations(reports: list[ValidationReport]) -> int:
-    return sum(
-        1
-        for report in reports
-        for violation in report.violations
-        if violation.expected_pattern not in ("not nullable", "missing value")
-        and not str(violation.expected_pattern or "").startswith(("naming convention", "sparse column"))
-    )
-
-
-def _validity(metrics: dict, reports: list[ValidationReport]) -> float | None:
-    cells = metrics.get("rows", 0) * metrics.get("columns", 0)
-    if not cells:
-        return None
-    return round(max(cells - _count_violations(reports), 0) / cells, 4)
+    counts = violation_counts([report])
+    return counts["format"] + counts["completeness"] + counts["consistency"] + counts["uniqueness"]
 
 
 def _hidden_defects(snapshots: dict) -> dict:
@@ -402,25 +467,97 @@ def _render_pdf(state: PipelineState, report: _ReportResponse, quality: dict) ->
     return pdf
 
 
-def _score_text(quality: dict) -> str:
-    before, after = quality["reliability_before"], quality["reliability_after"]
+_COUNTERS = (
+    ("rows", "rows"),
+    ("columns", "columns"),
+    ("null cells", "null_cells"),
+    ("cells checked", "checked_cells"),
+    ("format violations", "format_violations"),
+    ("inconsistent rows", "inconsistent_rows"),
+    ("duplicate rows", "duplicate_rows"),
+    ("rows in key conflict", "rows_in_key_conflict"),
+    ("columns badly named", "columns_badly_named"),
+    ("columns almost empty", "columns_sparse"),
+    ("columns duplicating another", "columns_redundant"),
+)
+
+
+def _comparison_block(comparison: dict, before_label: str, after_label: str, note: str) -> list[str]:
+    before, after = comparison["before"], comparison["after"]
     lines = [
-        f"Reliability score before remediation : {_fmt(before.get('score'))}",
-        f"Reliability score after remediation  : {_fmt(after.get('score'))}",
-        "",
-        "Components (before -> after):",
+        f"{before_label:38}: {_fmt(before.get('score'))}",
+        f"{after_label:38}: {_fmt(after.get('score'))}",
+        note,
     ]
-    for key in ("completeness", "validity", "uniqueness", "schema_conformity"):
-        b = before.get("components", {}).get(key)
-        a = after.get("components", {}).get(key)
-        if b is None and a is None:
-            continue
-        lines.append(f"  {key:18} {_fmt(b)} -> {_fmt(a)}")
-    lines.append("")
-    lines.append(
-        "Completeness is compared on the columns that survived deduplication, so that "
-        "removing a redundant full column is not read as a loss."
+    for key in comparison["dimensions"]:
+        lines.append(
+            f"  {key:20} {_fmt(before.get('components', {}).get(key))} -> "
+            f"{_fmt(after.get('components', {}).get(key))}"
+            f"   w={before.get('weights', {}).get(key, 0):g}"
+        )
+    return lines
+
+
+def _score_text(quality: dict) -> str:
+    snapshots = quality.get("snapshots") or {}
+    scoped = snapshots.get("pre_remediation_scoped") or {}
+    after_metrics = snapshots.get("final") or {}
+
+    lines = _comparison_block(
+        quality["as_delivered"],
+        "Reliability of the file as delivered",
+        "Reliability after remediation",
+        "Geometric mean over the dimensions measurable at both ends without a validation pass, "
+        "so that the file as received can be scored at all. A single broken dimension pulls the "
+        "whole score down rather than being averaged away.",
     )
+
+    like_for_like = quality.get("like_for_like") or {}
+    if like_for_like.get("dimensions"):
+        lines += [""] + _comparison_block(
+            like_for_like,
+            "Like-for-like before remediation",
+            "Like-for-like after remediation",
+            f"Restricted to the {scoped.get('columns_compared', 0)} columns present at both ends "
+            "and extended with the dimensions that need a validation pass, so that removing a "
+            "redundant or empty column is not read as an improvement.",
+        )
+
+    excluded = quality.get("dimensions_excluded") or []
+    if excluded:
+        lines += ["", "Excluded from the headline score, not measurable on the raw file: "
+                  + ", ".join(excluded)]
+
+    delivered_metrics = snapshots.get("raw") or scoped
+    lines += ["", "Counters behind the headline pair (as delivered -> after remediation):"]
+    for label, key in _COUNTERS:
+        lines.append(
+            f"  {label:28} {_count(delivered_metrics.get(key))} -> {_count(after_metrics.get(key))}"
+        )
+
+    scoped_after = snapshots.get("final_scoped") or {}
+    if scoped and scoped_after:
+        lines += [
+            "",
+            f"Counters behind the like-for-like pair, on the "
+            f"{scoped.get('columns_compared', 0)} comparable columns (before -> after):",
+        ]
+        for label, key in _COUNTERS:
+            lines.append(
+                f"  {label:28} {_count(scoped.get(key))} -> {_count(scoped_after.get(key))}"
+            )
+
+    lines += [
+        "",
+        "Validity divides by the cells actually checked against a format specification, not by "
+        "every cell in the table. Schema conformity is the share of columns carrying no "
+        "structural fault: a name breaking the convention, a column too empty to inform, or a "
+        "column merely repeating another.",
+        "",
+        "Detected anomalies are reported in the findings but deliberately excluded from this "
+        "score: a statistical outlier is unusual, which is not the same as wrong.",
+    ]
+
     hidden = quality.get("hidden_defects_unmasked") or {}
     if hidden:
         lines += [
@@ -434,3 +571,7 @@ def _score_text(quality: dict) -> str:
 
 def _fmt(value: float | None) -> str:
     return "n/a" if value is None else f"{value:.4f}"
+
+
+def _count(value: int | None) -> str:
+    return "n/a" if value is None else f"{value:,}"

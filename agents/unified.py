@@ -29,6 +29,7 @@ from utils.prompts import load_prompt
 _MAX_EVIDENCE_ROWS = 10
 _MAX_CLEAN_ROWS = 5
 _EXAMPLES_PER_VIOLATION = 3
+_MAX_PATTERNS_PER_COLUMN = 25
 _CORRECTION_EXAMPLES = 20
 _MAX_REVIEW_ITERATIONS = 2
 
@@ -504,8 +505,9 @@ def _aggregate_violations(
         nan_idx = df.index[df[col].isna()].tolist()
         row_indices.extend(int(i) for i in nan_idx)
 
+    ranked = sorted(by_pattern.items(), key=lambda entry: -len(entry[1]))
     aggregated: list[dict] = []
-    for pat_idx, (pattern, items) in enumerate(by_pattern.items()):
+    for pat_idx, (pattern, items) in enumerate(ranked[:_MAX_PATTERNS_PER_COLUMN]):
         first = items[0]
         examples = list({str(it.value) for it in items if it.row_index >= 0})[:_EXAMPLES_PER_VIOLATION]
         aggregated.append({
@@ -515,7 +517,29 @@ def _aggregate_violations(
             "count": int(first.value) if pattern in _MISSING_PATTERNS else len(items),
             "examples": examples,
         })
+    aggregated += _remainder_entries(col_idx, ranked[_MAX_PATTERNS_PER_COLUMN:], len(aggregated))
     return aggregated, row_indices
+
+
+def _remainder_entries(col_idx: int, tail: list, offset: int) -> list[dict]:
+    """Folds the long tail of one-off patterns into a single entry per violation kind. A
+    cross-column pattern names the key that implies the value, so a column can carry as many
+    distinct patterns as it has keys; sending every one of them to the model would bury the
+    frequent, fixable cases and leave a coverage obligation per stray row."""
+    by_kind: dict[str, list] = defaultdict(list)
+    for pattern, items in tail:
+        by_kind[_classify_violation(pattern)].extend(items)
+    entries = []
+    for index, (kind, items) in enumerate(sorted(by_kind.items())):
+        examples = list({str(it.value) for it in items if it.row_index >= 0})[:_EXAMPLES_PER_VIOLATION]
+        entries.append({
+            "id": f"c{col_idx}_v{offset + index + 1}",
+            "type": kind,
+            "expected_pattern": f"{len(items)} further {kind} violations across scattered patterns",
+            "count": len(items),
+            "examples": examples,
+        })
+    return entries
 
 
 _MISSING_PATTERNS = {"not nullable", "missing value"}

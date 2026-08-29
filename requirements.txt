@@ -19,3 +19,4 @@ kaleido
 e2b-code-interpreter>=2.4,<3.0
 python-dotenv>=1.0
 fpdf2>=2.7
+pytest>=8.0
