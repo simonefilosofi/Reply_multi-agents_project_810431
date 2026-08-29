@@ -55,6 +55,9 @@ class PipelineState(BaseModel):
     # completeness analysis (per column, per row, dataset-wide, sparse columns)
     completeness: dict = Field(default_factory=dict)
 
+    # reliability scores for the run, so the GUI and the notebook need not reopen the PDF
+    reliability: dict = Field(default_factory=dict)
+
     # quality snapshots keyed by measurement point (raw, detected, final)
     quality_snapshots: dict[str, dict] = Field(default_factory=dict)
 

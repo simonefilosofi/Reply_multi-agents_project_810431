@@ -58,7 +58,15 @@ def report_generator_node(state: PipelineState) -> PipelineState:
     )
     pdf = _render_pdf(state, result, quality)
     pdf.output(str(out))
-    return state.model_copy(update={"quality_snapshots": quality["snapshots"]})
+    return state.model_copy(update={
+        "quality_snapshots": quality["snapshots"],
+        "reliability": {
+            "as_delivered": quality["as_delivered"],
+            "like_for_like": quality["like_for_like"],
+            "dimensions_compared": quality["dimensions_compared"],
+            "dimensions_excluded": quality["dimensions_excluded"],
+        },
+    })
 
 
 # ── payload ───────────────────────────────────────────────────────────────────
@@ -104,6 +112,8 @@ def _residual_duplicates(state: PipelineState) -> list[ValidationReport]:
                 column_name=key,
                 row_index=-1,
                 value=stats["keys_with_conflicting_data"],
+                kind="uniqueness",
+                affected_rows=stats["keys_with_conflicting_data"],
                 expected_pattern=f"duplicate records: {stats['keys_with_conflicting_data']} keys still collide",
             )],
         )
@@ -122,6 +132,8 @@ def _residual_completeness(state: PipelineState) -> list[ValidationReport]:
                 row_index=-1,
                 value=stats["nulls"],
                 expected_pattern="missing value",
+                kind="completeness",
+                affected_rows=stats["nulls"],
             )],
         )
         for column, stats in report["by_column"].items()
@@ -145,6 +157,7 @@ def _quality_section(state: PipelineState, residual: list[ValidationReport]) -> 
             conventions,
             checked_cells=checked_cells_by_column(state.dataset, state.inferred_format_specs),
             duplicate_analysis=duplicate_row_analysis(state.dataset),
+            declared_dtypes={p.column_name: p.dtype for p in state.payload if p.dtype},
         )
         if state.dataset is not None
         else {}

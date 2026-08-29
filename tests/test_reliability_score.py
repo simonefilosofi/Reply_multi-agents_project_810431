@@ -6,6 +6,7 @@ import pytest
 
 import tools.reliability_score as rs
 from models import FormatViolation, GlobalConventions, ValidationReport
+from tools.reliability_score import classify_violation
 
 
 def _report(column: str, pattern: str, value=None, row_index: int = -1) -> ValidationReport:
@@ -13,6 +14,8 @@ def _report(column: str, pattern: str, value=None, row_index: int = -1) -> Valid
         column_name=column,
         violations=[FormatViolation(
             column_name=column, row_index=row_index, value=value, expected_pattern=pattern,
+            kind=classify_violation(pattern),
+            affected_rows=int(value) if isinstance(value, int) else 1,
         )],
     )
 

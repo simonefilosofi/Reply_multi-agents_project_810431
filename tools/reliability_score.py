@@ -22,6 +22,9 @@ DIMENSION_WEIGHTS: dict[str, float] = {dimension: 1.0 for dimension in DIMENSION
 
 
 def classify_violation(pattern) -> str:
+    """Derives the kind from a message. Producers now declare `kind` directly; this remains the
+    documented inverse, used to build reports by hand and to read anything written before the
+    field existed."""
     text = str(pattern or "")
     if text in _COMPLETENESS_PATTERNS:
         return "completeness"
@@ -38,11 +41,9 @@ def violation_counts(reports) -> dict[str, int]:
     counts = {"format": 0, "completeness": 0, "schema": 0, "consistency": 0, "uniqueness": 0}
     for report in reports:
         for violation in report.violations:
-            kind = classify_violation(violation.expected_pattern)
-            if kind == "completeness":
-                counts[kind] += int(violation.value) if str(violation.value).isdigit() else 1
-            else:
-                counts[kind] += 1
+            counts[violation.kind] += (
+                violation.affected_rows if violation.kind == "completeness" else 1
+            )
     return counts
 
 
@@ -52,7 +53,7 @@ def inconsistent_rows(reports) -> int:
         for report in reports
         for violation in report.violations
         if violation.row_index >= 0
-        and classify_violation(violation.expected_pattern) == "consistency"
+        and violation.kind == "consistency"
     })
 
 
@@ -80,19 +81,19 @@ def inconsistent_rows_by_column(reports) -> dict[str, int]:
     rows: dict[str, set[int]] = defaultdict(set)
     for report in reports:
         for violation in report.violations:
-            if violation.row_index >= 0 and classify_violation(
-                violation.expected_pattern
-            ) == "consistency":
+            if violation.row_index >= 0 and violation.kind == "consistency":
                 rows[report.column_name].add(violation.row_index)
     return {column: len(indices) for column, indices in rows.items()}
 
 
 def structural_defects(
-    df: pd.DataFrame, conventions: GlobalConventions | None
+    df: pd.DataFrame,
+    conventions: GlobalConventions | None,
+    declared_dtypes: dict[str, str] | None = None,
 ) -> dict[str, list[str]]:
     """Column-level faults that no row-level metric can see: a name that breaks the convention,
-    a column empty enough to carry no information, and a column whose values merely repeat
-    another's. These are what makes a delivered file structurally unusable, and counting them is
+    a column empty enough to carry no information, a column still holding the wrong type, and a
+    column whose values merely repeat another's. These are what makes a delivered file structurally unusable, and counting them is
     what stops the score from resting on row-level dimensions that sit near 1.0 by construction."""
     defects: dict[str, list[str]] = {}
     seen: dict[str, str] = {}
@@ -104,6 +105,9 @@ def structural_defects(
             found.append("naming")
         if rows and float(df[column].isna().mean()) >= _SPARSE_NULL_RATE:
             found.append("sparse")
+        declared = (declared_dtypes or {}).get(name)
+        if declared and declared != str(df[column].dtype):
+            found.append("untyped")
         fingerprint = _fingerprint(df[column])
         if fingerprint in seen:
             found.append("redundant")
@@ -119,6 +123,7 @@ def compute_metrics(
     validation_reports: list[ValidationReport] | None = None,
     conventions: GlobalConventions | None = None,
     checked_cells: dict[str, int] | None = None,
+    declared_dtypes: dict[str, str] | None = None,
     duplicate_analysis: dict | None = None,
 ) -> dict:
     rows = int(len(df))
@@ -139,7 +144,7 @@ def compute_metrics(
         "checked_cells_by_column": checked_cells or {},
         "completeness": _ratio(cells - null_cells, cells),
         "uniqueness": _ratio(rows - duplicate_rows - rows_in_key_conflict, rows),
-        "schema_conformity": _schema_conformity(df, conventions),
+        "schema_conformity": _schema_conformity(df, conventions, declared_dtypes),
         "structural_defects": defects,
         "columns_with_structural_defects": len(defects),
         "columns_badly_named": sum(1 for d in defects.values() if "naming" in d),
@@ -197,10 +202,14 @@ def _rows_in_key_conflict(duplicate_analysis: dict | None) -> int:
     )
 
 
-def _schema_conformity(df: pd.DataFrame, conventions: GlobalConventions | None) -> float | None:
+def _schema_conformity(
+    df: pd.DataFrame,
+    conventions: GlobalConventions | None,
+    declared_dtypes: dict[str, str] | None = None,
+) -> float | None:
     if df.columns.empty:
         return None
-    intact = len(df.columns) - len(structural_defects(df, conventions))
+    intact = len(df.columns) - len(structural_defects(df, conventions, declared_dtypes))
     return _ratio(intact, len(df.columns))
 
 
