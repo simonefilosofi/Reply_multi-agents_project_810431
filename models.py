@@ -101,12 +101,6 @@ class DuplicateResolution(BaseModel):
     values_lost: dict[str, list] = Field(default_factory=dict)
 
 
-class ColumnClassification(BaseModel):
-    column_name: str
-    normalized_name: str
-    description: str
-
-
 class FormatViolation(BaseModel):
     column_name: str
     row_index: int
