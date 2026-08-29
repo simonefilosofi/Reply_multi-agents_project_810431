@@ -1,4 +1,4 @@
-"""Applies the FixProposals approved at the human gate to the pipeline dataset via the local executor, then deterministically collapses any values left differing only by casing or whitespace and re-applies the dtype proposed by the Semantic agent. Those two passes are automatic cleaning, not remediation: they run whether or not any fix was approved, since remediation may have removed exactly the values that blocked a cast upstream, recording which fix ids landed and surfacing executor failures on state.errors. Implements the Apply step between the Unified Remediation agent and the final duplicate-row pass."""
+"""Applies the FixProposals approved at the human gate to the pipeline dataset via the local executor, keeps the payload and the inferred specs aligned with any column a fix renamed or dropped, then deterministically collapses any values left differing only by casing or whitespace and re-applies the dtype proposed by the Semantic agent. Those two passes are automatic cleaning, not remediation: they run whether or not any fix was approved, since remediation may have removed exactly the values that blocked a cast upstream, recording which fix ids landed and surfacing executor failures on state.errors. Implements the Apply step between the Unified Remediation agent and the final duplicate-row pass."""
 from __future__ import annotations
 
 import pandas as pd
@@ -41,6 +41,13 @@ def apply_fixes_node(state: PipelineState) -> PipelineState:
         for s in statuses
         if s["status"] in ("error", "rejected")
     ]
+    renames = {
+        operation.column: operation.new_name
+        for proposal in approved
+        if proposal.id in {status["id"] for status in statuses if status["status"] == "applied"}
+        for operation in proposal.operations
+        if operation.kind == "rename_column" and operation.new_name
+    }
     change_log = state.change_log + [
         change
         for status in statuses
@@ -48,6 +55,9 @@ def apply_fixes_node(state: PipelineState) -> PipelineState:
     ] + casing_changes + cast_changes
     return state.model_copy(update={
         "dataset": cleaned,
+        "payload": _realign_payload(state.payload, cleaned.columns, renames),
+        "surviving_columns": list(cleaned.columns),
+        "inferred_format_specs": _realign_specs(state.inferred_format_specs, cleaned.columns, renames),
         "change_log": change_log,
         "applied_fix_ids": [s["id"] for s in statuses if s["status"] == "applied"],
         "errors": state.errors + failures,
@@ -79,3 +89,28 @@ def _enum_spec(state: PipelineState, column: str) -> FormatSpec | None:
     if not spec or spec.get("type") != "enum":
         return None
     return EnumFormat(**spec)
+
+
+def _realign_payload(payload, columns, renames: dict[str, str]):
+    present = set(columns)
+    realigned = []
+    for entry in payload:
+        name = renames.get(entry.column_name, entry.column_name)
+        if name not in present:
+            continue
+        realigned.append(entry.model_copy(update={
+            "column_name": name,
+            "related_columns": [
+                renames.get(c, c) for c in entry.related_columns if renames.get(c, c) in present
+            ],
+        }))
+    return realigned
+
+
+def _realign_specs(specs: dict, columns, renames: dict[str, str]) -> dict:
+    present = set(columns)
+    return {
+        renames.get(column, column): spec
+        for column, spec in specs.items()
+        if renames.get(column, column) in present
+    }

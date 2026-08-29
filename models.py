@@ -130,6 +130,7 @@ OperationKind = Literal[
     "cast_dtype",
     "impute_from_lookup",
     "drop_column",
+    "rename_column",
     "drop_duplicate_rows",
 ]
 
@@ -145,6 +146,7 @@ class Operation(BaseModel):
     mapping: list[ValueMapping] = Field(default_factory=list)
     digits: int = 2
     dtype: str = ""
+    new_name: str = ""
     subset: list[str] = Field(default_factory=list)
 
 

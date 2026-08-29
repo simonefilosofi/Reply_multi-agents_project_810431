@@ -20,6 +20,7 @@ from state import PipelineState
 from tools.baseline_accessors import find_spec_by_hint
 from tools.match_canonical import compact_format_summary
 from tools.operations import describe_operation
+from tools.schema_proposals import schema_proposals
 from tools.fix_invariants import removable_values
 from tools.trial_execute import trial_execute
 from utils.prompts import load_prompt
@@ -43,7 +44,10 @@ def unified_node(state: PipelineState) -> PipelineState:
 
     actionable = [g for g in groups if any(reports_by_name.get(c, _empty_report(c)).violations for c in g)]
     if not actionable:
-        return state.model_copy(update={"proposed_fixes": [], "fix_groups": {}})
+        return state.model_copy(update={
+            "proposed_fixes": schema_proposals(state.validation_reports, list(state.dataset.columns)),
+            "fix_groups": {},
+        })
 
     anomalies_by_column = {
         r.column_name: {
@@ -68,8 +72,26 @@ def unified_node(state: PipelineState) -> PipelineState:
             anomalies=anomalies_by_column,
         ))
 
-    deduped = dedupe_proposals(all_proposals)
-    return state.model_copy(update={"proposed_fixes": deduped, "fix_groups": fix_groups})
+    schema = schema_proposals(state.validation_reports, list(state.dataset.columns))
+    deduped = _drop_redundant_schema_fixes(dedupe_proposals(all_proposals), schema)
+    return state.model_copy(update={
+        "proposed_fixes": schema + deduped,
+        "fix_groups": fix_groups,
+    })
+
+
+def _drop_redundant_schema_fixes(
+    proposals: list[FixProposal], schema: list[FixProposal]
+) -> list[FixProposal]:
+    covered = {
+        (operation.kind, operation.column)
+        for proposal in schema
+        for operation in proposal.operations
+    }
+    return [
+        proposal for proposal in proposals
+        if not any((o.kind, o.column) in covered for o in proposal.operations)
+    ]
 
 
 def dedupe_proposals(proposals: list[FixProposal]) -> list[FixProposal]:

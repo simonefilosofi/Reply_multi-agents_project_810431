@@ -33,6 +33,10 @@ def apply_operation(
         return df
     if operation.kind == "drop_column":
         return df.drop(columns=[operation.column])
+    if operation.kind == "rename_column":
+        if not operation.new_name or operation.new_name in df.columns:
+            return df
+        return df.rename(columns={operation.column: operation.new_name})
 
     df[operation.column] = _transform(df[operation.column], operation, imputation_hints or {}, df)
     return df
@@ -50,6 +54,8 @@ def describe_operation(operation: Operation) -> str:
         return f"cast_dtype on {operation.column} to {operation.dtype}"
     if operation.kind == "drop_duplicate_rows":
         return f"drop_duplicate_rows on {operation.subset or 'all columns'}"
+    if operation.kind == "rename_column":
+        return f"rename_column {operation.column} to {operation.new_name}"
     return f"{operation.kind} on {operation.column}"
 
 
