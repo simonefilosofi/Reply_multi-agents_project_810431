@@ -1,4 +1,4 @@
-"""Parses a numeric column written with human notation - currency symbols or codes, thousands separators, an Italian decimal comma - into plain numbers. Mirrors normalize_date_format: it changes representation, never magnitude, and is applied before any numeric cast so that a value written as an amount is not treated as uncastable."""
+"""Parses a numeric column written with human notation - currency symbols or codes, thousands separators, an Italian decimal comma, a trailing unit of measure spelled out after the figure - into plain numbers. Mirrors normalize_date_format: it changes representation, never magnitude, and is applied before any numeric cast so that a value written as an amount is not treated as uncastable."""
 from __future__ import annotations
 
 import re
@@ -6,6 +6,7 @@ import re
 import pandas as pd
 
 _CURRENCY = re.compile(r"(?:^\s*[€$£]\s*)|(?:\s*(?:eur|euro|usd)\s*$)", re.IGNORECASE)
+_UNIT_SUFFIX = re.compile(r"^(-?[\d.,]+)\s+[A-Za-zÀ-ÿ]+\.?$")
 _DECIMAL_COMMA = re.compile(r"^-?\d+,\d+$")
 _THOUSANDS_DOT = re.compile(r"^-?\d{1,3}(?:\.\d{3})+(?:,\d+)?$")
 _THOUSANDS_COMMA = re.compile(r"^-?\d{1,3}(?:,\d{3})+(?:\.\d+)?$")
@@ -21,6 +22,9 @@ def _normalize(value):
     if not isinstance(value, str):
         return value
     text = _CURRENCY.sub("", value.strip()).strip()
+    unit = _UNIT_SUFFIX.match(text)
+    if unit:
+        text = unit.group(1)
     if not text:
         return value
     if _THOUSANDS_DOT.match(text):

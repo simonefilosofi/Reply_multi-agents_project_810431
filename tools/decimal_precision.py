@@ -10,7 +10,10 @@ _TOTAL_TOLERANCE = 1e-9
 
 def recorded_precision(series: pd.Series) -> int | None:
     """The smallest number of decimals that already covers most of the column, when the values
-    above it are far enough away to be noise rather than finer measurements."""
+    above it are far enough away to be noise rather than finer measurements. Returns 0 for a
+    column of whole numbers, and None when the spread of decimals suggests a genuine
+    measurement rather than representation noise. Callers that round should check that there is
+    something to round."""
     numeric = pd.to_numeric(series, errors="coerce").dropna()
     if numeric.empty:
         return None
@@ -22,7 +25,7 @@ def recorded_precision(series: pd.Series) -> int | None:
             continue
         if _has_intermediate_values(decimals, precision):
             return None
-        return precision if covered < 1.0 else None
+        return precision
     return None
 
 

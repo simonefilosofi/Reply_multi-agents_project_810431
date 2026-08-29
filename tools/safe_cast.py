@@ -1,9 +1,10 @@
-"""Casts a column to a target dtype only when no non-null value would be lost, normalising human numeric and date notation first so that a value written as an amount or a local-format date is not mistaken for uncastable, reporting the row indices that block the cast instead of coercing them to NaN. Backs the non-destructive dtype enforcement performed by the NaN handler."""
+"""Casts a column to a target dtype only when no non-null value would be lost, promoting a float declaration to an integer one when the values carry no decimal part, and normalising human numeric and date notation first so that a value written as an amount or a local-format date is not mistaken for uncastable, reporting the row indices that block the cast instead of coercing them to NaN. Backs the non-destructive dtype enforcement performed by the NaN handler."""
 from __future__ import annotations
 
 import pandas as pd
 
 from tools.normalize_date_format import normalize_date_format
+from tools.decimal_precision import recorded_precision
 from tools.normalize_numeric_format import normalize_numeric_format
 
 _DATE_TOKENS = ("date", "time")
@@ -11,7 +12,7 @@ _FLOAT_TOKENS = ("float", "double", "decimal")
 
 
 def safe_cast(series: pd.Series, dtype: str) -> tuple[pd.Series, list[int]]:
-    target = dtype.lower()
+    target = _refine(series, dtype.lower())
     converted = _convert(series, target)
     if converted is None:
         return series, []
@@ -20,6 +21,14 @@ def safe_cast(series: pd.Series, dtype: str) -> tuple[pd.Series, list[int]]:
     if lost.any():
         return series, [int(i) for i in series.index[lost]]
     return converted, []
+
+
+def _refine(series: pd.Series, target: str) -> str:
+    """A count declared as a float comes back as 40.0 for every row. When the values carry no
+    decimal part at all, the column is an integer whatever the declared type says."""
+    if not any(token in target for token in _FLOAT_TOKENS):
+        return target
+    return "int64" if recorded_precision(series) == 0 else target
 
 
 def _convert(series: pd.Series, target: str) -> pd.Series | None:

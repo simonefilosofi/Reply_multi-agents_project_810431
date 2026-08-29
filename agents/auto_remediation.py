@@ -54,6 +54,8 @@ def auto_remediation_node(state: PipelineState) -> PipelineState:
         precision = recorded_precision(df[column])
         if precision is None or not rounds_cleanly(df[column], precision):
             continue
+        if not _has_excess_decimals(df[column], precision):
+            continue
         changed = _apply(df, Operation(kind="round_decimals", column=str(column), digits=precision))
         if changed:
             applied.append({
@@ -180,3 +182,8 @@ def _complete_period(df: pd.DataFrame, period: str) -> int:
         return 0
     df[period] = df[period].where(~recovered, completed[period])
     return int(recovered.sum())
+
+
+def _has_excess_decimals(series: pd.Series, precision: int) -> bool:
+    numeric = pd.to_numeric(series, errors="coerce").dropna()
+    return bool((numeric != numeric.round(precision)).any())
