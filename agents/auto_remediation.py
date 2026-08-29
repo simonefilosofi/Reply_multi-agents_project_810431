@@ -1,4 +1,4 @@
-"""Applies the corrections that the data itself determines, before any proposal reaches the human gate. Two kinds qualify: rewriting a value expressed in an alternative but unambiguous layout, and filling a gap from a mined functional dependency of near-perfect purity. The lookup only carries keys that map to a single observed value, so a body renamed halfway through the year is skipped on its own rows rather than disqualifying the whole column. Both are deductions rather than judgement calls, so withholding them behind an approval adds no safety and only leaves the dataset incomplete. Anything that requires choosing what a value ought to be stays with the Unified Remediation agent. Implements the Auto Remediation agent node."""
+"""Applies the corrections that the data itself determines, before any proposal reaches the human gate. Three kinds qualify: rewriting a value expressed in an alternative but unambiguous layout, restoring a value that its own key states directly - the year and month of an accounting period - and filling a gap from a mined functional dependency of near-perfect purity. The lookup only carries keys that map to a single observed value, so a body renamed halfway through the year is skipped on its own rows rather than disqualifying the whole column. Both are deductions rather than judgement calls, so withholding them behind an approval adds no safety and only leaves the dataset incomplete. Anything that requires choosing what a value ought to be stays with the Unified Remediation agent. Implements the Auto Remediation agent node."""
 from __future__ import annotations
 
 import pandas as pd
@@ -6,6 +6,7 @@ import pandas as pd
 from models import ImputationHint, Operation, ValidationReport
 from state import PipelineState
 from tools.change_log import diff_cells
+from tools.derive_from_period import derivable_columns, derive
 from tools.operations import apply_operation
 
 _AUTO_IMPUTE_PURITY = 0.99
@@ -27,6 +28,23 @@ def auto_remediation_node(state: PipelineState) -> PipelineState:
                 "operation": "normalize_period",
                 "cells_changed": rewritten,
                 "rationale": "alternative period layouts rewritten to the canonical YYYYMM form",
+            })
+
+    for period in _period_columns(state):
+        for column, part in derivable_columns(df, period).items():
+            corrected = derive(df, period, column, part)
+            changed = int((df[column].astype(str) != corrected.astype(str)).sum())
+            if not changed:
+                continue
+            df[column] = corrected
+            applied.append({
+                "column": column,
+                "operation": f"derive_{part}_from_period",
+                "cells_changed": changed,
+                "rationale": (
+                    f"{column} holds the {part} of {period}, which states it directly; "
+                    f"rows contradicting their own period were corrected"
+                ),
             })
 
     hints = _certain_hints(state)
