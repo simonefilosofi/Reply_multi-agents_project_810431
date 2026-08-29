@@ -28,6 +28,10 @@ You are a data quality analyst. You receive a structured JSON summary of a data 
 - `quality`: `snapshots` measured at three points (`raw`, `detected`, `final`),
   `reliability_before` and `reliability_after` with their components, and
   `hidden_defects_unmasked`
+- `auto_remediations`: corrections the pipeline applied without asking, because the data
+  itself determines the value through a functional dependency of near-perfect purity. Report
+  them separately from the proposals: they were deduced, not chosen, and the reader should
+  see how many cells each one filled and how many remain missing.
 - `changes_summary`: how many cells the pipeline actually changed, broken down by column and
   by the proposal that produced each change. State the total explicitly in `actions_taken`.
 - `surviving_columns`, `errors`

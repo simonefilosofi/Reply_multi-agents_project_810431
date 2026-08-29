@@ -14,6 +14,7 @@ from models import DateFormat, EnumFormat, FormatViolation, RangeFormat, RegexFo
 from state import PipelineState
 from tools.completeness import completeness_report
 from tools.cross_column_checks import candidate_predictors, cross_column_reports
+from tools.temporal_stability import time_column
 from tools.duplicate_rows import duplicate_row_analysis
 from tools.reliability_score import compute_metrics, reliability_score, violation_counts
 from tools.validate_format import validate_format
@@ -75,7 +76,9 @@ def _residual_reports(state: PipelineState) -> list[ValidationReport]:
     reports.extend(_residual_completeness(state))
     reports.extend(_residual_duplicates(state))
     reports.extend(cross_column_reports(
-        state.dataset, candidate_predictors(state.payload, set(state.dataset.columns), state.dataset)
+        state.dataset,
+        candidate_predictors(state.payload, set(state.dataset.columns), state.dataset),
+        clock=time_column(state.dataset, state.inferred_format_specs),
     ))
     return reports
 
@@ -260,6 +263,7 @@ def _build_payload(state: PipelineState, residual: list[ValidationReport], quali
             for r in state.duplicate_resolutions
         ],
         "duplicate_rows": state.duplicate_rows,
+        "auto_remediations": state.auto_remediations,
         "changes_summary": _changes_summary(state.change_log),
         "format_violations_detected": [
             {"column_name": r.column_name, "violation_count": _violation_count(r)}
