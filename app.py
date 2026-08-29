@@ -99,7 +99,7 @@ st.json(nan_diff)
 nullability_issues = [
     {"column": r.column_name, "violations": [v.model_dump() for v in r.violations]}
     for r in state.validation_reports
-    if any(v.expected_pattern == "not nullable" for v in r.violations)
+    if any(v.kind == "completeness" and v.expected_pattern == "not nullable" for v in r.violations)
 ]
 if nullability_issues:
     st.subheader("Nullability issues — non-nullable columns with NaN")
@@ -126,7 +126,7 @@ st.dataframe(state.dataset.head(20))
 format_violations_by_col = {
     r.column_name: sum(
         1 for v in r.violations
-        if v.expected_pattern not in (None, "not nullable", "missing value")
+        if v.kind == "format"
     )
     for r in state.validation_reports
 }
@@ -383,6 +383,42 @@ if final_state is not None and final_state.dataset is not None:
             reported = report_generator_node(duplicate_row_node(final_state))
         st.session_state.pipeline_state = reported
         st.success(f"Report written next to {reported.dataset_path or 'the dataset'}")
+
+    if final_state.reliability:
+        delivered = final_state.reliability["as_delivered"]
+        like_for_like = final_state.reliability["like_for_like"]
+        st.subheader("Reliability score")
+        st.caption(
+            "As delivered compares the file received with the file produced. Like for like "
+            "compares the same columns before and after remediation, over every dimension "
+            "measurable on both. Anomalies are reported but deliberately not scored: an "
+            "outlier is not necessarily an error."
+        )
+        scores = st.columns(2)
+        scores[0].metric(
+            "As delivered",
+            f"{delivered['after']['score']:.4f}",
+            delta=f"{delivered['after']['score'] - delivered['before']['score']:+.4f}",
+        )
+        if like_for_like:
+            scores[1].metric(
+                "Like for like",
+                f"{like_for_like['after']['score']:.4f}",
+                delta=f"{like_for_like['after']['score'] - like_for_like['before']['score']:+.4f}",
+            )
+        table = pd.DataFrame([
+            {
+                "dimension": dimension,
+                "before": delivered["before"]["components"].get(dimension),
+                "after": delivered["after"]["components"].get(dimension),
+                "weight": delivered["after"]["weights"].get(dimension),
+            }
+            for dimension in final_state.reliability["dimensions_compared"]
+        ])
+        st.dataframe(table, use_container_width=True, hide_index=True)
+        excluded = final_state.reliability["dimensions_excluded"]
+        if excluded:
+            st.caption(f"Not comparable as delivered, so excluded from that score: {', '.join(excluded)}.")
 
     if final_state.change_log:
         st.subheader("What changed, cell by cell")
