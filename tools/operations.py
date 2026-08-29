@@ -7,6 +7,7 @@ from models import Operation
 from tools.apply_casing import collapse_casing_variants
 from tools.normalize_date_format import normalize_date_format
 from tools.normalize_numeric_format import normalize_numeric_format
+from tools.normalize_period_format import normalize_period_format
 from tools.safe_cast import safe_cast
 
 
@@ -62,6 +63,8 @@ def _transform(
         return normalize_numeric_format(series)
     if operation.kind == "normalize_date":
         return normalize_date_format(series)
+    if operation.kind == "normalize_period":
+        return normalize_period_format(series)
     if operation.kind == "strip_whitespace":
         return series.astype("string").str.strip() if _is_text(series) else series
     if operation.kind == "collapse_casing":

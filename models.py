@@ -123,6 +123,7 @@ OperationKind = Literal[
     "replace_values",
     "normalize_numeric",
     "normalize_date",
+    "normalize_period",
     "strip_whitespace",
     "collapse_casing",
     "round_decimals",
@@ -179,6 +180,7 @@ class ImputationHint(BaseModel):
     purity: float
     coverage: float
     confidence: Literal["strict", "dominant"]
+    temporally_stable: bool = True
     rationale: str = ""
 
 

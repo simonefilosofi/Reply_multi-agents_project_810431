@@ -46,6 +46,9 @@ class PipelineState(BaseModel):
     approved_fix_ids: list[str] = Field(default_factory=list)
     applied_fix_ids: list[str] = Field(default_factory=list)
 
+    # corrections applied automatically because the data determines them
+    auto_remediations: list[dict] = Field(default_factory=list)
+
     # cell-level audit trail of every applied change
     change_log: list[dict] = Field(default_factory=list)
 
