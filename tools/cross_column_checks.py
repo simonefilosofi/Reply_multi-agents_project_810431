@@ -12,6 +12,8 @@ _MIN_PURITY = 0.9
 _MIN_GROUPS = 3
 _MIN_ROWS_PER_GROUP = 2
 _MAX_PREDICTOR_CARDINALITY = 0.2
+_TIMESTAMP_TEXT = r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}"
+_TEMPORAL_SHARE = 0.9
 
 
 def cross_column_reports(
@@ -52,12 +54,24 @@ def _one_per_row(violations: list[FormatViolation]) -> list[FormatViolation]:
 
 
 def _usable_column(series: pd.Series) -> bool:
-    if pd.api.types.is_datetime64_any_dtype(series):
+    if _is_temporal(series):
         return False
     populated = int(series.notna().sum())
     if not populated:
         return False
     return series.nunique(dropna=True) / populated <= _MAX_PREDICTOR_CARDINALITY
+
+
+def _is_temporal(series: pd.Series) -> bool:
+    """A timestamp is set by the ingestion process, never implied by another field. The dtype
+    alone is not enough to recognise one: the same column read back from a CSV arrives as text,
+    and would then be compared against every other column as if it were a category."""
+    if pd.api.types.is_datetime64_any_dtype(series):
+        return True
+    values = series.dropna()
+    if values.empty or not pd.api.types.is_object_dtype(values):
+        return False
+    return bool(values.astype(str).str.match(_TIMESTAMP_TEXT).mean() >= _TEMPORAL_SHARE)
 
 
 def _check_dependency(
