@@ -17,6 +17,7 @@ from agents.nan_handler import nan_handler_node
 from agents.profiler import profiler_node
 from agents.semantic import semantic_node
 from agents.apply_fixes import apply_fixes_node
+from agents.auto_remediation import auto_remediation_node
 from agents.duplicate_row import duplicate_row_node
 from agents.report_generator import report_generator_node
 from agents.unified import propose_for_group, unified_node
@@ -59,6 +60,8 @@ if st.button("Run pipeline"):
     snapshots["nan_post_dup"] = state.dataset.isna().sum().to_dict()
     with st.spinner("Format Consistency..."):
         state = format_consistency_node(state)
+    with st.spinner("Auto-remediation..."):
+        state = auto_remediation_node(state)
     with st.spinner("Anomaly Detector..."):
         state = anomaly_detector_node(state)
     with st.spinner("Unified Remediation..."):
@@ -144,6 +147,15 @@ if inference_rows:
         "missing = NaN count surfaced as a violation for the unified agent to impute."
     )
     st.dataframe(inference_rows, use_container_width=True)
+
+if state.auto_remediations:
+    st.subheader("Corrections applied automatically")
+    st.caption(
+        "Values the data determines on its own, through a functional dependency of "
+        "near-perfect purity. They are deductions rather than judgement calls, so they are "
+        "applied before the approval gate and recorded in the change log."
+    )
+    st.dataframe(pd.DataFrame(state.auto_remediations), use_container_width=True, hide_index=True)
 
 st.subheader("Anomaly Detection")
 if not state.anomaly_reports:
