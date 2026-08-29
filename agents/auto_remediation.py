@@ -1,4 +1,4 @@
-"""Applies the corrections that the data itself determines, before any proposal reaches the human gate. Three kinds qualify: rewriting a value expressed in an alternative but unambiguous layout, restoring a value that its own key states directly - the year and month of an accounting period - and filling a gap from a mined functional dependency of near-perfect purity. The lookup only carries keys that map to a single observed value, so a body renamed halfway through the year is skipped on its own rows rather than disqualifying the whole column. Both are deductions rather than judgement calls, so withholding them behind an approval adds no safety and only leaves the dataset incomplete. Anything that requires choosing what a value ought to be stays with the Unified Remediation agent. Implements the Auto Remediation agent node."""
+"""Applies the corrections that the data itself determines, before any proposal reaches the human gate. Four kinds qualify: rewriting a value expressed in an alternative but unambiguous layout, dropping representation noise from a number recorded at a known precision, restoring a value that its own key states directly - the year and month of an accounting period - and filling a gap from a mined functional dependency of near-perfect purity. The lookup only carries keys that map to a single observed value, so a body renamed halfway through the year is skipped on its own rows rather than disqualifying the whole column. Both are deductions rather than judgement calls, so withholding them behind an approval adds no safety and only leaves the dataset incomplete. Anything that requires choosing what a value ought to be stays with the Unified Remediation agent. Implements the Auto Remediation agent node."""
 from __future__ import annotations
 
 import pandas as pd
@@ -6,6 +6,7 @@ import pandas as pd
 from models import ImputationHint, Operation, ValidationReport
 from state import PipelineState
 from tools.change_log import diff_cells
+from tools.decimal_precision import recorded_precision, rounds_cleanly
 from tools.derive_from_period import derivable_columns, derive
 from tools.operations import apply_operation
 
@@ -44,6 +45,22 @@ def auto_remediation_node(state: PipelineState) -> PipelineState:
                 "rationale": (
                     f"{column} holds the {part} of {period}, which states it directly; "
                     f"rows contradicting their own period were corrected"
+                ),
+            })
+
+    for column in df.columns:
+        precision = recorded_precision(df[column])
+        if precision is None or not rounds_cleanly(df[column], precision):
+            continue
+        changed = _apply(df, Operation(kind="round_decimals", column=str(column), digits=precision))
+        if changed:
+            applied.append({
+                "column": str(column),
+                "operation": "round_decimals",
+                "cells_changed": changed,
+                "rationale": (
+                    f"the column is recorded at {precision} decimals; the extra digits are "
+                    f"floating-point noise and rounding leaves the totals unchanged"
                 ),
             })
 
