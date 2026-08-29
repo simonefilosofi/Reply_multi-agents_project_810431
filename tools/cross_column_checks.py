@@ -111,3 +111,27 @@ def _low_cardinality_columns(df: pd.DataFrame, target: str) -> list[str]:
         if ratio <= _MAX_PREDICTOR_CARDINALITY:
             ranked.append((ratio, column))
     return [column for _, column in sorted(ranked)[:_MAX_FALLBACK_PREDICTORS]]
+
+
+def coherence_score(
+    df: pd.DataFrame, column: str, exclude: set[str]
+) -> tuple[float, str] | None:
+    """How well a column agrees with the column that best explains it: the share of rows
+    whose value matches the dominant value for their key, taken over the strongest usable
+    predictor. Averaging over every predictor would drown the signal among columns that
+    have no bearing on this one. Used to pick which of two duplicate columns carries the
+    correct data."""
+    if column not in df.columns or not _usable_column(df[column]):
+        return None
+    best: tuple[float, str] | None = None
+    for predictor in df.columns:
+        if predictor == column or predictor in exclude or not _usable_column(df[predictor]):
+            continue
+        usable = df[[predictor, column]].dropna()
+        if len(usable) < _MIN_ROWS_PER_GROUP * _MIN_GROUPS:
+            continue
+        dominant = usable.groupby(predictor)[column].agg(lambda v: v.value_counts().idxmax())
+        score = round(float((usable[column] == usable[predictor].map(dominant)).mean()), 4)
+        if best is None or score > best[0]:
+            best = (score, str(predictor))
+    return best

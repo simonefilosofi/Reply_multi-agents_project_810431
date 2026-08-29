@@ -1,4 +1,4 @@
-"""Detects exact and near-duplicate columns via pairwise similarity, fills gaps from sibling columns, and elects the canonical name for each group. Similarity is measured on the string form and again on the numeric form, so that columns differing only by zero-padding or storage type are still recognised as duplicates. Validation reports follow the columns: those of dropped members are discarded and the survivor's are renamed. The election is deterministic whenever exactly one group member already satisfies the baseline naming convention; the LLM is consulted only to break ties or when no member conforms, and its answer is normalised and validated before use."""
+"""Detects exact and near-duplicate columns via pairwise similarity, keeps the member that agrees best with the rest of the table - measured, not assumed - fills its gaps from the siblings, and elects the canonical name for each group. Similarity is measured on the string form and again on the numeric form, so that columns differing only by zero-padding or storage type are still recognised as duplicates. Validation reports follow the columns: those of dropped members are discarded and the survivor's are renamed. The election is deterministic whenever exactly one group member already satisfies the baseline naming convention; the LLM is consulted only to break ties or when no member conforms, and its answer is normalised and validated before use."""
 from __future__ import annotations
 
 import json
@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from models import DuplicateResolution, FormatViolation, ValidationReport
 from state import PipelineState
 from tools.change_log import diff_values_only
+from tools.cross_column_checks import coherence_score
 from tools.validate_column_names import is_conforming, normalize_column_name, uniquify
 from utils.prompts import load_prompt
 
@@ -48,9 +49,7 @@ def duplicate_column_node(state: PipelineState) -> PipelineState:
     resolutions: list[DuplicateResolution] = []
 
     for group in groups:
-        nan_counts = {c: new_df[c].isna().sum() for c in group}
-        min_nan = min(nan_counts.values())
-        data_survivor = next(c for c, n in nan_counts.items() if n == min_nan)
+        data_survivor, selection = _elect_data_survivor(new_df, group)
         election = _elect_canonical_name(
             group, chain, system, state.detected_domain, baseline_columns, conventions, taken
         )
@@ -79,7 +78,7 @@ def duplicate_column_node(state: PipelineState) -> PipelineState:
             group=group,
             data_survivor=data_survivor,
             canonical_name=election.canonical_name,
-            rationale=election.rationale,
+            rationale=f"{election.rationale} {selection}",
             dropped=[c for c in group if c != data_survivor],
             cells_backfilled=backfilled,
             cells_overwritten={k: v for k, v in overwritten.items() if v},
@@ -119,6 +118,38 @@ def duplicate_column_node(state: PipelineState) -> PipelineState:
         "validation_reports": new_reports,
         "duplicate_resolutions": resolutions,
     })
+
+
+def _elect_data_survivor(df: pd.DataFrame, group: list[str]) -> tuple[str, str]:
+    others = set(group)
+    measured = {c: s for c in group if (s := coherence_score(df, c, others)) is not None}
+    if measured:
+        best = max(score for score, _ in measured.values())
+        leaders = [c for c in group if c in measured and measured[c][0] == best]
+        if len(leaders) == 1:
+            winner = leaders[0]
+            score, predictor = measured[winner]
+            runners = ", ".join(
+                f"{c} {measured[c][0]:.2%}" for c in group if c in measured and c != winner
+            )
+            return winner, (
+                f"Kept {winner}: it matches the value implied by {predictor} on {score:.2%} "
+                f"of rows, against {runners}."
+            )
+    else:
+        leaders = list(group)
+
+    nan_counts = {c: int(df[c].isna().sum()) for c in leaders}
+    survivor = min(leaders, key=lambda c: nan_counts[c])
+    reason = (
+        "no other column explains this one well enough to compare them"
+        if not measured
+        else "the group members agree with the rest of the table equally well"
+    )
+    return survivor, (
+        f"Kept {survivor}: {reason}, so the column with the fewest missing values was "
+        f"taken ({nan_counts[survivor]})."
+    )
 
 
 def _elect_canonical_name(
