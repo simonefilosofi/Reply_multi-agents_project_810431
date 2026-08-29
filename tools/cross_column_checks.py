@@ -6,7 +6,7 @@ import pandas as pd
 from models import FormatViolation, ValidationReport
 from tools.temporal_stability import is_stable
 
-_MAX_FALLBACK_PREDICTORS = 5
+_MAX_FALLBACK_PREDICTORS = 8
 
 _MIN_PURITY = 0.9
 _MIN_GROUPS = 3
@@ -102,16 +102,20 @@ def candidate_predictors(payload, columns: set[str], df: pd.DataFrame) -> dict[s
 
 
 def _low_cardinality_columns(df: pd.DataFrame, target: str) -> list[str]:
+    target_ratio = _cardinality(df, target)
     ranked = []
     for column in df.columns:
-        populated = int(df[column].notna().sum())
-        if column == target or not populated:
+        ratio = _cardinality(df, column)
+        if column == target or ratio is None or ratio > _MAX_PREDICTOR_CARDINALITY:
             continue
-        ratio = df[column].nunique(dropna=True) / populated
-        if ratio <= _MAX_PREDICTOR_CARDINALITY:
-            ranked.append((ratio, column))
+        distance = abs(ratio - target_ratio) if target_ratio is not None else ratio
+        ranked.append((distance, column))
     return [column for _, column in sorted(ranked)[:_MAX_FALLBACK_PREDICTORS]]
 
+
+def _cardinality(df: pd.DataFrame, column: str) -> float | None:
+    populated = int(df[column].notna().sum())
+    return df[column].nunique(dropna=True) / populated if populated else None
 
 def coherence_score(
     df: pd.DataFrame, column: str, exclude: set[str]

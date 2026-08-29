@@ -1,4 +1,4 @@
-"""Applies the corrections that the data itself determines, before any proposal reaches the human gate. Two kinds qualify: rewriting a value expressed in an alternative but unambiguous layout, and filling a gap from a mined functional dependency that is both of near-perfect purity and stable over time - a body renamed halfway through the year keeps its code, so its dominant name is not the right value for every period. Both are deductions rather than judgement calls, so withholding them behind an approval adds no safety and only leaves the dataset incomplete. Anything that requires choosing what a value ought to be stays with the Unified Remediation agent. Implements the Auto Remediation agent node."""
+"""Applies the corrections that the data itself determines, before any proposal reaches the human gate. Two kinds qualify: rewriting a value expressed in an alternative but unambiguous layout, and filling a gap from a mined functional dependency of near-perfect purity. The lookup only carries keys that map to a single observed value, so a body renamed halfway through the year is skipped on its own rows rather than disqualifying the whole column. Both are deductions rather than judgement calls, so withholding them behind an approval adds no safety and only leaves the dataset incomplete. Anything that requires choosing what a value ought to be stays with the Unified Remediation agent. Implements the Auto Remediation agent node."""
 from __future__ import annotations
 
 import pandas as pd
@@ -71,9 +71,7 @@ def _certain_hints(state: PipelineState) -> dict[str, ImputationHint]:
     return {
         column: hint
         for column, hint in state.imputation_hints.items()
-        if hint.purity >= _AUTO_IMPUTE_PURITY
-        and hint.temporally_stable
-        and column in state.dataset.columns
+        if hint.purity >= _AUTO_IMPUTE_PURITY and column in state.dataset.columns
     }
 
 

@@ -1,4 +1,4 @@
-"""Validates column values against per-column FormatSpecs inferred from the actual sample (with baseline as a hint), flags violations without re-reporting rows an upstream node already flagged, asks an LLM to propose targeted per-value corrections, discarding wholesale deletion proposals when they cover so much of a column that the inferred spec is the unreliable party so the Unified Remediation agent can emit value-preserving replace fixes instead of generic imputations, deterministically mines functional dependencies between related columns to surface both cross-column consistency violations and NaN-imputation hints (lookup mappings) for the Unified agent. Merges new violations with reports already on state (e.g. nullability reports from the NaN handler)."""
+"""Validates column values against per-column FormatSpecs inferred from the actual sample (with baseline as a hint), flags violations without re-reporting rows an upstream node already flagged, asks an LLM to propose targeted per-value corrections, discarding wholesale deletion proposals when they cover so much of a column that the inferred spec is the unreliable party so the Unified Remediation agent can emit value-preserving replace fixes instead of generic imputations, deterministically mines functional dependencies to surface cross-column consistency violations and NaN-imputation hints. The hint search covers every column that actually has gaps, not only those an inferred spec happened to flag, so it does not depend on what the model chose to describe. Merges new violations with reports already on state (e.g. nullability reports from the NaN handler)."""
 from __future__ import annotations
 
 from collections import defaultdict
@@ -24,7 +24,7 @@ _MAX_UNIQUE_OFFENDERS = 100
 _EXTENDED_SAMPLE_SIZE = 150
 _MAX_DELETION_SHARE = 0.02
 _MAX_PREDICTOR_CARDINALITY = 0.2
-_MAX_FALLBACK_PREDICTORS = 5
+_MAX_FALLBACK_PREDICTORS = 8
 _MIN_FILL_RATE_FOR_IMPUTATION = 0.1
 
 
@@ -152,8 +152,8 @@ def _mine_imputation_hints(
     specs: dict | None = None,
 ) -> dict[str, ImputationHint]:
     nan_columns = {
-        c for c in _columns_with_nan_violations(reports)
-        if c in df.columns and df[c].notna().mean() > _MIN_FILL_RATE_FOR_IMPUTATION
+        str(c) for c in df.columns
+        if df[c].isna().any() and df[c].notna().mean() > _MIN_FILL_RATE_FOR_IMPUTATION
     }
     if not nan_columns:
         return {}
@@ -204,15 +204,20 @@ def _candidate_predictors(
 
 
 def _low_cardinality_columns(df: pd.DataFrame, target: str) -> list[str]:
+    target_ratio = _cardinality(df, target)
     ranked = []
     for column in df.columns:
-        if column == target or df[column].notna().sum() == 0:
+        ratio = _cardinality(df, column)
+        if column == target or ratio is None or ratio > _MAX_PREDICTOR_CARDINALITY:
             continue
-        ratio = df[column].nunique(dropna=True) / int(df[column].notna().sum())
-        if ratio <= _MAX_PREDICTOR_CARDINALITY:
-            ranked.append((ratio, column))
+        distance = abs(ratio - target_ratio) if target_ratio is not None else ratio
+        ranked.append((distance, column))
     return [column for _, column in sorted(ranked)[:_MAX_FALLBACK_PREDICTORS]]
 
+
+def _cardinality(df: pd.DataFrame, column: str) -> float | None:
+    populated = int(df[column].notna().sum())
+    return df[column].nunique(dropna=True) / populated if populated else None
 
 def _enforce_dtype_consistency(spec, source: str, payload: ColumnPayload, profiler_spec):
     dtype = (payload.dtype or "").lower()

@@ -1,4 +1,4 @@
-"""Deterministic functional-dependency miner used by the Format & Consistency agent to surface relational NaN-imputation hints. For each target column with at least one NaN, scans single and pair predictors drawn from the column's related-columns + canonical-hint-stem siblings, computes purity (share of rows whose target equals the dominant value for their predictor key, so that a single outlier does not disqualify an otherwise reliable dependency) and coverage (share of target NaNs the predictor can reach), and emits the strongest ImputationHint above the dominant threshold. Tries both a raw-key path (fast hash via pandas .map) and a normalized-key path (lowercase + strip) — picking whichever produces the better (purity, coverage) score, with raw favored on ties since it implies the data was already clean."""
+"""Deterministic functional-dependency miner used by the Format & Consistency agent to surface relational NaN-imputation hints. For each target column with at least one NaN, scans single and pair predictors drawn from the column's related-columns + canonical-hint-stem siblings, computes purity (share of rows whose target equals the dominant value for their predictor key, so that a single outlier does not disqualify an otherwise reliable dependency) and coverage (share of target NaNs the predictor can reach), and emits the strongest ImputationHint among those that clear both thresholds - a candidate is discarded for insufficient coverage before it can win the comparison, otherwise a predictor pure on a handful of rows would shut out one that actually reaches the gaps. The lookup it carries holds only the keys whose dominant value is decisive: a key whose value genuinely changes partway through the data - an entity renamed during the year - is left out, while a key contradicted by a handful of dirty rows is kept. Ambiguity costs those rows rather than the whole column. Tries both a raw-key path (fast hash via pandas .map) and a normalized-key path (lowercase + strip) — picking whichever produces the better (purity, coverage) score, with raw favored on ties since it implies the data was already clean."""
 from __future__ import annotations
 
 import pandas as pd
@@ -7,6 +7,7 @@ from models import ImputationHint
 
 
 _DOMINANT_THRESHOLD = 0.95
+_KEY_DOMINANCE = 0.95
 _COVERAGE_THRESHOLD = 0.5
 _PAIR_SEARCH_CAP = 8
 _PAIR_KEY_DELIMITER = "|"
@@ -35,25 +36,42 @@ def mine_functional_deps(
         if not candidates:
             continue
         best: tuple[ImputationHint, tuple[float, float, int]] | None = None
+
+        def consider(candidate: ImputationHint | None, path: str) -> None:
+            nonlocal best
+            if candidate is None or candidate.coverage < coverage_threshold:
+                return
+            best = _maybe_swap(best, candidate, path)
+
         for predictor in candidates:
             for path in ("raw", "normalized"):
-                hint = _try_single(df, target, predictor, path, nan_mask, n_nan, dominant_threshold)
-                best = _maybe_swap(best, hint, path)
+                consider(
+                    _try_single(df, target, predictor, path, nan_mask, n_nan, dominant_threshold),
+                    path,
+                )
         if len(candidates) <= pair_search_cap:
             for i in range(len(candidates)):
                 for j in range(i + 1, len(candidates)):
                     for path in ("raw", "normalized"):
-                        hint = _try_pair(
-                            df, target, candidates[i], candidates[j],
-                            path, nan_mask, n_nan, dominant_threshold,
+                        consider(
+                            _try_pair(
+                                df, target, candidates[i], candidates[j],
+                                path, nan_mask, n_nan, dominant_threshold,
+                            ),
+                            path,
                         )
-                        best = _maybe_swap(best, hint, path)
-        if best is None:
-            continue
-        hint, _ = best
-        if hint.coverage >= coverage_threshold and hint.purity >= dominant_threshold:
-            hints[target] = hint
+        if best is not None:
+            hints[target] = best[0]
     return hints
+
+
+def _unambiguous_mapping(grouped, dominant) -> dict:
+    share = grouped.apply(lambda values: values.value_counts().iloc[0] / len(values))
+    decisive = share >= _KEY_DOMINANCE
+    return {
+        str(key): _jsonable(value)
+        for key, value in dominant[decisive].items()
+    }
 
 
 def _maybe_swap(
@@ -89,7 +107,9 @@ def _try_single(
     purity = float((pair[target] == keys.map(dominant)).mean())
     if purity < dominant_threshold:
         return None
-    mapping = {str(k): _jsonable(v) for k, v in dominant.items()}
+    mapping = _unambiguous_mapping(grouped, dominant)
+    if not mapping:
+        return None
     pred_for_nans = _normalize(df.loc[nan_mask, predictor], path).astype(str)
     coverable = df.loc[nan_mask, predictor].notna() & pred_for_nans.isin(mapping.keys())
     coverage = float(coverable.sum() / n_nan) if n_nan else 0.0
