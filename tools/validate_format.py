@@ -64,3 +64,25 @@ def _in_range(value: object, lo: float | None, hi: float | None) -> bool:
     except (TypeError, ValueError):
         return False
     return (lo is None or x >= lo) and (hi is None or x <= hi)
+
+
+def spec_from_dict(spec: dict | None) -> FormatSpec | None:
+    """Rebuilds a FormatSpec from the serialised form held in state.inferred_format_specs."""
+    if not spec:
+        return None
+    by_type = {
+        "regex": RegexFormat,
+        "enum": EnumFormat,
+        "range": RangeFormat,
+        "date": DateFormat,
+    }
+    model = by_type.get(spec.get("type", ""))
+    return model(**spec) if model else None
+
+
+def specs_by_column(inferred: dict[str, dict]) -> dict[str, FormatSpec | None]:
+    """Maps every profiled column to its resolved FormatSpec, or None when none was settled on."""
+    return {
+        column: spec_from_dict((info or {}).get("final_spec"))
+        for column, info in inferred.items()
+    }

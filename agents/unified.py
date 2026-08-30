@@ -23,6 +23,7 @@ from tools.operations import describe_operation
 from tools.schema_proposals import schema_proposals
 from tools.fix_invariants import removable_values
 from tools.trial_execute import trial_execute
+from tools.validate_format import specs_by_column
 from utils.prompts import load_prompt
 
 
@@ -303,25 +304,7 @@ def _review_feedback_for(proposal: FixProposal, trial: dict, reviewer_feedback: 
 
 
 def _specs_by_col(inferred: dict[str, dict]) -> dict[str, FormatSpec | None]:
-    from models import DateFormat, EnumFormat, RangeFormat, RegexFormat
-    out: dict[str, FormatSpec | None] = {}
-    for col, info in inferred.items():
-        spec = info.get("final_spec")
-        if not spec:
-            out[col] = None
-            continue
-        kind = spec.get("type")
-        if kind == "regex":
-            out[col] = RegexFormat(**spec)
-        elif kind == "enum":
-            out[col] = EnumFormat(**spec)
-        elif kind == "range":
-            out[col] = RangeFormat(**spec)
-        elif kind == "date":
-            out[col] = DateFormat(**spec)
-        else:
-            out[col] = None
-    return out
+    return specs_by_column(inferred)
 
 
 def _build_groups(payload: list[ColumnPayload]) -> list[list[str]]:
