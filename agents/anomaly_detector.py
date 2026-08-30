@@ -1,4 +1,4 @@
-"""Detects numeric outliers (IQR method) and rare categorical values per column using pure pandas/numpy, then asks the LLM for a one-sentence explanatory comment per column. The method is chosen from what the column means rather than from its current dtype: identifiers and free-text columns are skipped, codes are never treated as magnitudes (a numeric column with few distinct values is a code, whatever its dtype says), and only genuinely categorical columns are scanned for rare values."""
+"""Detects numeric outliers (IQR method) and rare categorical values per column using pure pandas/numpy, then asks the LLM for a one-sentence explanatory comment per column. The method is chosen from what the column means rather than from its current dtype: identifiers and free-text columns are skipped, codes are never treated as magnitudes (a numeric column with few distinct values is a code, whatever its dtype says), and only genuinely categorical columns are scanned for rare values. A category counts as rare below 1% of non-null rows or under three occurrences, and at most 50 entries are kept per column."""
 from __future__ import annotations
 
 import json
@@ -12,9 +12,9 @@ from state import PipelineState
 from utils.llm import structured_model
 from utils.prompts import load_prompt
 
-_RARE_FREQ_THRESHOLD = 0.01  # below 1% of non-null rows
-_RARE_ABS_THRESHOLD = 3      # or fewer than 3 absolute occurrences
-_OUTLIER_CAP = 50            # max anomaly entries stored per column, both methods
+_RARE_FREQ_THRESHOLD = 0.01
+_RARE_ABS_THRESHOLD = 3
+_OUTLIER_CAP = 50
 _IDENTIFIER_UNIQUENESS = 0.9
 _MAX_CATEGORY_VALUES = 30
 _NUMERIC_READ_THRESHOLD = 0.9

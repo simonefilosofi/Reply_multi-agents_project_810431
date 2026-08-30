@@ -1,4 +1,4 @@
-"""Unified remediation agent: groups columns by related_columns transitive closure, aggregates upstream validation_reports into IDed violations per column, and builds a per-group LLM payload carrying each column's conforming and violating values alongside the evidence rows. The model answers with proposals whose operations are typed catalogue entries for anything structural and generated cleaning functions for value-level repair, so a format rule is expressed as code that generalises rather than as an enumeration of the values already seen. Every generated function is cleared by a static gate and executed against its own column's evidence in a sandbox before the proposal is dry-run; a failure becomes deterministic feedback and another attempt, and a failure that repeats identically escalates once to a critic model that diagnoses without writing code. What survives is dry-run, self-reviewed, and written to state.proposed_fixes. The downstream Apply step still owns the real execution against state.dataset."""
+"""Unified Remediation agent. Groups columns by the transitive closure of related_columns, aggregates upstream validation reports into identified violations, and asks the model for proposals per group: typed catalogue operations for anything structural, generated cleaning functions for value-level repair, so a format rule generalises rather than enumerating the values already seen. Every generated function is cleared by a static gate and executed against its own column's evidence before the proposal is dry-run; a failure becomes deterministic feedback and another attempt, and a failure that repeats identically escalates once to a critic that diagnoses without writing code. What survives is dry-run, self-reviewed and written to state.proposed_fixes; the Apply step owns execution against the dataset."""
 from __future__ import annotations
 
 import json
@@ -324,10 +324,10 @@ def _examples_by_column(ctx: dict) -> dict[str, dict]:
 
 
 def _drop_unusable_proposals(proposals: list[FixProposal], group: list[str]) -> list[FixProposal]:
-    """Discards what the model returned but cannot be executed: a proposal with no operations, and
-    one whose operation names a column outside the group. The namespacing step rebuilds
-    affected_columns from the operations, so an invented column name would otherwise survive the
-    coverage check and reach the approval gate."""
+    """Discards what the model returned but cannot be executed: a proposal with no operations,
+    or one naming a column outside the group. Namespacing rebuilds affected_columns from the
+    operations, so an invented column name would otherwise survive the coverage check and
+    reach the gate."""
     in_group = set(group)
     usable: list[FixProposal] = []
     for proposal in proposals:
@@ -673,10 +673,9 @@ def _aggregate_violations(
 
 
 def _remainder_entries(col_idx: int, tail: list, offset: int) -> list[dict]:
-    """Folds the long tail of one-off patterns into a single entry per violation kind. A
-    cross-column pattern names the key that implies the value, so a column can carry as many
-    distinct patterns as it has keys; sending every one of them to the model would bury the
-    frequent, fixable cases and leave a coverage obligation per stray row."""
+    """Folds the long tail of one-off patterns into one entry per violation kind. A cross-
+    column pattern names the key that implies the value, so a column can carry as many
+    patterns as it has keys; sending every one would bury the frequent, fixable cases."""
     by_kind: dict[str, list] = defaultdict(list)
     for pattern, items in tail:
         by_kind[_prompt_label(items[0])].extend(items)

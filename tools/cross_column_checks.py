@@ -1,4 +1,4 @@
-"""Deterministic cross-column consistency checks. Mines high-purity functional dependencies between related columns, ignoring dependencies that shift over time, and columns that are timestamps or near-unique on either side: a key cannot be a semantic determinant, and a timestamp is set by the ingestion process rather than implied by another field and reports the rows that contradict the dominant mapping, so that a value inconsistent with its own key (a tax code paired with the wrong tax name, a province paired with the wrong region) is surfaced as a violation the Unified agent can repair. A row is reported once however many predictors condemn it, which both keeps the consistency count equal to a row count and bounds the output at one violation per row. Backs the Consistency Validation performed by the Format & Consistency agent."""
+"""Deterministic cross-column consistency checks behind the Format & Consistency agent. Mines high-purity functional dependencies between related columns, ignoring dependencies that shift over time and columns that are timestamps or near-unique on either side, since a key cannot be a semantic determinant and a timestamp is set by ingestion rather than implied by another field. Reports the rows contradicting the dominant mapping, so a value inconsistent with its own key is surfaced for repair. A row is reported once however many predictors condemn it, which keeps the consistency count equal to a row count."""
 from __future__ import annotations
 
 import pandas as pd
@@ -160,10 +160,9 @@ def coherence_score(
     df: pd.DataFrame, column: str, exclude: set[str]
 ) -> tuple[float, str] | None:
     """How well a column agrees with the column that best explains it: the share of rows
-    whose value matches the dominant value for their key, taken over the strongest usable
-    predictor. Averaging over every predictor would drown the signal among columns that
-    have no bearing on this one. Used to pick which of two duplicate columns carries the
-    correct data."""
+    matching the dominant value for their key, over the strongest usable predictor.
+    Averaging over every predictor would drown the signal. Used to pick which of two
+    duplicate columns carries the correct data."""
     if column not in df.columns or not _usable_column(df[column]):
         return None
     best: tuple[float, str] | None = None

@@ -1,4 +1,4 @@
-"""Applies the corrections that the data itself determines, before any proposal reaches the human gate. Four kinds qualify: rewriting a value expressed in an alternative but unambiguous layout, dropping representation noise from a number recorded at a known precision, restoring a value that its own key states directly - the year and month of an accounting period - and filling a gap from a mined functional dependency of near-perfect purity. The lookup only carries keys that map to a single observed value, so a body renamed halfway through the year is skipped on its own rows rather than disqualifying the whole column. Both are deductions rather than judgement calls, so withholding them behind an approval adds no safety and only leaves the dataset incomplete. Anything that requires choosing what a value ought to be stays with the Unified Remediation agent. Implements the Auto Remediation agent node. Whatever it rewrites it also re-measures: the format violations of every touched column are recomputed and the settled value corrections dropped, so the Unified agent downstream reasons about the dataset as it now stands rather than as it was profiled."""
+"""Applies the corrections the data itself determines, before any proposal reaches the human gate: an unambiguous alternative layout, representation noise on a number of known precision, the year and month a period key states directly, and a gap fillable from a mined dependency of near-perfect purity. These are deductions rather than judgement calls, so holding them behind an approval adds no safety; anything needing a choice about what a value ought to be stays with the Unified Remediation agent. Whatever it rewrites it re-measures, so downstream agents reason about the dataset as it now stands."""
 from __future__ import annotations
 
 import pandas as pd
@@ -159,10 +159,10 @@ def _refresh_reports(
     specs: dict[str, FormatSpec | None],
     consistency: list[ValidationReport],
 ) -> list[ValidationReport]:
-    """Re-measures what this node rewrote, so the Unified agent downstream is handed the violations
-    the dataset still carries rather than the ones it carried before remediation. Format checks are
-    recomputed per rewritten column; cross-column findings are replaced wholesale, since a rule
-    relates two columns and rewriting either side invalidates the finding on both."""
+    """Re-measures what this node rewrote, so the Unified agent is handed the violations the
+    dataset still carries. Format checks are recomputed per rewritten column; cross-column
+    findings are replaced wholesale, since a rule relates two columns and rewriting either
+    side invalidates the finding on both."""
     refreshed: list[ValidationReport] = []
     for report in reports:
         column = report.column_name
@@ -178,10 +178,10 @@ def _refresh_reports(
 def _realign_range_bounds(
     specs: dict[str, dict], rounded: dict[str, int]
 ) -> dict[str, dict]:
-    """A range bound is read off the values themselves, float noise included, so rounding a column
-    can leave its own extreme value a fraction outside the bound derived from the unrounded form.
-    Rounding is monotonic, so rounding the bound to the same precision restores containment for
-    every value without widening the check."""
+    """A range bound is read off the values themselves, float noise included, so rounding a
+    column can leave its own extreme a fraction outside the bound. Rounding is monotonic, so
+    rounding the bound to the same precision restores containment without widening the
+    check."""
     if not rounded:
         return specs
     realigned = dict(specs)

@@ -1,4 +1,4 @@
-"""Casts a column to a target dtype only when no non-null value would be lost, promoting a float declaration to an integer one when the values carry no decimal part, and normalising human numeric and date notation first so that a value written as an amount or a local-format date is not mistaken for uncastable, reporting the row indices that block the cast instead of coercing them to NaN. Owns the pipeline's single notion of what a dtype declaration means: a declaration arrives either in the canonical catalogue's vocabulary or in pandas' own names, and an integer cast deliberately lands on the nullable Int64, so dtype_family reduces both sides of any comparison to what a cast would produce and dtype_satisfied answers whether a realised column met its declaration. Backs the non-destructive dtype enforcement performed by the NaN handler and the dtype term of the reliability score, which must agree on conformity or mark correctly cast columns as untyped."""
+"""Casts a column to a target dtype only when no non-null value would be lost, promoting a float declaration to an integer one when no value carries a decimal part, normalising human numeric and date notation first, and reporting the rows that block a cast rather than coercing them to NaN. Also owns the pipeline's single notion of what a declaration means: declarations arrive in the canonical catalogue's vocabulary or in pandas' own names, and an integer cast lands on the nullable Int64, so dtype_family reduces both sides of a comparison to what a cast would produce and dtype_satisfied answers whether a column met its declaration. The NaN handler and the reliability score must agree on this, or correctly cast columns are marked untyped."""
 from __future__ import annotations
 
 import pandas as pd
@@ -24,10 +24,10 @@ def safe_cast(series: pd.Series, dtype: str) -> tuple[pd.Series, list[int]]:
 
 
 def dtype_family(dtype: str) -> str:
-    """The family a dtype belongs to, whether it is written in the canonical catalogue's
-    vocabulary (integer, float, string), in pandas' own names (int64, Int64, datetime64[ns]), or
-    as anything else pandas accepts. Deciding the family in one place is what keeps what a cast
-    produces and what a reader expects of it from drifting apart."""
+    """The family a dtype belongs to, whether written in the catalogue's vocabulary (integer,
+    float, string), in pandas' names (int64, Int64, datetime64[ns]), or as anything else
+    pandas accepts. Deciding it in one place keeps what a cast produces and what a reader
+    expects of it from drifting apart."""
     target = (dtype or "").lower()
     if any(token in target for token in _DATE_TOKENS):
         return "datetime"
@@ -43,11 +43,11 @@ def dtype_family(dtype: str) -> str:
 
 
 def dtype_satisfied(declared: str, realised: str) -> bool:
-    """Whether a column that came out as realised meets what was declared for it. String equality
-    cannot answer this: a declaration is written either as a catalogue word or as a pandas name,
-    and an integer cast lands on the nullable Int64, so the two sides are almost never spelled
-    alike. A float declaration is met by an integer realisation because _refine promotes it when
-    no value carries a decimal part, which makes the integer the caster obeying the declaration."""
+    """Whether a realised dtype meets a declaration. String equality cannot answer this:
+    declarations are written either as a catalogue word or as a pandas name, and an integer
+    cast lands on the nullable Int64, so the two are almost never spelled alike. A float
+    declaration is met by an integer realisation because _refine promotes it when no value
+    carries a decimal part."""
     wanted, got = dtype_family(declared), dtype_family(realised)
     return got == wanted or (wanted == "float" and got == "integer")
 

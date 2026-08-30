@@ -1,4 +1,4 @@
-"""Final reporting node: recomputes the residual violations on the remediated dataset across every category - format, completeness and cross-column consistency - so that the before/after comparison comes from like-for-like measurements, derives the three-point quality metrics and the aggregate reliability score, asks the LLM for the interpretation only, and emits the cleaned dataset, a cell-level audit trail of every change, a structured JSON artefact, and the report itself as Markdown with an HTML and a PDF rendering. Every figure in the report is computed here and laid out by tools.report_markdown; the model contributes a verdict, one comment per coverage area and the recommendations, so a wrong number cannot enter the document through a sentence. Implements the Report Generator agent."""
+"""Final reporting node. Recomputes the residual violations on the remediated dataset across format, completeness and cross-column consistency so the before/after comparison is like-for-like, derives the three-point quality metrics and the reliability score, and asks the model for the interpretation only. Emits the cleaned dataset, a cell-level audit trail, a structured JSON artefact, and the report as Markdown with an HTML and a PDF rendering. Every figure is computed here and laid out by tools.report_markdown; the model contributes the verdict, one comment per coverage area and the recommendations, so a wrong number cannot enter the document through a sentence."""
 from __future__ import annotations
 
 import json
@@ -71,8 +71,6 @@ def report_generator_node(state: PipelineState) -> PipelineState:
         },
     })
 
-
-# ── payload ───────────────────────────────────────────────────────────────────
 
 def _residual_reports(state: PipelineState) -> list[ValidationReport]:
     if state.dataset is None:
@@ -192,10 +190,9 @@ def _quality_section(state: PipelineState, residual: list[ValidationReport]) -> 
 def _like_for_like_snapshots(
     state: PipelineState, before: dict, residual: list[ValidationReport], conventions
 ) -> tuple[dict, dict]:
-    """Measures both ends of the run on the same columns: the pre-remediation snapshot restricted
-    to the columns that survive, and the remediated dataset restricted to those same columns.
-    Scoping only the earlier side would compare a subset against the whole and call the result
-    like-for-like."""
+    """Measures both ends of the run on the same columns: the pre-remediation snapshot and the
+    remediated dataset, each restricted to the columns that survive. Scoping only the
+    earlier side would compare a subset against the whole and call the result like-for-like."""
     if not before or state.dataset is None:
         return {}, {}
     null_by_column = before.get("null_by_column") or {}
@@ -275,12 +272,11 @@ def _scope_metrics(before: dict, kept: list[str]) -> dict:
 
 
 def _origin_columns(state: PipelineState) -> dict[str, str]:
-    """Maps a column of the remediated dataset back to the name it carried in the pre-remediation
-    snapshot, which is taken after the duplicate-column election and therefore already uses
-    canonical names. Only the renames applied by approved fixes happened after that point, so
-    only they need inverting; reaching further back, to the column that originally held the
-    data, names something the snapshot does not contain and drops the column from the
-    comparison."""
+    """Maps a column of the remediated dataset back to the name it carried in the pre-
+    remediation snapshot, which is taken after the duplicate-column election and so already
+    uses canonical names. Only renames from approved fixes happened after that point, so
+    only they need inverting; reaching further back names something the snapshot does not
+    contain and drops the column from the comparison."""
     origins: dict[str, str] = {}
     applied = set(state.applied_fix_ids)
     for proposal in state.proposed_fixes:
@@ -407,8 +403,6 @@ def _build_payload(state: PipelineState, residual: list[ValidationReport], quali
         "errors": state.errors,
     }
 
-
-# ── pdf renderer ──────────────────────────────────────────────────────────────
 
 def _write_report(payload: dict, commentary: _ReportResponse, out: Path) -> None:
     """Emits the report three ways. The Markdown is the report itself; the HTML is one

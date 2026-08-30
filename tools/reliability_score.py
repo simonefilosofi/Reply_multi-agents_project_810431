@@ -92,10 +92,10 @@ def structural_defects(
     conventions: GlobalConventions | None,
     declared_dtypes: dict[str, str] | None = None,
 ) -> dict[str, list[str]]:
-    """Column-level faults that no row-level metric can see: a name that breaks the convention,
-    a column empty enough to carry no information, a column still holding the wrong type, and a
-    column whose values merely repeat another's. These are what makes a delivered file structurally unusable, and counting them is
-    what stops the score from resting on row-level dimensions that sit near 1.0 by construction."""
+    """Column-level faults no row-level metric can see: a name breaking the convention, a
+    column too empty to inform, one still holding the wrong type, and one whose values
+    merely repeat another's. Counting them is what stops the score from resting on row-level
+    dimensions that sit near 1.0 by construction."""
     defects: dict[str, list[str]] = {}
     seen: dict[str, str] = {}
     rows = len(df)

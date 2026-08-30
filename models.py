@@ -229,7 +229,7 @@ class AnomalyEntry(BaseModel):
 
 class AnomalyReport(BaseModel):
     column_name: str
-    method: str  # "iqr" or "rare_category"
+    method: Literal["iqr", "rare_category"]
     anomalies: list[AnomalyEntry] = Field(default_factory=list)
     stats: dict = Field(default_factory=dict)
     comment: str = ""

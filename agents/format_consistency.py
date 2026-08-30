@@ -1,4 +1,4 @@
-"""Validates column values against per-column FormatSpecs inferred from the actual sample (with baseline as a hint), flags violations without re-reporting rows an upstream node already flagged, asks an LLM to propose targeted per-value corrections, discarding wholesale deletion proposals when they cover so much of a column that the inferred spec is the unreliable party so the Unified Remediation agent can emit value-preserving replace fixes instead of generic imputations, deterministically mines functional dependencies to surface cross-column consistency violations and NaN-imputation hints. The hint search covers every column that actually has gaps, not only those an inferred spec happened to flag, so it does not depend on what the model chose to describe. Merges new violations with reports already on state (e.g. nullability reports from the NaN handler), and records the pre_remediation quality snapshot: the last point at which the dataset is fully measured but not yet altered, which is what the report compares the remediated result against."""
+"""Validates each column against a FormatSpec inferred from its own values with the baseline as a hint, skipping rows an upstream node already flagged, and asks the LLM for targeted per-value corrections so the Unified agent can emit value-preserving replacements instead of generic imputations. A correction set that would delete much of a column is discarded: at that scale the inferred spec is the unreliable party. Deterministically mines functional dependencies for cross-column violations and imputation hints, over every column that actually has gaps rather than only those a spec flagged. Records the pre_remediation snapshot, the last point at which the dataset is fully measured but not yet altered, which is what the report compares the remediated result against."""
 from __future__ import annotations
 
 from collections import defaultdict
@@ -176,16 +176,6 @@ def _mine_imputation_hints(
         })
         for column, hint in hints.items()
     }
-
-
-def _columns_with_nan_violations(reports: list[ValidationReport]) -> set[str]:
-    flagged: set[str] = set()
-    for r in reports:
-        for v in r.violations:
-            if v.expected_pattern in ("missing value", "not nullable"):
-                flagged.add(r.column_name)
-                break
-    return flagged
 
 
 def _candidate_predictors(

@@ -1,4 +1,4 @@
-"""Execution and validation of the per-column cleaning functions the Unified Remediation agent generates. A generated cleaner is a pure scalar transform named clean_value, so it can neither change the row count nor reach another column: half of the post-fix invariants hold by construction rather than by check. Three layers guard the rest. check_source reads the source and rejects it before anything runs, so what reaches the interpreter is already known to be free of imports outside a small allowlist, of eval, exec, open and attribute access into dunders. validate_against_examples then executes the never-yet-run code inside an E2B sandbox, which isolates the host but does not restrain the code, and falls back to the local cage when no key or no network is available; the sandbox only executes, while the judgement of what the outputs mean stays here and stays deterministic. load_callable finally runs the approved source locally over the full column, in a namespace whose builtins are a whitelist and whose import hook admits only the allowed modules."""
+"""Execution and validation of the per-column cleaning functions the Unified Remediation agent generates. A cleaner is a pure scalar transform named clean_value, so it can neither change the row count nor reach another column and half the post-fix invariants hold by construction. Three layers guard the rest: check_source rejects forbidden source before anything runs; validate_against_examples executes the never-yet-run code in an E2B sandbox, falling back to a local cage when no key or network is available, while the judgement of what the outputs mean stays here and stays deterministic; load_callable then runs the approved source over the full column behind whitelisted builtins and a restricted import hook."""
 from __future__ import annotations
 
 import ast
@@ -94,12 +94,11 @@ def validate_against_examples(
 
 
 def run_on_values(source: str, values: list[str | None]) -> tuple[list[dict], str]:
-    """Executes the cleaner over a handful of values, preferring the sandbox. The fallback exists
-    so a missing key or a dropped connection degrades the isolation of a first run rather than
-    stopping the pipeline. A cleaner is a pure function of its input, so the same source over the
-    same values is answered from the run's cache: the repair loop checks a proposal at the top of
-    every iteration and once more when it settles, and without this the unchanged source would
-    cross the network again each time."""
+    """Executes the cleaner over a handful of values, preferring the sandbox; the local
+    fallback degrades the isolation of a first run rather than stopping the pipeline. A
+    cleaner is a pure function of its input, so the same source over the same values is
+    answered from the run's cache - the repair loop checks a proposal at the top of every
+    iteration and again when it settles, which would otherwise cross the network each time."""
     key = (source, tuple(values))
     cached = _results.get(key)
     if cached is not None:

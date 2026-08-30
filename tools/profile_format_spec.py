@@ -59,13 +59,11 @@ def _try_range(non_null: pd.Series, dominance: float) -> RangeFormat | None:
 
 
 def _try_enum(non_null: pd.Series, dominance: float) -> EnumFormat | None:
-    """An enum admits only its common values, so everything in the tail is reported as a
-    violation. On a closed vocabulary that tail is the defect being looked for - a placeholder, a
-    casing variant, a trailing space. On a column of proper nouns it is the subject matter, and
-    calling it invalid hands the remediation stage a false premise: asked to make those values
-    conform, a model can only map them onto a value that does conform, which rewrites one
-    institution into another. The whole column therefore has to be a small closed set before its
-    tail can mean anything, and cardinality is what separates the two cases."""
+    """An enum reports its tail as violations. On a closed vocabulary that tail is the defect
+    being looked for - a placeholder, a casing variant, a trailing space. On a column of
+    proper nouns it is the subject matter, and calling it invalid hands remediation a false
+    premise: asked to make those values conform, a model can only map one institution onto
+    another. Cardinality is what separates the two cases."""
     n = len(non_null)
     counts = non_null.value_counts()
     if len(counts) > _MAX_ENUM:

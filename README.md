@@ -125,9 +125,9 @@ with the NoiPA registry and the detected domain). Drops all non-survivors and re
 For each surviving column with a resolved `canonical_hint`, retrieves the column's `format`
 spec from the baseline and validates every value against it: enum specs check membership,
 regex specs test pattern match, range specs check numeric bounds. Each violation is recorded
-as a `FormatViolation` with the row index and observed value. Also applies two normalisation
-tools (`normalize_date_format`, `normalize_entity_format`) to correct recoverable formatting
-inconsistencies before flagging them as violations.
+as a `FormatViolation` with the row index and observed value. Recoverable formatting is not
+corrected here: `normalize_date_format` and the other normalisers are remediation operations in
+`tools/operations.py`, applied only once a fix carrying them is approved.
 
 **`duplicate_row`**  
 Drops exact duplicate rows using pandas `drop_duplicates()` as a final cleaning step after

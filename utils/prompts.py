@@ -1,3 +1,4 @@
+"""Loads the versioned system prompt for an LLM-calling agent from prompts/<name>.md. A missing file raises rather than degrading to an empty prompt, so a renamed prompt fails at the call site instead of silently changing what an agent is asked."""
 from pathlib import Path
 
 _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
