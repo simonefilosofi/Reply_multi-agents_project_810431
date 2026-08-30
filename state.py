@@ -46,6 +46,9 @@ class PipelineState(BaseModel):
     # corrections applied automatically because the data determines them
     auto_remediations: list[dict] = Field(default_factory=list)
 
+    # which executor validated each generated cleaning function (sandbox or local cage)
+    generated_function_runs: list[dict] = Field(default_factory=list)
+
     # cell-level audit trail of every applied change
     change_log: list[dict] = Field(default_factory=list)
 

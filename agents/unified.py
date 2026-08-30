@@ -24,7 +24,13 @@ from tools.match_canonical import compact_format_summary
 from tools.operations import describe_operation
 from tools.schema_proposals import schema_proposals
 from tools.fix_invariants import removable_values
-from tools.generated_function import issues_fingerprint, validate_against_examples
+from tools.generated_function import (
+    close_sandbox,
+    execution_log,
+    issues_fingerprint,
+    start_execution_log,
+    validate_against_examples,
+)
 from tools.trial_execute import trial_execute
 from tools.validate_format import specs_by_column
 from utils.prompts import load_prompt
@@ -44,6 +50,7 @@ def unified_node(state: PipelineState) -> PipelineState:
     if state.dataset is None or not state.payload:
         return state
 
+    start_execution_log()
     payload_by_name = {p.column_name: p for p in state.payload}
     reports_by_name = {r.column_name: r for r in state.validation_reports}
     specs_by_col = _specs_by_col(state.inferred_format_specs)
@@ -84,9 +91,12 @@ def unified_node(state: PipelineState) -> PipelineState:
 
     schema = schema_proposals(state.validation_reports, list(state.dataset.columns))
     deduped = _drop_redundant_schema_fixes(dedupe_proposals(all_proposals), schema)
+    runs = execution_log()
+    close_sandbox()
     return state.model_copy(update={
         "proposed_fixes": [_with_readable_code(p) for p in schema + deduped],
         "fix_groups": fix_groups,
+        "generated_function_runs": runs,
     })
 
 

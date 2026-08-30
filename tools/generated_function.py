@@ -85,6 +85,7 @@ def validate_against_examples(
     dominant = [_as_scalar(value) for value in dominant_values]
     inconsistent = [_as_scalar(value) for value in inconsistent_values]
     results, executor = run_on_values(source, dominant + inconsistent)
+    _executions.append({"executor": executor, "ok": True, "values": len(dominant) + len(inconsistent)})
 
     issues = _judge(dominant, results[: len(dominant)], expected_unchanged=True, dtype=target_dtype)
     issues.extend(
@@ -100,8 +101,8 @@ def run_on_values(source: str, values: list[str | None]) -> tuple[list[dict], st
     if os.getenv("E2B_API_KEY"):
         try:
             return _run_in_sandbox(source, values), "e2b"
-        except Exception:
-            pass
+        except Exception as error:
+            _executions.append({"executor": "e2b", "ok": False, "detail": str(error)[:200]})
     return _run_locally(source, values), "local"
 
 
@@ -111,13 +112,26 @@ def issues_fingerprint(issues: list[CleanerIssue]) -> tuple[str, ...]:
 
 
 def close_sandbox() -> None:
-    """Releases the sandbox held open across a run."""
+    """Releases the sandbox held open across a run. A caller that opens one owns closing it: the
+    handle survives the call that created it, so in a long-lived process such as the Streamlit
+    gate an unclosed sandbox stays billed and connected for the whole session."""
     global _sandbox
     if _sandbox is not None:
         try:
             _sandbox.kill()
         finally:
             _sandbox = None
+
+
+def start_execution_log() -> None:
+    """Begins recording which executor ran each generated cleaner, for the run about to start."""
+    _executions.clear()
+
+
+def execution_log() -> list[dict]:
+    """What ran where, so the report can state whether the sandbox or the local cage validated
+    each function rather than leaving the reader to assume."""
+    return list(_executions)
 
 
 def _check_shape(tree: ast.Module) -> list[CleanerIssue]:
@@ -225,6 +239,7 @@ def _run_locally(source: str, values: list[str | None]) -> list[dict]:
 
 
 _sandbox = None
+_executions: list[dict] = []
 
 
 def _run_in_sandbox(source: str, values: list[str | None]) -> list[dict]:

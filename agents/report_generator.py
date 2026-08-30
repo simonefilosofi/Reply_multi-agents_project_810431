@@ -349,6 +349,7 @@ def _build_payload(state: PipelineState, residual: list[ValidationReport], quali
         ],
         "duplicate_rows": state.duplicate_rows,
         "auto_remediations": state.auto_remediations,
+        "generated_function_runs": state.generated_function_runs,
         "changes_summary": _changes_summary(state.change_log),
         "format_violations_detected": [
             {"column_name": r.column_name, "violation_count": _violation_count(r)}

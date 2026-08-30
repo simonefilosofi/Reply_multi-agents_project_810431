@@ -297,9 +297,20 @@ def _remediation_body(payload: dict) -> str:
             ["proposals put to the reviewer", _number(len(proposals))],
             ["proposals accepted", _number(len(applied))],
             ["proposals carrying a generated function", _number(len(generated))],
+            ["generated functions validated in a sandbox", _sandbox_runs(payload)],
             ["cells changed in total", _number((payload.get("changes_summary") or {}).get("total_cells_changed"))],
         ],
     )
+
+
+def _sandbox_runs(payload: dict) -> str:
+    """How many generated functions were first executed in the isolated sandbox rather than the
+    local cage, so the reader is told which guard actually ran instead of assuming it."""
+    runs = payload.get("generated_function_runs") or []
+    if not runs:
+        return "0"
+    sandboxed = sum(1 for run in runs if run.get("executor") == "e2b" and run.get("ok"))
+    return f"{sandboxed} of {sum(1 for run in runs if run.get('ok'))}"
 
 
 def _changes(payload: dict) -> str:

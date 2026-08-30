@@ -1,4 +1,4 @@
-"""Applies the FixProposals approved at the human gate to the pipeline dataset via the local executor, keeps the payload and the inferred specs aligned with any column a fix renamed or dropped, then deterministically collapses any values left differing only by casing or whitespace and re-applies the dtype proposed by the Semantic agent. Those two passes are automatic cleaning, not remediation: they run whether or not any fix was approved, since remediation may have removed exactly the values that blocked a cast upstream, recording which fix ids landed and surfacing executor failures on state.errors. Implements the Apply step between the Unified Remediation agent and the final duplicate-row pass."""
+"""Applies the FixProposals approved at the human gate to the pipeline dataset via the local executor, keeps the payload and the inferred specs aligned with any column a fix renamed or dropped, then deterministically collapses any values left differing only by casing or whitespace and re-applies the dtype proposed by the Semantic agent. Those two passes are automatic cleaning, not remediation: they run whether or not any fix was approved, since remediation may have removed exactly the values that blocked a cast upstream, recording which fix ids landed and surfacing on state.errors every approved fix that did not land, whether it errored, breached an invariant, or was skipped. Implements the Apply step between the Unified Remediation agent and the final duplicate-row pass."""
 from __future__ import annotations
 
 import pandas as pd
@@ -37,9 +37,9 @@ def apply_fixes_node(state: PipelineState) -> PipelineState:
     cleaned = _enforce_dtypes(cleaned.copy(), state)
     cast_changes, _ = diff_cells(before_cast, cleaned, "enforce_dtype")
     failures = [
-        f"apply_fixes:{s['id']}: {s.get('error') or s.get('invariant_violations')}"
+        f"apply_fixes:{s['id']}: {_failure_detail(s)}"
         for s in statuses
-        if s["status"] in ("error", "rejected")
+        if s["status"] in ("error", "rejected", "skipped")
     ]
     renames = {
         operation.column: operation.new_name
@@ -62,6 +62,18 @@ def apply_fixes_node(state: PipelineState) -> PipelineState:
         "applied_fix_ids": [s["id"] for s in statuses if s["status"] == "applied"],
         "errors": state.errors + failures,
     })
+
+
+def _failure_detail(status: dict) -> str:
+    """Why an approved fix did not land. A skip used to be silent, so a proposal the reviewer had
+    accepted could vanish between the gate and the dataset with nothing in state.errors to say
+    so; the only trace was a count that did not add up."""
+    return str(
+        status.get("error")
+        or status.get("invariant_violations")
+        or status.get("reason")
+        or status["status"]
+    )
 
 
 def _enforce_dtypes(df: pd.DataFrame, state: PipelineState) -> pd.DataFrame:
