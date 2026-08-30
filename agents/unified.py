@@ -1,4 +1,4 @@
-"""Unified remediation agent: groups columns by related_columns transitive closure, aggregates upstream validation_reports into IDed violations per column, builds a per-group LLM payload (columns + evidence rows + clean reference rows), invokes structured FixGroupResponse output whose proposals are typed catalogue operations rather than generated code, runs coverage checks with one retry, then dry-runs each proposal in a sandbox and asks the same model to self-review the trial outcome — approving the proposal or regenerating with feedback — before writing group-prefixed proposals to state.proposed_fixes. The downstream Apply step still owns the real execution against state.dataset."""
+"""Unified remediation agent: groups columns by related_columns transitive closure, aggregates upstream validation_reports into IDed violations per column, and builds a per-group LLM payload carrying each column's conforming and violating values alongside the evidence rows. The model answers with proposals whose operations are typed catalogue entries for anything structural and generated cleaning functions for value-level repair, so a format rule is expressed as code that generalises rather than as an enumeration of the values already seen. Every generated function is cleared by a static gate and executed against its own column's evidence in a sandbox before the proposal is dry-run; a failure becomes deterministic feedback and another attempt, and a failure that repeats identically escalates once to a critic model that diagnoses without writing code. What survives is dry-run, self-reviewed, and written to state.proposed_fixes. The downstream Apply step still owns the real execution against state.dataset."""
 from __future__ import annotations
 
 import json
@@ -8,6 +8,8 @@ import pandas as pd
 from langchain_openai import ChatOpenAI
 
 from models import (
+    CleanerDiagnosis,
+    CleanerIssue,
     ColumnPayload,
     FixGroupResponse,
     FixProposal,
@@ -22,6 +24,7 @@ from tools.match_canonical import compact_format_summary
 from tools.operations import describe_operation
 from tools.schema_proposals import schema_proposals
 from tools.fix_invariants import removable_values
+from tools.generated_function import issues_fingerprint, validate_against_examples
 from tools.trial_execute import trial_execute
 from tools.validate_format import specs_by_column
 from utils.prompts import load_prompt
@@ -33,7 +36,8 @@ _EXAMPLES_PER_VIOLATION = 3
 _MAX_PATTERNS_PER_COLUMN = 25
 _CORRECTION_EXAMPLES = 20
 _MAX_EXAMPLE_VALUES = 8
-_MAX_REVIEW_ITERATIONS = 2
+_MAX_REVIEW_ITERATIONS = 3
+_MAX_REPORTED_ISSUES = 5
 
 
 def unified_node(state: PipelineState) -> PipelineState:
@@ -176,8 +180,9 @@ def propose_for_group(
         return []
 
     reviewed = _review_and_revise_proposals(
-        proposals=response.proposals,
+        proposals=_drop_unusable_proposals(response.proposals, group),
         group=group,
+        examples_by_column=_examples_by_column(ctx),
         df=df,
         removable_by_column=removable_by_column or {},
         value_corrections=value_corrections or {},
@@ -194,6 +199,7 @@ def propose_for_group(
 def _review_and_revise_proposals(
     proposals: list[FixProposal],
     group: list[str],
+    examples_by_column: dict[str, dict],
     df: pd.DataFrame,
     removable_by_column: dict[str, set],
     value_corrections: dict[str, dict[str, str | None]],
@@ -207,7 +213,27 @@ def _review_and_revise_proposals(
     finalized: list[FixProposal] = []
     for proposal in proposals:
         current = proposal
+        previous_fingerprint: tuple[str, ...] = ()
+        critic_spent = False
         for _ in range(_MAX_REVIEW_ITERATIONS):
+            cleaner_issues = _validate_generated_operations(current, examples_by_column)
+            if cleaner_issues:
+                repeated = issues_fingerprint(cleaner_issues) == previous_fingerprint
+                previous_fingerprint = issues_fingerprint(cleaner_issues)
+                if repeated and not critic_spent:
+                    critic_spent = True
+                    feedback = _critic_feedback_for(current, cleaner_issues, examples_by_column)
+                else:
+                    feedback = _cleaner_feedback_for(current, cleaner_issues)
+                replacement = regenerate(feedback)
+                if replacement is None:
+                    current = None
+                    break
+                current = replacement.model_copy(update={
+                    "id": proposal.id,
+                    "depends_on": proposal.depends_on,
+                })
+                continue
             trial = trial_execute(
                 df, current, value_corrections, specs_by_col, reports_by_name,
                 imputation_hints=imputation_hints,
@@ -245,12 +271,111 @@ def _review_and_revise_proposals(
                 "id": proposal.id,
                 "depends_on": proposal.depends_on,
             })
-        if current is not None and not _breaks_invariants(
+        if current is None or _validate_generated_operations(current, examples_by_column):
+            continue
+        if not _breaks_invariants(
             current, df, value_corrections, specs_by_col, reports_by_name, imputation_hints,
             removable_by_column,
         ):
             finalized.append(current)
     return finalized
+
+
+def _validate_generated_operations(
+    proposal: FixProposal, examples_by_column: dict[str, dict]
+) -> list[CleanerIssue]:
+    """Clears every generated function a proposal carries against its own column's evidence,
+    before the proposal is dry-run and before a human ever sees it. The static gate runs first
+    and short-circuits, so malformed or forbidden source never reaches an interpreter."""
+    issues: list[CleanerIssue] = []
+    for operation in proposal.operations:
+        if operation.kind != "apply_generated_function":
+            continue
+        examples = examples_by_column.get(operation.column, {})
+        found, _ = validate_against_examples(
+            operation.source,
+            examples.get("dominant", []),
+            examples.get("inconsistent", []),
+            examples.get("dtype", ""),
+        )
+        issues.extend(found)
+    return issues
+
+
+def _examples_by_column(ctx: dict) -> dict[str, dict]:
+    return {
+        column["name"]: {
+            "dominant": column.get("dominant_example_values", []),
+            "inconsistent": column.get("example_inconsistent_values", []),
+            "dtype": column.get("dtype", ""),
+        }
+        for column in ctx.get("columns", [])
+    }
+
+
+def _drop_unusable_proposals(proposals: list[FixProposal], group: list[str]) -> list[FixProposal]:
+    """Discards what the model returned but cannot be executed: a proposal with no operations, and
+    one whose operation names a column outside the group. The namespacing step rebuilds
+    affected_columns from the operations, so an invented column name would otherwise survive the
+    coverage check and reach the approval gate."""
+    in_group = set(group)
+    usable: list[FixProposal] = []
+    for proposal in proposals:
+        if not proposal.operations:
+            continue
+        targets = {operation.column for operation in proposal.operations if operation.column}
+        if targets - in_group:
+            continue
+        usable.append(proposal)
+    return usable
+
+
+def _cleaner_feedback_for(proposal: FixProposal, issues: list[CleanerIssue]) -> str:
+    lines = [
+        f"The cleaning function in proposal {proposal.id} failed validation against the column's "
+        f"own values. Rewrite it so that every point below is resolved."
+    ]
+    for issue in issues[:_MAX_REPORTED_ISSUES]:
+        lines.append(
+            f"- input {issue.input_value!r} produced {issue.actual_output!r}: "
+            f"{issue.message} Expected behaviour: {issue.expected_behavior}"
+        )
+    return " ".join(lines)
+
+
+def _critic_feedback_for(
+    proposal: FixProposal, issues: list[CleanerIssue], examples_by_column: dict[str, dict]
+) -> str:
+    """Escalates a failure the deterministic feedback did not unblock. A second model reads the
+    failed function and the findings and prescribes the repair; it never writes the code itself,
+    so the generator stays the only author."""
+    generated = next(
+        (o for o in proposal.operations if o.kind == "apply_generated_function"), None
+    )
+    if generated is None:
+        return _cleaner_feedback_for(proposal, issues)
+    examples = examples_by_column.get(generated.column, {})
+    chain = ChatOpenAI(model="gpt-5.4-mini", temperature=0).with_structured_output(CleanerDiagnosis)
+    diagnosis: CleanerDiagnosis = chain.invoke([
+        {"role": "system", "content": load_prompt("cleaner_critic")},
+        {"role": "user", "content": json.dumps({
+            "column": generated.column,
+            "source": generated.source,
+            "issues": [issue.model_dump() for issue in issues[:_MAX_REPORTED_ISSUES]],
+            "dominant_example_values": examples.get("dominant", []),
+            "example_inconsistent_values": examples.get("inconsistent", []),
+        }, ensure_ascii=False, default=str)},
+    ])
+    repairs = " ".join(
+        f"For {repair.input_value!r} produce {repair.expected_output!r}: {repair.fix_note}"
+        for repair in diagnosis.exact_repairs[:_MAX_REPORTED_ISSUES]
+    )
+    return (
+        f"The cleaning function in proposal {proposal.id} failed the same way twice, so the "
+        f"previous feedback was not enough. Diagnosis: {diagnosis.root_cause} "
+        f"The defect is in {diagnosis.bug_location}. Required fix: {diagnosis.planned_fix} "
+        f"{repairs}"
+    )
 
 
 def _breaks_invariants(

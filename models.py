@@ -170,6 +170,21 @@ class CleanerIssue(BaseModel):
     expected_behavior: str = ""
 
 
+class CleanerRepair(BaseModel):
+    input_value: str
+    actual_output: str | None = None
+    expected_output: str | None = None
+    fix_note: str
+
+
+class CleanerDiagnosis(BaseModel):
+    root_cause: str
+    bug_location: str
+    planned_fix: str
+    exact_repairs: list[CleanerRepair] = Field(default_factory=list)
+    confidence: Literal["low", "medium", "high"] = "medium"
+
+
 class FixProposal(BaseModel):
     id: str
     description: str

@@ -1,9 +1,10 @@
-"""Deterministic post-fix checks that no remediation may violate, evaluated on the before/after dataframes of a single FixProposal. Enforces that a fix never invents data, never deletes more than a small fraction of a column beyond its declared placeholders, never splits a column into casing variants, and never changes the row count outside a declared deduplication. Consumed by the trial run of the Unified Remediation agent and by the local executor."""
+"""Deterministic post-fix checks that no remediation may violate, evaluated on the before/after dataframes of a single FixProposal. Enforces that a fix never invents data, never fills a column too sparse to speak for itself, never deletes more than a small fraction of a column beyond its declared placeholders, never splits a column into casing variants, and never changes the row count outside a declared deduplication. Consumed by the trial run of the Unified Remediation agent and by the local executor."""
 from __future__ import annotations
 
 import pandas as pd
 
 _MAX_DELETION_RATIO = 0.02
+_MAX_FILLABLE_MISSING_RATE = 0.5
 
 
 def check_invariants(
@@ -69,7 +70,16 @@ def _check_invented_values(
     before: pd.Series, after: pd.Series, column: str, hints: dict
 ) -> list[str]:
     filled = int(before.isna().sum() - after.isna().sum())
-    if filled <= 0 or column in hints:
+    if filled <= 0:
+        return []
+    missing_rate = float(before.isna().mean())
+    if missing_rate > _MAX_FILLABLE_MISSING_RATE:
+        return [
+            f"{column}: {filled} missing values were filled, but the column was "
+            f"{missing_rate:.1%} empty before the fix. A column this sparse can only be flagged "
+            f"or dropped, because what little it holds cannot speak for what it does not."
+        ]
+    if column in hints:
         return []
     return [
         f"{column}: {filled} missing values were filled without an imputation hint"
