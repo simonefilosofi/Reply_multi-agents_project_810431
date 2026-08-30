@@ -32,6 +32,7 @@ _MAX_CLEAN_ROWS = 5
 _EXAMPLES_PER_VIOLATION = 3
 _MAX_PATTERNS_PER_COLUMN = 25
 _CORRECTION_EXAMPLES = 20
+_MAX_EXAMPLE_VALUES = 8
 _MAX_REVIEW_ITERATIONS = 2
 
 
@@ -424,6 +425,7 @@ def _build_group_context(
             "violations": violations,
             "value_corrections": _summarize_corrections(value_corrections.get(col, {})),
             "imputation_hint": _summarize_hint(imputation_hints.get(col)),
+            **_format_examples(report, df[col] if col in df.columns else None),
         })
 
     evidence_rows = _select_rows(df, group, sorted(violation_row_indices)[:_MAX_EVIDENCE_ROWS])
@@ -440,6 +442,37 @@ def _build_group_context(
         },
         input_violation_ids,
     )
+
+
+def _format_examples(report: ValidationReport | None, series: pd.Series | None) -> dict:
+    """Splits the column into the values that already conform and the values that do not, taken
+    from the rows the format validator flagged. A generated cleaning function is judged against
+    exactly these two lists: it must leave the first untouched and rewrite the second."""
+    if series is None:
+        return {"dominant_example_values": [], "example_inconsistent_values": []}
+    offending_rows = {
+        violation.row_index
+        for violation in (report.violations if report else [])
+        if violation.kind == "format" and violation.row_index >= 0
+    }
+    populated = series.dropna()
+    offending = populated[populated.index.isin(offending_rows)]
+    conforming = populated[~populated.index.isin(offending_rows)]
+    return {
+        "dominant_example_values": _distinct_head(conforming),
+        "example_inconsistent_values": _distinct_head(offending),
+    }
+
+
+def _distinct_head(series: pd.Series) -> list:
+    seen: list = []
+    for value in series:
+        rendered = _jsonable(value)
+        if rendered not in seen:
+            seen.append(rendered)
+        if len(seen) == _MAX_EXAMPLE_VALUES:
+            break
+    return seen
 
 
 def _context_columns(

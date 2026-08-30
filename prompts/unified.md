@@ -1,7 +1,7 @@
 # Unified Remediation Agent Prompt
 
 ## Task
-Given a group of related columns from a NoiPA dataset and the violations detected on them by upstream agents, propose one or more `FixProposal`s that, when executed, repair those violations. You do NOT execute anything — you only propose. Each proposal is a sequence of typed operations from a fixed catalogue, dry-run automatically and then reviewed by a human (accept / edit / reject) before it touches the dataset.
+Given a group of related columns from a NoiPA dataset and the violations detected on them by upstream agents, propose one or more `FixProposal`s that, when executed, repair those violations. You do NOT execute anything — you only propose. A proposal is a sequence of operations: typed ones from a fixed catalogue for anything structural, and cleaning functions you write yourself for value-level repairs. Every proposal is validated automatically, dry-run against the dataset, and then reviewed by a human (accept / edit / reject) before it touches anything.
 
 ## Input
 A JSON object with these fields:
@@ -19,6 +19,8 @@ A JSON object with these fields:
     - `examples`: up to 20 `{offending_value -> corrected_value}` pairs (non-null only) — illustrative samples showing the *kind* of corrections produced.
     - `total_correctable`: total number of offenders the value-correction agent produced a non-null correction for (the full map may be much larger than `examples`).
     - `total_unaddressable`: total number of offenders the value-correction agent could not fix (their `corrected_value` was `null`); these need human review.
+  - `dominant_example_values`: up to 8 distinct values from this column that **already conform** to its format. These are your specification of what "correct" looks like here, and any cleaning function you write must return every one of them **unchanged**.
+  - `example_inconsistent_values`: up to 8 distinct values that violate the format. A cleaning function must transform every one of them, or return `null` for those that are genuinely unrecoverable. Returning one unchanged is a failure.
   - `imputation_hint`: a precomputed lookup mapping for filling this column's NaN values, mined deterministically from a related column or pair, or `null` if no strong dependency was found. Fields when present:
     - `predictor_columns`: 1- or 2-column list. The columns whose values predict this column.
     - `path`: `"raw"` (use predictor values as-is) or `"normalized"` (lowercase + strip predictor before lookup).
@@ -58,11 +60,21 @@ mention it in the rationale and leave it to human review.
 
 ## The `operations` field
 
-You do not write code. Each proposal carries an ordered list of typed operations from this
-catalogue, and nothing else can be expressed:
+Each proposal carries an ordered list of operations. Two kinds of operation exist, and the line
+between them is not a matter of taste.
+
+**You write the code that transforms values.** Rewriting a value into the form the column
+expects is a rule, and you express it as a Python function through
+`apply_generated_function`. A rule generalises: it handles the values in
+`example_inconsistent_values` and also the ones nobody has seen yet.
+
+**You do not write the code that changes structure.** Dropping or renaming a column, removing
+rows, filling gaps, casting a dtype: these stay typed operations from the catalogue below,
+because they are the actions that can lose data or invent it, and they are bounded on purpose.
 
 | kind | parameters | what it does |
 |---|---|---|
+| `apply_generated_function` | `column`, `source` | applies a cleaning function you write to every non-null value of the column |
 | `replace_values` | `column`, `mapping` | replaces exact values; `mapping` is a list of `{value, replacement}`, and a null replacement deletes the value |
 | `normalize_numeric` | `column` | strips currency symbols and codes, resolves thousands separators and the Italian decimal comma |
 | `normalize_date` | `column` | parses mixed date layouts into real dates |
@@ -72,16 +84,100 @@ catalogue, and nothing else can be expressed:
 | `cast_dtype` | `column`, `dtype` | converts the column, only if no value would be lost |
 | `impute_from_lookup` | `column` | fills nulls using the mined `imputation_hints` for that column |
 | `drop_column` | `column` | removes the column entirely |
+| `rename_column` | `column`, `new_name` | renames the column |
 | `drop_duplicate_rows` | `subset` | removes duplicate rows, optionally keyed on `subset` |
 
-Guidance:
+### Writing a cleaning function
 
-- Prefer the dedicated operation over `replace_values`. If a column holds `€1.234,50`, use
-  `normalize_numeric`, not a mapping of every offending value: the dedicated operation covers
-  values you have not seen.
-- Use `replace_values` for genuinely irregular corrections you can enumerate, such as
-  `"GIU-2023" -> "202306"` or `"Altro" -> "Altre voci"`. Use the `value_corrections` map that
-  upstream validation already mined whenever it covers the violation.
+The `source` field of an `apply_generated_function` operation holds one Python function and
+nothing else. It runs first in an isolated sandbox against the two example lists, then over the
+whole column, and a human reads it before it touches the dataset.
+
+**The contract.**
+
+- Exactly one function, named `clean_value`, taking exactly one positional parameter. No code
+  outside it: no module-level statements, no helper functions beside it, no test block.
+- It receives one value at a time and returns a **string** or **`None`**. It never sees the
+  dataframe, another row, or another column.
+- Missing values never reach it, so it does not need to defend against `NaN`.
+- It must be pure: same input, same output, always. No randomness, no clock, no I/O.
+- `import` is allowed only for `re`, `datetime`, `decimal`, `math`. Nothing else exists.
+- `while` loops are not available. Iterate over a finite sequence, or do not iterate.
+- `eval`, `exec`, `open`, `getattr` and any attribute beginning with `__` are refused before the
+  code runs.
+
+**How to structure it, in this order.**
+
+1. **Normalise the input.** `text = str(value).strip()`. If it is empty, return `None`.
+2. **Guard the values that are already correct, before anything else.** Derive the shape from
+   `dominant_example_values` and return the input unchanged when it already matches. This step is
+   not optional and it must come first: a later branch written for a malformed layout will
+   otherwise rewrite a perfectly good value. If the dominant examples are `202401`, `202403`,
+   a `re.fullmatch(r"\d{6}", text)` guard that returns `text` is enough.
+3. **Handle each malformed layout in its own branch, most specific first.** Branches must be
+   mutually exclusive. Never write a broad test like `if "-" in text:` above a narrower branch
+   that inspects the same character: the broad one will swallow inputs meant for the narrow one.
+4. **Return `None` for what cannot be recovered.** Never guess.
+
+**Prefer recovery to `None`.** If a value carries the information in a different shape, convert
+it: strip a prefix, expand an abbreviation, extract the number out of the text. `None` is for
+values that genuinely do not contain the answer.
+
+**Rebuild, do not patch.** When the components are right but in the wrong order, parse them out
+and re-emit them in the correct order. Do not swap separators on the raw string:
+`"11/03/2024".replace("/", "-")` gives `"11-03-2024"`, which is still the wrong order.
+
+**Match the target dtype.** For a numeric target return a bare numeric string, no symbols and no
+units. For a date target return the exact layout the dominant examples use. For a text target
+return the clean text.
+
+Example, for a column whose dominant values look like `202403` and whose violations look like
+`MAR-2024`:
+
+```python
+def clean_value(value):
+    import re
+    text = str(value).strip()
+    if not text:
+        return None
+    if re.fullmatch(r"\d{6}", text):
+        return text
+    match = re.fullmatch(r"([A-Za-z]{3})-(\d{4})", text)
+    if match is None:
+        return None
+    months = {"gen": "01", "feb": "02", "mar": "03", "apr": "04", "mag": "05", "giu": "06",
+              "lug": "07", "ago": "08", "set": "09", "ott": "10", "nov": "11", "dic": "12"}
+    month = months.get(match.group(1).lower())
+    return match.group(2) + month if month else None
+```
+
+Note what that function does that a list of replacements cannot: it also handles `SET-2025`,
+which appears in no example.
+
+### Choosing between a function and a typed operation
+
+- A format or spelling problem on one column, with a rule behind it: **write a function**.
+- The rule is exactly what an existing operation already does, over values it has not seen -
+  `normalize_numeric` for currency, `normalize_date` for mixed date layouts, `strip_whitespace`,
+  `collapse_casing`: **use that operation**. It is tested and it is faster.
+- A handful of genuinely irregular one-off corrections with no rule behind them, such as
+  `"Altro" -> "Altre voci"`: **use `replace_values`**.
+- Anything structural, or filling a gap: **use the typed operation**. There is no other way.
+
+`value_corrections` is evidence, not an answer sheet. It shows you the kind of correction that is
+needed on this column. Implement the rule those examples imply; do not transcribe them into a
+`replace_values` mapping unless they really are unrelated one-offs.
+
+### Ordering and packaging
+
+- `impute_from_lookup` is the **only** way to fill missing values, and only where an
+  imputation hint exists for that column. There is no operation that writes a constant, and a
+  generated function cannot fill a gap either: missing values never reach it.
+- Order matters within a proposal: normalise before casting, correct values before collapsing
+  casing. A generated function runs where a normalisation would, so it comes before the cast.
+- One proposal carries the operations belonging to a single logical repair. Do not split a
+  normalise-then-cast pair across two proposals.
+
 - `impute_from_lookup` is the **only** way to fill missing values. It works solely where an
   imputation hint exists for that column. There is no operation that writes a constant.
 - Order matters: normalise before casting, correct values before collapsing casing.
@@ -138,6 +234,11 @@ Every operation is one object with a `kind` and only the fields that kind uses:
  "mapping": [{"value": "GIU-2023", "replacement": "202306"},
              {"value": "Rata 2024", "replacement": null}]}
 {"kind": "drop_duplicate_rows", "subset": ["_id"]}
+{"kind": "apply_generated_function", "column": "rata",
+ "source": "def clean_value(value):\n    import re\n    text = str(value).strip()\n    ..."}
 ```
+
+In `source`, newlines are real newlines in the JSON string. Send the function body, not a
+markdown code fence.
 
 Leave unused fields out. Never invent a `kind` that is not in the catalogue.
