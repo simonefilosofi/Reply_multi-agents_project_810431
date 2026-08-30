@@ -1,4 +1,4 @@
-"""Sandboxed dry-run for a single FixProposal: executes the proposal's typed operations against a copy of the dataframe, re-runs the format validator on the affected columns, checks the deterministic post-fix invariants, and returns a structured trial outcome consumed by the per-proposal self-review step in the Unified Remediation agent."""
+"""Local dry-run for a single FixProposal against a copy of the dataframe - the sandbox in this pipeline guards the first execution of generated code, in tools.generated_function, not this pass: executes the proposal's typed operations against a copy of the dataframe, re-runs the format validator on the affected columns, checks the deterministic post-fix invariants, and returns a structured trial outcome consumed by the per-proposal self-review step in the Unified Remediation agent."""
 from __future__ import annotations
 
 import pandas as pd

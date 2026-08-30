@@ -1,4 +1,4 @@
-"""Executable catalogue of remediation operations. A fix is expressed as a typed operation with validated parameters rather than as generated Python, so that every action is deterministic, reviewable, replayable, and structurally incapable of inventing data. A replacement of None clears the value, which the post-fix invariants then hold to the deletion budget. Each entry maps an Operation to a pure dataframe transformation, The lookup key is built the same way the miner built it, so a timestamp predictor is matched by month rather than by instant. Each entry renders itself both as a human-readable line and as the equivalent pandas expression, so a reviewer can see exactly what a proposal will do. The rendered Python is documentation: what runs is the catalogue below, never a generated string."""
+"""Executable catalogue of remediation operations. A fix is expressed as a typed operation with validated parameters rather than as generated Python, so that every action is deterministic, reviewable, replayable, and structurally incapable of inventing data. A replacement of None clears the value, which the post-fix invariants then hold to the deletion budget. Each entry maps an Operation to a pure dataframe transformation, The lookup key is built the same way the miner built it, so a timestamp predictor is matched by month rather than by instant. Each entry renders itself both as a human-readable line and as the equivalent pandas expression, so a reviewer can see exactly what a proposal will do. For every entry but one the rendered Python is documentation and what runs is the catalogue below. The exception is apply_generated_function, which carries a cleaning function the Unified agent wrote: there the rendered source is the code that runs, which is why it reaches the approval gate verbatim and why tools.generated_function re-reads it immediately before every execution."""
 from __future__ import annotations
 
 import pandas as pd
@@ -7,6 +7,7 @@ from models import Operation
 
 _RENDERED_MAPPINGS = 4
 from tools.apply_casing import collapse_casing_variants
+from tools.generated_function import apply_to_series
 from tools.cross_column_checks import period_key
 from tools.normalize_date_format import normalize_date_format
 from tools.normalize_numeric_format import normalize_numeric_format
@@ -57,6 +58,8 @@ def describe_operation(operation: Operation) -> str:
         return f"cast_dtype on {operation.column} to {operation.dtype}"
     if operation.kind == "drop_duplicate_rows":
         return f"drop_duplicate_rows on {operation.subset or 'all columns'}"
+    if operation.kind == "apply_generated_function":
+        return f"apply_generated_function on {operation.column}:\n{operation.source}"
     if operation.kind == "rename_column":
         return f"rename_column {operation.column} to {operation.new_name}"
     return f"{operation.kind} on {operation.column}"
@@ -84,6 +87,8 @@ def _transform(
     if operation.kind == "cast_dtype":
         cast, blocking = safe_cast(series, operation.dtype)
         return series if blocking else cast
+    if operation.kind == "apply_generated_function":
+        return apply_to_series(series, operation.source)
     if operation.kind == "impute_from_lookup":
         return _impute(series, hints.get(operation.column), df)
     return series
@@ -131,6 +136,8 @@ def _as_python(operation: Operation) -> str:
         return f'df["{column}"] = pd.to_numeric(df["{column}"], errors="coerce").round({operation.digits})'
     if operation.kind == "cast_dtype":
         return f'df["{column}"], blocking = safe_cast(df["{column}"], "{operation.dtype}")'
+    if operation.kind == "apply_generated_function":
+        return f'{operation.source}\ndf["{column}"] = df["{column}"].map(clean_value)'
     if operation.kind == "impute_from_lookup":
         return (
             f'lookup = imputation_hints["{column}"]["mapping"]\n'

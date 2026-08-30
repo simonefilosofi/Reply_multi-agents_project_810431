@@ -1,4 +1,4 @@
-"""Applies accepted FixProposals to the pipeline dataset in dependency order by executing their typed operations. No proposal carries executable code: each is a validated sequence of catalogue operations, so remediation is deterministic and replayable. A proposal whose result breaks a post-fix invariant is rejected rather than applied. Returns the cleaned dataframe and a per-proposal status list (applied / skipped / error / rejected) carrying the cell-level changes each proposal produced."""
+"""Applies accepted FixProposals to the pipeline dataset in dependency order by executing their typed operations. A proposal is a validated sequence of catalogue operations, so remediation is deterministic and replayable; where an operation carries a generated cleaning function, that source is re-read and cleared before it runs. A proposal whose result breaks a post-fix invariant is rejected rather than applied. Returns the cleaned dataframe and a per-proposal status list (applied / skipped / error / rejected) carrying the cell-level changes each proposal produced."""
 from __future__ import annotations
 
 import numpy as np

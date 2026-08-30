@@ -132,6 +132,7 @@ OperationKind = Literal[
     "drop_column",
     "rename_column",
     "drop_duplicate_rows",
+    "apply_generated_function",
 ]
 
 
@@ -148,6 +149,25 @@ class Operation(BaseModel):
     dtype: str = ""
     new_name: str = ""
     subset: list[str] = Field(default_factory=list)
+    source: str = ""
+
+
+CleanerIssueCategory = Literal[
+    "malformed_source",
+    "forbidden_construct",
+    "runtime_exception",
+    "dominant_value_modified",
+    "outlier_unchanged",
+    "not_parseable_as_target_dtype",
+]
+
+
+class CleanerIssue(BaseModel):
+    category: CleanerIssueCategory
+    message: str
+    input_value: str | None = None
+    actual_output: str | None = None
+    expected_behavior: str = ""
 
 
 class FixProposal(BaseModel):
