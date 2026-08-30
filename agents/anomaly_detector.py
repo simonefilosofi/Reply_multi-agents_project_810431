@@ -4,12 +4,12 @@ from __future__ import annotations
 import json
 
 import pandas as pd
-from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
 from models import AnomalyEntry, AnomalyReport
 from tools.normalize_numeric_format import normalize_numeric_format
 from state import PipelineState
+from utils.llm import structured_model
 from utils.prompts import load_prompt
 
 _RARE_FREQ_THRESHOLD = 0.01  # below 1% of non-null rows
@@ -181,7 +181,7 @@ def _detect_rare_categories(series: pd.Series, col_name: str) -> AnomalyReport |
 
 
 def _add_llm_comments(reports: list[AnomalyReport]) -> None:
-    chain = ChatOpenAI(model="gpt-4o-mini", temperature=0).with_structured_output(_AnomalyCommentResponse)
+    chain = structured_model(_AnomalyCommentResponse)
     system = load_prompt("anomaly_detector")
 
     payload = [

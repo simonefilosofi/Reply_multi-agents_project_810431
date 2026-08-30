@@ -1,4 +1,4 @@
-"""Renders the data quality report from Markdown to a printable PDF. The report itself is the Markdown: HTML and PDF are renderings of it, so a run whose PDF step fails still delivers a readable report, and the Streamlit gate can show the same text the PDF carries. Conversion is python-markdown for the HTML and headless Chrome for the print, which buys CSS layout, real tables and inline SVG for the cost of one system dependency. Two behaviours of headless Chrome are worked around here rather than rediscovered: on macOS it silently hangs instead of failing when asked to read a TCC-protected path, which includes the Desktop this project lives on, so the conversion happens entirely under /tmp; and it writes the PDF but never exits, so the wait is on the file settling rather than on the process ending."""
+"""Renders the data quality report from Markdown to a printable PDF. The report itself is the Markdown: HTML and PDF are renderings of it, so a run whose PDF step fails still delivers a readable report, and the Streamlit gate can show the same text the PDF carries. Conversion is python-markdown for the HTML and headless Chrome for the print, which buys CSS layout, real tables and inline SVG for the cost of one system dependency. Two behaviours of headless Chrome are worked around here rather than rediscovered: on macOS it silently hangs instead of failing when asked to read a TCC-protected path, which includes the Desktop this project lives on, so on a POSIX machine the conversion happens entirely under /tmp; and it writes the PDF but never exits, so the wait is on the file settling rather than on the process ending."""
 from __future__ import annotations
 
 import os
@@ -16,7 +16,12 @@ _CHROME_CANDIDATES = (
     "/usr/bin/google-chrome",
     "/usr/bin/chromium",
     "/usr/bin/chromium-browser",
+    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+    r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+    r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
 )
+_CHROME_ON_PATH = ("google-chrome", "chromium", "chrome", "msedge")
+_TCC_SAFE_WORKSPACE = "/tmp"
 _PDF_TIMEOUT_SECONDS = 120
 _SETTLE_SECONDS = 0.7
 
@@ -120,7 +125,11 @@ def chrome_executable() -> str | None:
     for candidate in _CHROME_CANDIDATES:
         if Path(candidate).exists():
             return candidate
-    return shutil.which("google-chrome") or shutil.which("chromium")
+    for name in _CHROME_ON_PATH:
+        found = shutil.which(name)
+        if found:
+            return found
+    return None
 
 
 def write_pdf(
@@ -135,10 +144,16 @@ def write_pdf(
     html = markdown_to_html(md_text, title, footer_note)
     destination = Path(out_pdf).resolve()
     destination.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="dq-report-", dir="/tmp") as work:
+    with tempfile.TemporaryDirectory(prefix="dq-report-", dir=_workspace_root()) as work:
         staged = _print_to_pdf(browser, html, Path(work))
         shutil.move(str(staged), destination)
     return destination
+
+
+def _workspace_root() -> str | None:
+    """Where the conversion is staged. /tmp on a POSIX machine, for the macOS reason in the module
+    docstring; the platform default on Windows, which has no /tmp and is not subject to TCC."""
+    return _TCC_SAFE_WORKSPACE if os.name == "posix" else None
 
 
 def _print_to_pdf(browser: str, html: str, work: Path) -> Path:

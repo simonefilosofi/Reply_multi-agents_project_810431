@@ -5,7 +5,6 @@ import json
 from collections import defaultdict
 
 import pandas as pd
-from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
 from models import DuplicateResolution, FormatViolation, ValidationReport
@@ -13,6 +12,7 @@ from state import PipelineState
 from tools.change_log import diff_values_only
 from tools.cross_column_checks import coherence_score
 from tools.validate_column_names import is_conforming, normalize_column_name, uniquify
+from utils.llm import structured_model
 from utils.prompts import load_prompt
 
 
@@ -35,7 +35,7 @@ def duplicate_column_node(state: PipelineState) -> PipelineState:
     if not groups:
         return state.model_copy(update={"surviving_columns": list(df.columns)})
 
-    chain = ChatOpenAI(model="gpt-5.4-mini", temperature=0).with_structured_output(_NameElection)
+    chain = structured_model(_NameElection)
     system = load_prompt("duplicate_column")
     baseline_columns = _baseline_columns_for_domain(state)
 

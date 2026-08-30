@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 
 import pandas as pd
-from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
 from models import Casing, ColumnPayload, ColumnSchema, EnumFormat, RangeFormat
@@ -17,6 +16,7 @@ from tools.baseline_accessors import (
 from tools.infer_and_validate_dtype import infer_and_validate_dtype
 from tools.match_canonical import compact_format_summary, programmatic_match
 from tools.retrieve_canonical import lookup_descriptor, retrieve_top_k
+from utils.llm import structured_model
 from utils.prompts import load_prompt
 
 
@@ -66,7 +66,7 @@ def semantic_node(state: PipelineState) -> PipelineState:
 
     domain_catalog = column_catalog_all_domains(state.baseline) if state.baseline else {}
     aliases = alias_index(state.baseline) if state.baseline else {}
-    chain = ChatOpenAI(model="gpt-5.4-mini", temperature=0).with_structured_output(_SemanticResponse)
+    chain = structured_model(_SemanticResponse)
     system = load_prompt("semantic")
     descriptions = _describe_columns(df, all_columns)
 
@@ -226,7 +226,7 @@ def _resolve_dtype(canonical_hint: str, series: pd.Series, llm_dtype: str) -> st
 
 
 def _describe_columns(df: pd.DataFrame, columns: list[str]) -> dict[str, str]:
-    chain = ChatOpenAI(model="gpt-5.4-mini", temperature=0).with_structured_output(_DescribeResponse)
+    chain = structured_model(_DescribeResponse)
     user = {
         "columns": [
             {

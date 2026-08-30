@@ -93,6 +93,7 @@ def _received(payload: dict) -> str:
         ["columns badly named", _number(before.get("columns_badly_named"))],
         ["columns almost empty", _number(before.get("columns_sparse"))],
         ["columns duplicating another", _number(before.get("columns_redundant"))],
+        ["columns still holding the wrong type", _number(before.get("columns_untyped"))],
     ]
     lines = [
         "## The dataset as received",
@@ -396,6 +397,7 @@ def _delivered(payload: dict) -> str:
         ("columns badly named", "columns_badly_named"),
         ("columns almost empty", "columns_sparse"),
         ("columns duplicating another", "columns_redundant"),
+        ("columns still holding the wrong type", "columns_untyped"),
     ]
     rows = [
         [label, _number(before.get(key)), _number(after.get(key))]

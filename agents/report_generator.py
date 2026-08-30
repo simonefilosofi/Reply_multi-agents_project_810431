@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 
 import pandas as pd
-from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
 from models import DateFormat, EnumFormat, FormatViolation, RangeFormat, RegexFormat, ValidationReport
@@ -19,6 +18,7 @@ from tools.operations import describe_operation, operations_as_python
 from tools.report_markdown import build_report_markdown
 from tools.reliability_score import DIMENSIONS, checked_cells_by_column, compare, compute_metrics, violation_counts
 from tools.validate_format import validate_format
+from utils.llm import structured_model
 from utils.prompts import load_prompt
 
 
@@ -47,7 +47,7 @@ def report_generator_node(state: PipelineState) -> PipelineState:
     quality = _quality_section(state, residual)
     payload = _build_payload(state, residual, quality)
     system = load_prompt("report_generator")
-    chain = ChatOpenAI(model="gpt-5.4-mini", temperature=0).with_structured_output(_ReportResponse)
+    chain = structured_model(_ReportResponse)
 
     result: _ReportResponse = chain.invoke([
         {"role": "system", "content": system},
@@ -213,6 +213,7 @@ def _like_for_like_snapshots(
         conventions,
         checked_cells=checked_cells_by_column(sub, state.inferred_format_specs),
         duplicate_analysis=duplicate_row_analysis(sub),
+        declared_dtypes={p.column_name: p.dtype for p in state.payload if p.dtype},
     )
     return _scope_metrics(before, [origin for origin, _ in pairs]), after
 
@@ -257,6 +258,7 @@ def _scope_metrics(before: dict, kept: list[str]) -> dict:
         "columns_badly_named": sum(1 for labels in defects.values() if "naming" in labels),
         "columns_sparse": sum(1 for labels in defects.values() if "sparse" in labels),
         "columns_redundant": sum(1 for labels in defects.values() if "redundant" in labels),
+        "columns_untyped": sum(1 for labels in defects.values() if "untyped" in labels),
         "checked_cells": checked_total or None,
         "checked_cells_by_column": checked,
         "format_violations": format_violations,

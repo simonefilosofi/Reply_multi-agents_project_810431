@@ -8,6 +8,7 @@ from collections import defaultdict
 import pandas as pd
 
 from models import GlobalConventions, ValidationReport
+from tools.safe_cast import dtype_satisfied
 from tools.validate_column_names import is_conforming
 
 _COMPLETENESS_PATTERNS = {"not nullable", "missing value"}
@@ -106,7 +107,7 @@ def structural_defects(
         if rows and float(df[column].isna().mean()) >= _SPARSE_NULL_RATE:
             found.append("sparse")
         declared = (declared_dtypes or {}).get(name)
-        if declared and declared != str(df[column].dtype):
+        if declared and not dtype_satisfied(declared, str(df[column].dtype)):
             found.append("untyped")
         fingerprint = _fingerprint(df[column])
         if fingerprint in seen:
@@ -131,7 +132,7 @@ def compute_metrics(
     null_cells = int(df.isna().sum().sum())
     duplicate_rows = int(df.duplicated().sum())
     rows_in_key_conflict = _rows_in_key_conflict(duplicate_analysis)
-    defects = structural_defects(df, conventions)
+    defects = structural_defects(df, conventions, declared_dtypes)
     metrics: dict = {
         "null_by_column": {str(c): int(df[c].isna().sum()) for c in df.columns},
         "rows": rows,
@@ -144,12 +145,13 @@ def compute_metrics(
         "checked_cells_by_column": checked_cells or {},
         "completeness": _ratio(cells - null_cells, cells),
         "uniqueness": _ratio(rows - duplicate_rows - rows_in_key_conflict, rows),
-        "schema_conformity": _schema_conformity(df, conventions, declared_dtypes),
+        "schema_conformity": _ratio(len(df.columns) - len(defects), len(df.columns)),
         "structural_defects": defects,
         "columns_with_structural_defects": len(defects),
         "columns_badly_named": sum(1 for d in defects.values() if "naming" in d),
         "columns_sparse": sum(1 for d in defects.values() if "sparse" in d),
         "columns_redundant": sum(1 for d in defects.values() if "redundant" in d),
+        "columns_untyped": sum(1 for d in defects.values() if "untyped" in d),
     }
     if validation_reports is not None:
         counts = violation_counts(validation_reports)
@@ -200,17 +202,6 @@ def _rows_in_key_conflict(duplicate_analysis: dict | None) -> int:
         (int(stats.get("rows_in_conflicting_groups", 0)) for stats in collisions.values()),
         default=0,
     )
-
-
-def _schema_conformity(
-    df: pd.DataFrame,
-    conventions: GlobalConventions | None,
-    declared_dtypes: dict[str, str] | None = None,
-) -> float | None:
-    if df.columns.empty:
-        return None
-    intact = len(df.columns) - len(structural_defects(df, conventions, declared_dtypes))
-    return _ratio(intact, len(df.columns))
 
 
 def _fingerprint(series: pd.Series) -> str:

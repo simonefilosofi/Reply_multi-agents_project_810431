@@ -3,9 +3,10 @@ import traceback
 import pandas as pd
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
-from langchain_openai import ChatOpenAI 
 from langchain_core.prompts import ChatPromptTemplate
 from e2b_code_interpreter import Sandbox
+
+from utils.llm import structured_model
 
 load_dotenv()
 
@@ -14,8 +15,7 @@ class CodeOutput(BaseModel):
 
 def run_mechanic_in_cloud(dataset: dict, approved_errors: str):
     print("Running Code Generator...")
-    llm = ChatOpenAI(model="gpt-5.4-mini", temperature=0)
-    structured_llm = llm.with_structured_output(CodeOutput)
+    structured_llm = structured_model(CodeOutput)
     
     prompt = ChatPromptTemplate.from_messages([
         ("system", """You are a Python data engineer. Write a function `clean_data(df)` that fixes ONLY the approved errors.

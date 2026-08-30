@@ -99,6 +99,7 @@ def format_consistency_node(state: PipelineState) -> PipelineState:
         state.baseline.global_conventions if state.baseline else None,
         checked_cells=checked_cells_by_column(state.dataset, inferred_specs),
         duplicate_analysis=duplicate_row_analysis(state.dataset),
+        declared_dtypes={p.column_name: p.dtype for p in state.payload if p.dtype},
     )
     return state.model_copy(update={
         "validation_reports": merged,

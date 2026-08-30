@@ -28,9 +28,6 @@ def _proposal(identifier: str = "f1") -> FixProposal:
 
 
 class _ApprovingReviewChain:
-    def with_structured_output(self, _model):
-        return self
-
     def invoke(self, _messages):
         return FixReviewResponse(decision="approve")
 
@@ -40,7 +37,7 @@ def loop(monkeypatch):
     """Runs the real loop over stubbed collaborators and records how it asked for repairs."""
     calls: dict[str, list] = {"deterministic": [], "critic": []}
 
-    monkeypatch.setattr(unified, "ChatOpenAI", lambda **_kwargs: _ApprovingReviewChain())
+    monkeypatch.setattr(unified, "structured_model", lambda *_a, **_k: _ApprovingReviewChain())
     monkeypatch.setattr(unified, "load_prompt", lambda _name: "")
     monkeypatch.setattr(unified, "trial_execute", lambda *a, **k: {
         "status": "applied", "invariant_violations": [], "rows_changed": 1,

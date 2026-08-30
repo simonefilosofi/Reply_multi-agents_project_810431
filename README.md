@@ -77,7 +77,7 @@ single, fully-dereferenced schema object to query. This is a pure Python step �
 
 **`profiler`**  
 Builds a hierarchical signature map of the baseline (domain → dataset → column names) and
-sends it alongside the input dataset's column names and 5-row samples to `gpt-4o-mini`. The
+sends it alongside the input dataset's column names and 5-row samples to `deepseek-v4-pro`. The
 LLM returns the most likely NoiPA domain and primary language. This detection gates how
 subsequent agents interpret ambiguous columns — for example, a column named `rata` means
 something different in `spesa` vs. `attivazioniCessazioni`.
@@ -85,9 +85,9 @@ something different in `spesa` vs. `attivazioniCessazioni`.
 **`semantic`** *(core agent — semi-RAG)*  
 The most complex agent, running four sub-steps per column:
 
-1. **Batch description pass**: sends all columns (name + dtype + 5 samples) to `gpt-4o-mini`
-   in a single call and gets back a one-sentence factual description for each. This description
-   is the query text for retrieval — it captures meaning rather than just name.
+1. **Batch description pass**: sends all columns (name + dtype + 5 samples) to
+   `deepseek-v4-pro` in a single call and gets back a one-sentence factual description for each.
+   This description is the query text for retrieval — it captures meaning rather than just name.
 
 2. **Embedding retrieval**: for each column, concatenates `name + description + samples` into
    a query string, embeds it with `text-embedding-3-small`, and scores all 54 entries in
@@ -97,7 +97,7 @@ The most complex agent, running four sub-steps per column:
 
 3. **LLM verdict**: sends the column's name, dtype, 30-row sample, placeholder candidates,
    `canonical_suggestion` (from name-based fallback), and the top-5 retrieval candidates to
-   `gpt-4o-mini`. The LLM confirms or rejects each candidate by comparing descriptions and
+   `deepseek-v4-pro`. The LLM confirms or rejects each candidate by comparing descriptions and
    sample vocabularies, and returns: `canonical_match`, `dtype`, `column_meaning`,
    `placeholders`, `related_columns`, `target_casing`.
 
@@ -117,7 +117,7 @@ LLM call — the intelligence was already applied upstream in the semantic agent
 Computes pairwise column similarity (value-overlap Jaccard at 0.80 threshold) to find groups
 of near-duplicate columns. Within each group, elects the data survivor as the column with
 fewest nulls, then backfills its missing values from the other group members. Calls
-`gpt-4o-mini` once per group to elect the canonical output name (the name most consistent
+`deepseek-v4-pro` once per group to elect the canonical output name (the name most consistent
 with the NoiPA registry and the detected domain). Drops all non-survivors and records a
 `DuplicateResolution` entry per group.
 
@@ -138,7 +138,7 @@ on the clean data is more precise than on the raw data.
 **`report_generator`**  
 Builds a structured payload from the final pipeline state — dataset shape, per-column null
 percentages, the semantic payload (column meanings, dtypes, placeholders), duplicate
-resolutions, and validation violations — and sends it to `gpt-4o-mini` to produce five
+resolutions, and validation violations — and sends it to `deepseek-v4-pro` to produce five
 narrative sections: executive summary, dataset overview, quality findings, actions taken, and
 recommendations. Renders the result to a PDF using `fpdf2`.
 
@@ -183,7 +183,7 @@ the agent logic.
 Python 3.11. Key dependencies:
 
 ```
-langchain-openai
+langchain-deepseek
 langgraph
 openai
 pandas
@@ -202,9 +202,11 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Set `OPENAI_API_KEY` in a `.env` file at the project root. The pipeline uses `gpt-4o-mini`
-for all LLM calls and `text-embedding-3-small` for canonical retrieval. The embedding index
-for `column_descriptions.json` is cached to disk on first run.
+Set `DEEPSEEK_API_KEY` and `OPENAI_API_KEY` in a `.env` file at the project root. Every chat
+call goes through `utils/llm.py`, which pins `deepseek-v4-pro` and disables the provider's
+reasoning mode so that `temperature=0` is honoured. Canonical retrieval stays on OpenAI's
+`text-embedding-3-small`; the embedding index for `column_descriptions.json` is cached to disk
+on first run, so only the per-column query is embedded live.
 
 ---
 

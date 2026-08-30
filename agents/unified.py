@@ -5,7 +5,6 @@ import json
 from collections import defaultdict
 
 import pandas as pd
-from langchain_openai import ChatOpenAI
 
 from models import (
     CleanerDiagnosis,
@@ -33,6 +32,7 @@ from tools.generated_function import (
 )
 from tools.trial_execute import trial_execute
 from tools.validate_format import specs_by_column
+from utils.llm import structured_model
 from utils.prompts import load_prompt
 
 
@@ -174,7 +174,7 @@ def propose_for_group(
     removable_by_column: dict[str, set] | None = None,
     anomalies: dict[str, dict] | None = None,
 ) -> list[FixProposal]:
-    chain = ChatOpenAI(model="gpt-5.4-mini", temperature=0).with_structured_output(FixGroupResponse)
+    chain = structured_model(FixGroupResponse)
     system = load_prompt("unified")
     ctx, input_violation_ids = _build_group_context(
         group_id, group, payload_by_name, reports_by_name, df, baseline,
@@ -218,7 +218,7 @@ def _review_and_revise_proposals(
     imputation_hints: dict[str, ImputationHint],
     regenerate,
 ) -> list[FixProposal]:
-    review_chain = ChatOpenAI(model="gpt-5.4-mini", temperature=0).with_structured_output(FixReviewResponse)
+    review_chain = structured_model(FixReviewResponse)
     review_system = load_prompt("unified_review")
     finalized: list[FixProposal] = []
     for proposal in proposals:
@@ -365,7 +365,7 @@ def _critic_feedback_for(
     if generated is None:
         return _cleaner_feedback_for(proposal, issues)
     examples = examples_by_column.get(generated.column, {})
-    chain = ChatOpenAI(model="gpt-5.4-mini", temperature=0).with_structured_output(CleanerDiagnosis)
+    chain = structured_model(CleanerDiagnosis)
     diagnosis: CleanerDiagnosis = chain.invoke([
         {"role": "system", "content": load_prompt("cleaner_critic")},
         {"role": "user", "content": json.dumps({
