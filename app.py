@@ -261,11 +261,26 @@ for proposal in state.proposed_fixes:
         if proposal.depends_on:
             st.caption(f"Depends on: {', '.join(proposal.depends_on)}")
         st.markdown(f"_{proposal.rationale}_")
+        generated = [o for o in proposal.operations if o.kind == "apply_generated_function"]
+        if generated:
+            st.markdown(
+                "**Generated code** on "
+                f"`{', '.join(o.column for o in generated)}` — read it before accepting."
+            )
         st.code(operations_as_python(proposal.operations), language="python")
-        st.caption(
-            "Equivalent pandas expression, shown so you can see exactly what the proposal "
-            "does. The pipeline executes the typed operations, not this text."
-        )
+        if generated:
+            st.caption(
+                "The cleaning function above is the code that will run, written by the model for "
+                "this column. It was refused any import outside re, datetime, decimal and math, "
+                "then executed in a sandbox against this column's own conforming and violating "
+                "values before reaching you. The remaining lines are the equivalent pandas "
+                "expression for the typed operations."
+            )
+        else:
+            st.caption(
+                "Equivalent pandas expression, shown so you can see exactly what the proposal "
+                "does. The pipeline executes the typed operations, not this text."
+            )
 
         btns = st.columns(3)
         if btns[0].button("Accept", key=f"acc_{proposal.id}"):
