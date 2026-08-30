@@ -7,6 +7,8 @@ import pytest
 from tools.generated_function import (
     apply_to_series,
     check_source,
+    execution_log,
+    start_execution_log,
     issues_fingerprint,
     load_callable,
     validate_against_examples,
@@ -148,3 +150,42 @@ def test_the_same_failure_twice_carries_the_same_fingerprint() -> None:
 
     assert issues_fingerprint(first) == issues_fingerprint(second)
     assert issues_fingerprint(first) != issues_fingerprint([])
+
+
+def test_the_same_source_over_the_same_values_is_executed_once_per_run() -> None:
+    start_execution_log()
+
+    for _ in range(4):
+        validate_against_examples(_PERIOD_CLEANER, _DOMINANT, _INCONSISTENT, "string")
+
+    assert len(execution_log()) == 1
+
+
+def test_a_different_source_is_executed_again() -> None:
+    start_execution_log()
+
+    validate_against_examples(_PERIOD_CLEANER, _DOMINANT, _INCONSISTENT, "string")
+    validate_against_examples(
+        "def clean_value(value):\n    return str(value)", _DOMINANT, _INCONSISTENT, "string"
+    )
+
+    assert len(execution_log()) == 2
+
+
+def test_the_log_names_the_executor_that_ran() -> None:
+    start_execution_log()
+
+    _issues, executor = validate_against_examples(_PERIOD_CLEANER, _DOMINANT, [], "string")
+
+    assert execution_log()[0]["executor"] == executor
+    assert execution_log()[0]["ok"] is True
+
+
+def test_source_the_gate_refuses_never_reaches_an_executor() -> None:
+    start_execution_log()
+
+    validate_against_examples(
+        "def clean_value(value):\n    import os\n    return value", _DOMINANT, [], "string"
+    )
+
+    assert execution_log() == []

@@ -85,7 +85,6 @@ def validate_against_examples(
     dominant = [_as_scalar(value) for value in dominant_values]
     inconsistent = [_as_scalar(value) for value in inconsistent_values]
     results, executor = run_on_values(source, dominant + inconsistent)
-    _executions.append({"executor": executor, "ok": True, "values": len(dominant) + len(inconsistent)})
 
     issues = _judge(dominant, results[: len(dominant)], expected_unchanged=True, dtype=target_dtype)
     issues.extend(
@@ -97,13 +96,30 @@ def validate_against_examples(
 def run_on_values(source: str, values: list[str | None]) -> tuple[list[dict], str]:
     """Executes the cleaner over a handful of values, preferring the sandbox. The fallback exists
     so a missing key or a dropped connection degrades the isolation of a first run rather than
-    stopping the pipeline."""
+    stopping the pipeline. A cleaner is a pure function of its input, so the same source over the
+    same values is answered from the run's cache: the repair loop checks a proposal at the top of
+    every iteration and once more when it settles, and without this the unchanged source would
+    cross the network again each time."""
+    key = (source, tuple(values))
+    cached = _results.get(key)
+    if cached is not None:
+        return cached
+    outcome = _execute(source, values)
+    _results[key] = outcome
+    return outcome
+
+
+def _execute(source: str, values: list[str | None]) -> tuple[list[dict], str]:
     if os.getenv("E2B_API_KEY"):
         try:
-            return _run_in_sandbox(source, values), "e2b"
+            results = _run_in_sandbox(source, values)
+            _executions.append({"executor": "e2b", "ok": True, "values": len(values)})
+            return results, "e2b"
         except Exception as error:
             _executions.append({"executor": "e2b", "ok": False, "detail": str(error)[:200]})
-    return _run_locally(source, values), "local"
+    results = _run_locally(source, values)
+    _executions.append({"executor": "local", "ok": True, "values": len(values)})
+    return results, "local"
 
 
 def issues_fingerprint(issues: list[CleanerIssue]) -> tuple[str, ...]:
@@ -124,8 +140,10 @@ def close_sandbox() -> None:
 
 
 def start_execution_log() -> None:
-    """Begins recording which executor ran each generated cleaner, for the run about to start."""
+    """Begins a run: clears both the record of what was executed and the cache that keeps a
+    repeated check from re-executing it."""
     _executions.clear()
+    _results.clear()
 
 
 def execution_log() -> list[dict]:
@@ -240,6 +258,7 @@ def _run_locally(source: str, values: list[str | None]) -> list[dict]:
 
 _sandbox = None
 _executions: list[dict] = []
+_results: dict[tuple, tuple[list[dict], str]] = {}
 
 
 def _run_in_sandbox(source: str, values: list[str | None]) -> list[dict]:
