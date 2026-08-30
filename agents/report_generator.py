@@ -54,7 +54,7 @@ def report_generator_node(state: PipelineState) -> PipelineState:
         {"role": "user", "content": json.dumps(payload, ensure_ascii=False, default=str)},
     ])
 
-    out = _output_path(state)
+    out = output_path(state)
     _write_artefacts(state, out)
     out.with_suffix(".json").write_text(
         json.dumps({**payload, "narrative": result.model_dump()}, ensure_ascii=False, indent=2, default=str),
@@ -428,7 +428,10 @@ def _write_artefacts(state: PipelineState, out: Path) -> None:
         pd.DataFrame(state.change_log).to_csv(out.with_suffix(".changes.csv"), index=False)
 
 
-def _output_path(state: PipelineState) -> Path:
+def output_path(state: PipelineState) -> Path:
+    """Where this run's artefacts are written. The report is emitted beside the dataset as .md,
+    .html and .pdf sharing this stem, so a caller that wants to show the report reads it from
+    here rather than rebuilding it."""
     if state.dataset_path:
         return Path(state.dataset_path).with_suffix(".pdf")
     return Path("report.pdf")

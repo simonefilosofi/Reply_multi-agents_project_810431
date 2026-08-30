@@ -20,7 +20,7 @@ from agents.semantic import semantic_node
 from agents.apply_fixes import apply_fixes_node
 from agents.auto_remediation import auto_remediation_node
 from agents.duplicate_row import duplicate_row_node
-from agents.report_generator import report_generator_node
+from agents.report_generator import output_path, report_generator_node
 from agents.unified import propose_for_group, unified_node
 from state import PipelineState
 from tools.operations import operations_as_python
@@ -33,6 +33,20 @@ st.session_state.setdefault("snapshots", {})
 st.session_state.setdefault("fix_decisions", {})
 st.session_state.setdefault("editing", {})
 st.session_state.setdefault("execution", None)
+st.session_state.setdefault("report", None)
+
+
+def _read_report(reported: PipelineState) -> dict:
+    """Reads back the three renderings the report node just wrote. The PDF is absent when no
+    browser was available to print it, which is not an error: the HTML carries the same page."""
+    out = output_path(reported)
+    report = {"stem": out.stem, "md": out.with_suffix(".md").read_text(encoding="utf-8")}
+    for extension, mode in (("html", "r"), ("pdf", "rb")):
+        path = out.with_suffix(f".{extension}")
+        report[extension] = (
+            path.read_text(encoding="utf-8") if mode == "r" else path.read_bytes()
+        ) if path.exists() else None
+    return report
 
 uploaded = st.file_uploader("Upload a CSV", type=["csv"])
 if uploaded is None:
@@ -397,7 +411,35 @@ if final_state is not None and final_state.dataset is not None:
         with st.spinner("Deduplicating rows and writing the report..."):
             reported = report_generator_node(duplicate_row_node(final_state))
         st.session_state.pipeline_state = reported
-        st.success(f"Report written next to {reported.dataset_path or 'the dataset'}")
+        st.session_state.report = _read_report(reported)
+        st.rerun()
+
+report = st.session_state.report
+if report:
+    st.divider()
+    st.subheader("Data quality report")
+    st.caption(
+        "The same document the PDF renders. Every figure in it is computed from the run; the "
+        "model wrote only the verdict, the comment under each area, and the recommendations."
+    )
+    downloads = st.columns(3)
+    for column, extension, mime in (
+        (downloads[0], "md", "text/markdown"),
+        (downloads[1], "html", "text/html"),
+        (downloads[2], "pdf", "application/pdf"),
+    ):
+        content = report.get(extension)
+        if content is not None:
+            column.download_button(
+                f"Report ({extension})", content,
+                file_name=f"{report['stem']}.{extension}", mime=mime,
+            )
+    if report.get("pdf") is None:
+        st.caption(
+            "No browser was available to print the PDF. Download the HTML and print it from "
+            "any browser: it is one self-contained file and looks identical."
+        )
+    st.markdown(report["md"], unsafe_allow_html=True)
 
     if final_state.reliability:
         delivered = final_state.reliability["as_delivered"]
