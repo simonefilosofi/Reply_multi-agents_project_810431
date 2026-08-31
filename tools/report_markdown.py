@@ -28,6 +28,7 @@ def build_report_markdown(payload: dict, commentary: dict) -> str:
         _findings(payload, commentary),
         _changes(payload),
         _delivered(payload),
+        _per_column(payload),
         _recommendations(commentary),
     ]
     return "\n\n".join(section for section in sections if section) + "\n"
@@ -132,8 +133,8 @@ def _fault_table(payload: dict) -> str:
         ],
         [
             "Consistency",
-            f"{_number(detected.get('consistency'))} cross-column violations, "
-            f"{len(duplicates)} duplicate column groups",
+            f"{_plural(int(detected.get('consistency') or 0), 'cross-column violation')}, "
+            f"{_plural(len(duplicates), 'duplicate column group')}",
             ", ".join(f"`{group['canonical_name']}`" for group in duplicates[:3]) or "-",
         ],
         [
@@ -236,6 +237,27 @@ def _completeness_body(payload: dict) -> str:
 
 
 def _consistency_body(payload: dict) -> str:
+    return (_duplicate_group_table(payload) + _cross_column_rules(payload)
+            + _duplicate_row_note(payload))
+
+
+def _duplicate_row_note(payload: dict) -> str:
+    """Reconciles the two duplicate-row counts the document carries. The file as delivered holds
+    one number; more rows become identical once the duplicate columns are collapsed, so the number
+    removed is larger, and a reader seeing both without explanation reads it as an error."""
+    delivered = ((payload.get("quality") or {}).get("headline_before") or {}).get("duplicate_rows")
+    removed = (payload.get("duplicate_rows") or {}).get("rows_removed")
+    if not removed or delivered is None or removed == delivered:
+        return ""
+    return (
+        f"\n\nThe file as delivered held {_number(delivered)} exact duplicate rows, and "
+        f"{_number(removed)} were removed. The difference is not a discrepancy: collapsing the "
+        "duplicate columns left further rows identical to one another that had differed only in "
+        "the columns that were dropped."
+    )
+
+
+def _duplicate_group_table(payload: dict) -> str:
     duplicates = payload.get("duplicate_resolutions") or []
     duplicate_rows = payload.get("duplicate_rows") or {}
     blocks = []
@@ -314,9 +336,8 @@ def _unaddressed(payload: dict) -> str:
         return ""
     rows = [
         [
-            ", ".join(f"`{c}`" for c in (entry.get("columns") or [])) or "-",
-            _number(entry.get("affected_rows")) if entry.get("affected_rows") else "-",
-            entry.get("reason") or "no reason recorded",
+            _columns_with_counts(entry),
+            entry.get("reason", "") + _actioned_note(entry) or "no reason recorded",
         ]
         for entry in carried
     ]
@@ -327,7 +348,75 @@ def _unaddressed(payload: dict) -> str:
         "expressed as code over the columns the file actually contains; acting anyway would mean",
         "inventing values. They are listed so the gap is visible rather than silently carried.",
         "",
-        _table(["column", "rows affected", "why no action is proposed"], rows),
+        _table(["column (rows affected)", "why no action is proposed"], rows),
+    ])
+
+
+def _columns_with_counts(entry: dict) -> str:
+    """Each column with its own affected-row count. A single total would be the sum of per-column
+    counts that overlap, which can exceed the row count of the file and reads as an error."""
+    by_column = entry.get("affected_by_column") or {}
+    columns = entry.get("columns") or []
+    if not columns:
+        return "-"
+    return ", ".join(
+        f"`{column}`" + (f" ({_number(by_column[column])})" if by_column.get(column) else "")
+        for column in columns
+    )
+
+
+def _actioned_note(entry: dict) -> str:
+    """Names the columns the reason discusses that a proposal has since taken over, so the prose
+    and the column beside it cannot be read as disagreeing."""
+    elsewhere = entry.get("actioned_elsewhere") or []
+    if not elsewhere:
+        return ""
+    named = ", ".join(f"`{column}`" for column in elsewhere)
+    verb = "is" if len(elsewhere) == 1 else "are"
+    return f" ({named} {verb} also named above but {verb} covered by a proposal at the gate.)"
+
+
+def _cross_column_rules(payload: dict) -> str:
+    """The rules the run checked between columns, and how many rows broke each. The coverage table
+    gives one total and the commentary describes it in words; this says which rule, which is what
+    a reader can take back to the source system."""
+    rules = payload.get("cross_column_rules") or []
+    if not rules:
+        return ""
+    return "\n".join([
+        "",
+        "| rule | rows breaking it | still breaking it after remediation |",
+        "|---|---|---|",
+        *(f"| `{r['rule']}` | {_number(r['rows_breaking'])} | {_number(r['rows_remaining'])} |"
+          for r in rules[:12]),
+    ])
+
+
+def _per_column(payload: dict) -> str:
+    """One row per surviving column, so a reader can look a column up instead of reassembling it
+    from four sections."""
+    columns = payload.get("per_column") or []
+    if not columns:
+        return ""
+    rows = [
+        [
+            f"`{c['column']}`" + (f"<br><sub>from {c['from']}</sub>" if c.get("from") else ""),
+            c.get("dtype", ""),
+            f"{float(c.get('fill_rate') or 0) * 100:.1f}%",
+            _number(c.get("detected")),
+            _number(c.get("outstanding")),
+            _number(c.get("cells_changed")),
+        ]
+        for c in columns
+    ]
+    return "\n".join([
+        "## Every column at a glance",
+        "",
+        "One row per column of the delivered file. `detected` counts what was found against it on"
+        " arrival, `outstanding` what a check still reports, and `cells changed` how many of its"
+        " values the run rewrote.",
+        "",
+        _table(["column", "type", "filled", "detected", "outstanding", "cells changed"], rows),
     ])
 
 
@@ -499,6 +588,10 @@ def _table(headers: list[str], rows: list[list]) -> str:
 
 def _cell(value) -> str:
     return str(value).replace("|", "\\|").replace("\n", " ")
+
+
+def _plural(count: int, singular: str, plural: str = "") -> str:
+    return f"{_number(count)} {singular if count == 1 else (plural or singular + 's')}"
 
 
 def _number(value) -> str:

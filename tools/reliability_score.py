@@ -48,6 +48,31 @@ def violation_counts(reports) -> dict[str, int]:
     return counts
 
 
+def rule_counts(reports) -> dict[str, int]:
+    """Rows breaking each cross-column rule, keyed by the rule rather than by the value that
+    happened to break it. A mined dependency states itself once per offending value, so counting
+    the patterns verbatim would list the same rule dozens of times; an arithmetic identity states
+    itself once and is already in the right form."""
+    counts: dict[str, int] = {}
+    for report in reports:
+        for violation in report.violations:
+            if violation.kind != "consistency":
+                continue
+            rule = _rule_of(report.column_name, str(violation.expected_pattern or ""))
+            counts[rule] = counts.get(rule, 0) + 1
+    return counts
+
+
+def _rule_of(column: str, pattern: str) -> str:
+    if pattern.startswith("cross-column:"):
+        body = pattern.split(":", 1)[1].strip()
+        predictor = body.split("=", 1)[0].strip() if "=" in body else body
+        return f"{predictor} determines {column}"
+    if " = " in pattern:
+        return pattern
+    return f"{column}: {pattern}" if pattern else column
+
+
 def inconsistent_rows(reports) -> int:
     return len({
         violation.row_index

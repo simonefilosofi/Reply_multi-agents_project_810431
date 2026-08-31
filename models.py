@@ -217,6 +217,8 @@ class UnaddressedViolations(BaseModel):
     violation_ids: list[str] = Field(default_factory=list)
     reason: str = ""
     affected_rows: int = 0
+    affected_by_column: dict[str, int] = Field(default_factory=dict)
+    actioned_elsewhere: list[str] = Field(default_factory=list)
     source: Literal["model", "pipeline"] = "model"
 
 

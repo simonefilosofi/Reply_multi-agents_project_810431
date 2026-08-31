@@ -9,7 +9,7 @@ from models import BaselineFile, ColumnPayload, EnumFormat, FormatViolation, Imp
 from state import PipelineState
 from tools.baseline_accessors import find_spec_by_hint
 from tools.duplicate_rows import duplicate_row_analysis
-from tools.reliability_score import checked_cells_by_column, compute_metrics, violation_counts
+from tools.reliability_score import checked_cells_by_column, compute_metrics, rule_counts, violation_counts
 from tools.correct_violations import correct_violations
 from tools.merge_reports import merge_reports
 from tools.arithmetic_identities import arithmetic_reports
@@ -103,6 +103,11 @@ def format_consistency_node(state: PipelineState) -> PipelineState:
         declared_dtypes={p.column_name: p.dtype for p in state.payload if p.dtype},
     )
     pre_remediation["violations_by_kind"] = violation_counts(merged)
+    pre_remediation["consistency_rules"] = rule_counts(merged)
+    pre_remediation["violations_by_column"] = {
+        report.column_name: sum(v.affected_rows or 1 for v in report.violations)
+        for report in merged if report.violations
+    }
     return state.model_copy(update={
         "validation_reports": merged,
         "value_corrections": value_corrections,

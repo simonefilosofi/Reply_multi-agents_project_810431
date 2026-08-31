@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -17,7 +18,7 @@ from tools.duplicate_rows import duplicate_row_analysis
 from tools.md_to_pdf import markdown_to_html, write_pdf
 from tools.operations import describe_operation, operations_as_python
 from tools.report_markdown import build_report_markdown
-from tools.reliability_score import DIMENSIONS, checked_cells_by_column, compare, compute_metrics, violation_counts
+from tools.reliability_score import rule_counts, DIMENSIONS, checked_cells_by_column, compare, compute_metrics, violation_counts
 from tools.validate_format import validate_format
 from utils.llm import structured_model
 from utils.prompts import load_prompt
@@ -290,6 +291,77 @@ def _origin_columns(state: PipelineState) -> dict[str, str]:
     return origins
 
 
+def _cross_column_rules(state: PipelineState, residual: list[ValidationReport]) -> list[dict]:
+    """Each cross-column rule the run relied on, with the rows breaking it before and after
+    remediation. The coverage table states one total and the commentary describes it in prose;
+    neither says which rule was broken, which is the part a reader can act on."""
+    snapshot = (state.quality_snapshots or {}).get("pre_remediation") or {}
+    detected = snapshot.get("consistency_rules") or {}
+    origins = _origin_columns(state)
+    remaining: dict[str, int] = {}
+    for rule, count in rule_counts(residual).items():
+        remaining[_rule_under_original_names(rule, origins)] = count
+    return [
+        {"rule": rule, "rows_breaking": count, "rows_remaining": remaining.get(rule, 0)}
+        for rule, count in sorted(detected.items(), key=lambda kv: -kv[1])
+    ]
+
+
+def _rule_under_original_names(rule: str, origins: dict[str, str]) -> str:
+    """A rule restated with the column names the file arrived with. A rule is mined before the
+    renames are applied and again afterwards, so the same rule is keyed one way in what was
+    detected and another in what remains; matching them by the later name would report every rule
+    over a renamed column as fully resolved."""
+    for current, original in origins.items():
+        if current != original:
+            rule = re.sub(rf"\b{re.escape(current)}\b", original, rule)
+    return rule
+
+
+def _per_column(state: PipelineState, residual: list[ValidationReport]) -> list[dict]:
+    """One row per surviving column: what it holds, how complete it is, how much was wrong with it
+    and what the run did about it. The same facts are spread over four sections, which is fine for
+    reading the argument and useless for looking a column up."""
+    df = state.dataset
+    if df is None:
+        return []
+    origins = _origin_columns(state)
+    snapshot = (state.quality_snapshots or {}).get("pre_remediation") or {}
+    detected = snapshot.get("violations_by_column") or _violations_by_column(state.validation_reports)
+    outstanding = _violations_by_column(residual)
+    changed = _changed_by_column(state.change_log)
+    rows = []
+    for column in df.columns:
+        name = str(column)
+        rows.append({
+            "column": name,
+            "from": origins.get(name, ""),
+            "dtype": str(df[name].dtype),
+            "fill_rate": round(float(df[name].notna().mean()), 4),
+            "detected": detected.get(name, 0),
+            "outstanding": outstanding.get(name, 0),
+            "cells_changed": changed.get(name, 0),
+        })
+    return rows
+
+
+def _violations_by_column(reports: list[ValidationReport]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for report in reports:
+        if report.violations:
+            counts[report.column_name] = counts.get(report.column_name, 0) + _violation_count(report)
+    return counts
+
+
+def _changed_by_column(change_log: list[dict]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for entry in change_log:
+        column = entry.get("column")
+        if column:
+            counts[str(column)] = counts.get(str(column), 0) + 1
+    return counts
+
+
 def _detected_counts(state: PipelineState) -> dict:
     """What the file held when it was last fully measured and not yet altered. Reading the reports
     the report node receives understates this badly: every remediating stage re-measures, so the
@@ -361,6 +433,8 @@ def _build_payload(state: PipelineState, residual: list[ValidationReport], quali
         "duplicate_column_groups": len(state.duplicate_resolutions),
         "columns_dropped_as_duplicates": sum(len(r.dropped) for r in state.duplicate_resolutions),
         "unaddressed_violations": [u.model_dump() for u in state.unaddressed_violations],
+        "cross_column_rules": _cross_column_rules(state, residual),
+        "per_column": _per_column(state, residual),
         "auto_remediations": state.auto_remediations,
         "generated_function_runs": state.generated_function_runs,
         "changes_summary": _changes_summary(state.change_log),

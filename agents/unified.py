@@ -56,7 +56,8 @@ class GroupOutcome(NamedTuple):
 
 
 def declared_unaddressed(
-    group_id: str, columns: list[str], response: FixGroupResponse, affected_rows: int = 0
+    group_id: str, columns: list[str], response: FixGroupResponse, affected_rows: int = 0,
+    by_column: dict[str, int] | None = None,
 ) -> UnaddressedViolations | None:
     """The model's own statement of what it cannot fix. The prompt requires it and _coverage_errors
     refuses a response that omits one, so this is an answer already being produced and validated.
@@ -70,6 +71,7 @@ def declared_unaddressed(
         violation_ids=list(response.unaddressed_violation_ids),
         reason=response.rationale_for_unaddressed,
         affected_rows=affected_rows,
+        affected_by_column=dict(by_column or {}),
         source="model",
     )
 
@@ -89,10 +91,17 @@ def unexplained_columns(
 
 
 def violation_rows(columns: list[str], reports_by_name: dict) -> int:
-    return sum(
-        sum(v.affected_rows or 1 for v in reports_by_name[column].violations)
+    return sum(rows_by_column(columns, reports_by_name).values())
+
+
+def rows_by_column(columns: list[str], reports_by_name: dict) -> dict[str, int]:
+    """Rows affected per column. Reported per column rather than as a total, because the totals
+    are per-column counts that overlap: summing them over a group states more affected rows than
+    the file has, which reads as nonsense next to the row count."""
+    return {
+        column: sum(v.affected_rows or 1 for v in reports_by_name[column].violations)
         for column in columns if reports_by_name.get(column)
-    )
+    }
 
 
 def unaddressed_backstop(
@@ -115,13 +124,14 @@ def unaddressed_backstop(
     ]
     if not outstanding:
         return None
-    affected = violation_rows(outstanding, reports_by_name)
+    by_column = rows_by_column(outstanding, reports_by_name)
     return UnaddressedViolations(
         group_id=group_id,
         columns=outstanding,
         violation_ids=sorted({f"{column}:unaddressed" for column in outstanding} - covered),
         reason=reason or _no_action_reason(outstanding, imputation_hints),
-        affected_rows=affected,
+        affected_rows=sum(by_column.values()),
+        affected_by_column=by_column,
         source="pipeline",
     )
 
@@ -148,8 +158,18 @@ def without_columns_already_actioned(
         remaining = [column for column in entry.columns if column not in proposed]
         if not remaining:
             continue
-        kept.append(entry if remaining == entry.columns
-                    else entry.model_copy(update={"columns": remaining}))
+        if remaining == entry.columns:
+            kept.append(entry)
+            continue
+        elsewhere = [column for column in entry.columns if column in proposed]
+        kept.append(entry.model_copy(update={
+            "columns": remaining,
+            "actioned_elsewhere": elsewhere,
+            "affected_by_column": {c: n for c, n in entry.affected_by_column.items()
+                                   if c in remaining},
+            "affected_rows": sum(n for c, n in entry.affected_by_column.items()
+                                 if c in remaining) or entry.affected_rows,
+        }))
     return kept
 
 
@@ -341,8 +361,9 @@ def propose_for_group(
     )
     namespaced = [_namespace_proposal(group_id, p) for p in reviewed]
     still_open = unexplained_columns(group, reports_by_name, namespaced)
+    open_by_column = rows_by_column(still_open, reports_by_name)
     declared = declared_unaddressed(
-        group_id, still_open, response, violation_rows(still_open, reports_by_name)
+        group_id, still_open, response, sum(open_by_column.values()), open_by_column
     )
     return GroupOutcome(
         proposals=namespaced,
@@ -496,10 +517,12 @@ def _examples_by_column(ctx: dict) -> dict[str, dict]:
 
 
 def _drop_unusable_proposals(proposals: list[FixProposal], group: list[str]) -> list[FixProposal]:
-    """Discards what the model returned but cannot be executed: a proposal with no operations,
-    or one naming a column outside the group. Namespacing rebuilds affected_columns from the
-    operations, so an invented column name would otherwise survive the coverage check and
-    reach the gate."""
+    """Discards what the model returned but cannot be executed: a proposal with no operations, one
+    naming a column outside the group, or one depending on a proposal that is not there. Namespacing
+    rebuilds affected_columns from the operations, so an invented column name would otherwise
+    survive the coverage check and reach the gate; and a dangling dependency survived it too,
+    because the retry that refuses one still returns its second attempt, leaving a proposal to be
+    approved by a reviewer and then refused by apply_fixes for the dependency it never had."""
     in_group = set(group)
     usable: list[FixProposal] = []
     for proposal in proposals:
@@ -509,7 +532,19 @@ def _drop_unusable_proposals(proposals: list[FixProposal], group: list[str]) -> 
         if targets - in_group:
             continue
         usable.append(proposal)
-    return usable
+    return _without_dangling_dependencies(usable)
+
+
+def _without_dangling_dependencies(proposals: list[FixProposal]) -> list[FixProposal]:
+    """Drops proposals whose dependencies are absent, repeatedly, since dropping one can strand
+    another that depended on it."""
+    kept = list(proposals)
+    while True:
+        present = {proposal.id for proposal in kept}
+        remaining = [p for p in kept if not (set(p.depends_on) - present)]
+        if len(remaining) == len(kept):
+            return remaining
+        kept = remaining
 
 
 def _cleaner_feedback_for(proposal: FixProposal, issues: list[CleanerIssue]) -> str:
