@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from tools.md_to_pdf import markdown_to_html
-from tools.report_charts import dimension_comparison_chart, fill_rate_chart
+from tools.report_charts import _LOW, dimension_comparison_chart, fill_rate_chart
 
 _BEFORE = {"completeness": 0.8752, "uniqueness": 0.9881, "schema_conformity": 0.5}
 _AFTER = {"completeness": 0.9801, "uniqueness": 1.0, "schema_conformity": 1.0}
@@ -35,9 +35,9 @@ def test_the_fill_chart_ranks_the_emptiest_columns_first() -> None:
     assert "full" not in svg
 
 
-def test_a_column_below_the_threshold_is_drawn_in_the_warning_colour() -> None:
-    assert "#c1666b" in fill_rate_chart({"sparse": 0.2})
-    assert "#c1666b" not in fill_rate_chart({"complete": 0.99})
+def test_a_column_below_the_threshold_is_drawn_in_a_different_tone() -> None:
+    assert _LOW in fill_rate_chart({"sparse": 0.2})
+    assert _LOW not in fill_rate_chart({"complete": 0.99})
 
 
 def test_a_rate_outside_the_unit_interval_cannot_overflow_the_plot() -> None:

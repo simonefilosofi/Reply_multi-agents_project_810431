@@ -1,12 +1,12 @@
 """Inline SVG charts for the data quality report. The report is print-first, so the charts are static SVG strings written straight into the Markdown: no plotting library, no image files, nothing for the PDF step to resolve. Two shapes cover what the report needs to show - a paired bar comparing each quality dimension before and after remediation, and a single bar ranking columns by fill rate - and both degrade to an empty string when there is nothing to draw, so a caller can concatenate the result unconditionally."""
 from __future__ import annotations
 
-_INK = "#1c3552"
-_BEFORE = "#a8bdd6"
-_AFTER = "#2f6db3"
-_GRID = "#dde5ef"
-_MUTED = "#6b7a90"
-_LOW = "#c1666b"
+_INK = "#0b3d0b"
+_BEFORE = "#9ae399"
+_AFTER = "#02b900"
+_GRID = "#ccf1cc"
+_MUTED = "#4a7a4a"
+_LOW = "#67d566"
 
 _ROW_HEIGHT = 26
 _BAR_HEIGHT = 9
@@ -65,7 +65,7 @@ def fill_rate_chart(
         colour = _LOW if rate < _LOW_FILL_THRESHOLD else _AFTER
         parts.append(_label(column, top + 8))
         parts.append(_bar(_LABEL_WIDTH, top, plot_width * _clamp(rate), colour))
-        parts.append(_value(width - 4, top + 8, f"{rate:.1%}", colour))
+        parts.append(_value(width - 4, top + 8, f"{rate:.1%}", _INK))
 
     parts.append("</svg>")
     return "".join(parts)

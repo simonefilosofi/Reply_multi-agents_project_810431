@@ -243,15 +243,16 @@ def unified_node(state: PipelineState) -> PipelineState:
             unaddressed.append(remainder)
 
     deduped = _drop_redundant_schema_fixes(dedupe_proposals(all_proposals), schema)
+    settled = _without_dangling_dependencies(schema + deduped)
     runs = execution_log()
     close_sandbox()
     return state.model_copy(update={
-        "proposed_fixes": [_with_readable_code(p) for p in schema + deduped],
+        "proposed_fixes": [_with_readable_code(p) for p in settled],
         "fix_groups": fix_groups,
         "generated_function_runs": runs,
         "errors": state.errors + failures,
         "unaddressed_violations": state.unaddressed_violations + without_columns_already_actioned(
-            unaddressed, schema + deduped
+            unaddressed, settled
         ),
     })
 
@@ -359,7 +360,8 @@ def propose_for_group(
             chain, system, ctx, input_violation_ids, group, fb,
         ),
     )
-    namespaced = [_namespace_proposal(group_id, p) for p in reviewed]
+    namespaced = [_namespace_proposal(group_id, p)
+                  for p in _without_dangling_dependencies(reviewed)]
     still_open = unexplained_columns(group, reports_by_name, namespaced)
     open_by_column = rows_by_column(still_open, reports_by_name)
     declared = declared_unaddressed(
@@ -536,15 +538,27 @@ def _drop_unusable_proposals(proposals: list[FixProposal], group: list[str]) -> 
 
 
 def _without_dangling_dependencies(proposals: list[FixProposal]) -> list[FixProposal]:
-    """Drops proposals whose dependencies are absent, repeatedly, since dropping one can strand
-    another that depended on it."""
-    kept = list(proposals)
+    """Keeps only the proposals whose dependencies can actually be satisfied, by resolving them in
+    order: one with no dependency is satisfiable, and one becomes satisfiable when everything it
+    names already is. Anything never reached names something absent, or names itself, or sits in a
+    cycle with another - all of them unsatisfiable, and all of them refused by the executor after a
+    reviewer has approved them.
+
+    The list is settled only once every group has answered and the redundant schema fixes have been
+    collapsed, so the last word belongs there: a dependency can survive its own group and still be
+    dropped for duplicating a schema proposal. The review loop discards a proposal whose cleaning
+    function fails or whose trial breaches an invariant, which strands anything that depended on it
+    just as surely as the model never having emitted it."""
+    resolved: set[str] = set()
     while True:
-        present = {proposal.id for proposal in kept}
-        remaining = [p for p in kept if not (set(p.depends_on) - present)]
-        if len(remaining) == len(kept):
-            return remaining
-        kept = remaining
+        newly = {
+            proposal.id for proposal in proposals
+            if proposal.id not in resolved
+            and all(dependency in resolved for dependency in proposal.depends_on)
+        }
+        if not newly:
+            return [proposal for proposal in proposals if proposal.id in resolved]
+        resolved |= newly
 
 
 def _cleaner_feedback_for(proposal: FixProposal, issues: list[CleanerIssue]) -> str:

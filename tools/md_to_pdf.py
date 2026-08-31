@@ -25,12 +25,12 @@ _TCC_SAFE_WORKSPACE = "/tmp"
 _PDF_TIMEOUT_SECONDS = 120
 _SETTLE_SECONDS = 0.7
 
-_INK = "#1c3552"
-_BODY = "#33475f"
-_MUTED = "#6b7a90"
-_RULE = "#c9d4e4"
-_HEAD_FILL = "#eef2f8"
-_ZEBRA = "#f7f9fc"
+_INK = "#0b3d0b"
+_BODY = "#1f3d1f"
+_MUTED = "#4a7a4a"
+_RULE = "#9ae399"
+_HEAD_FILL = "#ccf1cc"
+_ZEBRA = "#f2fbf2"
 
 _CSS = f"""
 @page {{ size: A4; margin: 14mm 15mm; }}

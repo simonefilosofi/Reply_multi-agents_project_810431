@@ -1,39 +1,134 @@
-"""Minimal Streamlit harness to manually exercise the Baseline-Builder, Profiler, Semantic, NaN-Handler, Duplicate-Column, Format-Consistency, and Unified-Remediation agents on an uploaded CSV. The baseline builder runs first so that the naming conventions reach the metrics and the raw quality snapshot exists, without which the report cannot show how many nulls were disguised. Renders an approval gate where the user can Accept, Reject, or Edit-with-feedback each proposed fix."""
+"""Streamlit front end for the NoiPA data-quality pipeline, and the human approval gate the
+Unified Remediation agent's proposals must pass through. The run is driven node by node so each
+stage's progress is visible, and the result is laid out as four views - what arrived, what was
+found, what is proposed, and what was produced - rather than as one column of raw state, because
+the reviewer's job is to decide on a handful of proposals and everything else is context for that
+decision. The detailed per-stage output every agent produces is kept, one expander down, for
+anyone who wants to audit the run rather than approve it."""
 from __future__ import annotations
 
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
+import time
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
 from agents.anomaly_detector import anomaly_detector_node
+from agents.apply_fixes import apply_fixes_node
+from agents.auto_remediation import auto_remediation_node
 from agents.baseline_builder import baseline_builder_node
 from agents.duplicate_column import duplicate_column_node
+from agents.duplicate_row import duplicate_row_node
 from agents.format_consistency import format_consistency_node
 from agents.nan_handler import nan_handler_node
 from agents.profiler import profiler_node
-from agents.semantic import semantic_node
-from agents.apply_fixes import apply_fixes_node
-from agents.auto_remediation import auto_remediation_node
-from agents.duplicate_row import duplicate_row_node
 from agents.report_generator import output_path, report_generator_node
+from agents.semantic import semantic_node
 from agents.unified import propose_for_group, unified_node
 from state import PipelineState
+from tools.change_log import column_diff
 from tools.operations import operations_as_python
 
-st.set_page_config(page_title="NoiPA DQ — pipeline test", layout="wide")
-st.title("NoiPA DQ — Profiler, Semantic, NaN, Duplicate-Column, Format, Unified")
+st.set_page_config(
+    page_title="NoiPA Data Quality",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
-st.session_state.setdefault("pipeline_state", None)
-st.session_state.setdefault("snapshots", {})
-st.session_state.setdefault("fix_decisions", {})
-st.session_state.setdefault("editing", {})
-st.session_state.setdefault("execution", None)
-st.session_state.setdefault("report", None)
+_STAGES = (
+    ("Baseline", baseline_builder_node),
+    ("Profiler", profiler_node),
+    ("Semantic", semantic_node),
+    ("Completeness", nan_handler_node),
+    ("Duplicate columns", duplicate_column_node),
+    ("Format consistency", format_consistency_node),
+    ("Auto-remediation", auto_remediation_node),
+    ("Anomalies", anomaly_detector_node),
+    ("Remediation proposals", unified_node),
+)
+
+_STYLE = """
+<style>
+:root {
+  --ink: #0b3d0b; --accent: #02b900; --accent-soft: #35c733; --mid: #67d566;
+  --muted: #4a7a4a; --line: #9ae399; --wash: #ccf1cc;
+  --inactive-ink: #6f6f6f; --inactive-wash: #f1f1f1;
+}
+.block-container { padding-top: 2.2rem; padding-bottom: 3rem; max-width: 1500px; }
+h1, h2, h3 { color: var(--ink); font-weight: 650; letter-spacing: -0.01em; }
+h1 { font-size: 1.85rem; margin-bottom: .1rem; }
+h2 { font-size: 1.2rem; margin-top: .4rem; }
+h3 { font-size: 1rem; }
+
+.lede { color: var(--muted); font-size: .93rem; margin: 0 0 1.4rem; max-width: 70ch; }
+.eyebrow { color: var(--muted); font-size: .72rem; letter-spacing: .1em;
+           text-transform: uppercase; font-weight: 600; margin-bottom: .35rem; }
+
+div[data-testid="stMetric"] {
+  background: #fff; border: 1px solid var(--line); border-radius: 10px;
+  padding: .8rem .95rem;
+}
+div[data-testid="stMetric"] label p { color: var(--muted) !important; font-size: .74rem !important;
+  letter-spacing: .04em; text-transform: uppercase; font-weight: 600; }
+div[data-testid="stMetricValue"] { font-size: 1.5rem; color: var(--ink); font-weight: 650; }
+
+.stTabs [data-baseweb="tab-list"] { gap: .3rem; border-bottom: 1px solid var(--line); }
+.stTabs [data-baseweb="tab"] {
+  height: 42px; padding: 0 1.1rem; background: transparent; color: var(--muted);
+  font-weight: 600; font-size: .88rem;
+}
+.stTabs [aria-selected="true"] { color: var(--ink); border-bottom: 2px solid var(--accent); }
+
+div[data-testid="stExpander"] { border: 1px solid var(--line); border-radius: 10px;
+  background: #fff; margin-bottom: .55rem; }
+div[data-testid="stExpander"] summary { font-weight: 600; color: var(--ink); }
+
+.card { background: #fff; border: 1px solid var(--line); border-radius: 10px;
+        padding: 1rem 1.15rem; height: 100%; }
+.card .t { font-weight: 650; color: var(--ink); margin-bottom: .3rem; font-size: .95rem; }
+.card .d { color: var(--muted); font-size: .84rem; line-height: 1.45; }
+
+.chip { display: inline-block; padding: .12rem .55rem; border-radius: 999px;
+        font-size: .7rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.chip.ok { background: var(--wash); color: var(--ink); box-shadow: inset 2px 0 0 var(--accent); }
+.chip.no { background: var(--inactive-wash); color: var(--inactive-ink); }
+.chip.wait { background: var(--inactive-wash); color: var(--inactive-ink); box-shadow: inset 2px 0 0 var(--mid); }
+
+.stage { display: flex; justify-content: space-between; font-size: .8rem;
+         padding: .22rem 0; border-bottom: 1px dotted var(--line); }
+.stage .n { color: var(--ink); }
+.stage .s { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+</style>
+"""
+st.markdown(_STYLE, unsafe_allow_html=True)
+
+for key, default in (
+    ("pipeline_state", None), ("timings", {}), ("fix_decisions", {}),
+    ("editing", {}), ("execution", None), ("report", None), ("source_name", ""),
+):
+    st.session_state.setdefault(key, default)
+
+
+def _run(frame: pd.DataFrame, name: str) -> PipelineState:
+    """Drives the nodes in order, naming each as it starts so a long run is legible."""
+    state = PipelineState(dataset=frame, dataset_path=name)
+    timings: dict[str, float] = {}
+    with st.status("Running the pipeline", expanded=True) as status:
+        for label, node in _STAGES:
+            status.update(label=f"{label} ...")
+            started = time.time()
+            state = node(state)
+            timings[label] = time.time() - started
+            st.write(f"{label} - {timings[label]:.1f}s")
+        status.update(label=f"Completed in {sum(timings.values()):.0f}s", state="complete",
+                      expanded=False)
+    st.session_state.timings = timings
+    return state
 
 
 def _read_report(reported: PipelineState) -> dict:
@@ -48,184 +143,19 @@ def _read_report(reported: PipelineState) -> dict:
         ) if path.exists() else None
     return report
 
-uploaded = st.file_uploader("Upload a CSV", type=["csv"])
-if uploaded is None:
-    st.stop()
 
-df = pd.read_csv(uploaded)
-st.subheader("Input preview")
-st.caption(f"{df.shape[0]} rows x {df.shape[1]} columns")
-st.dataframe(df.head(20))
+def _violation_totals(state: PipelineState) -> dict[str, int]:
+    totals: dict[str, int] = {}
+    for report in state.validation_reports:
+        for violation in report.violations:
+            totals[violation.kind] = totals.get(violation.kind, 0) + (
+                violation.affected_rows if violation.kind == "completeness" else 1
+            )
+    return totals
 
-if st.button("Run pipeline"):
-    snapshots: dict = {}
-    state = PipelineState(dataset=df, dataset_path=uploaded.name)
 
-    with st.spinner("Baseline builder..."):
-        state = baseline_builder_node(state)
-    with st.spinner("Profiler..."):
-        state = profiler_node(state)
-    with st.spinner("Semantic..."):
-        state = semantic_node(state)
-    snapshots["nan_before"] = state.dataset.isna().sum().to_dict()
-    with st.spinner("NaN handler..."):
-        state = nan_handler_node(state)
-    snapshots["nan_after"] = state.dataset.isna().sum().to_dict()
-    snapshots["cols_before_dup"] = list(state.dataset.columns)
-    snapshots["nan_pre_dup"] = state.dataset.isna().sum().to_dict()
-    with st.spinner("Duplicate Column..."):
-        state = duplicate_column_node(state)
-    snapshots["nan_post_dup"] = state.dataset.isna().sum().to_dict()
-    with st.spinner("Format Consistency..."):
-        state = format_consistency_node(state)
-    with st.spinner("Auto-remediation..."):
-        state = auto_remediation_node(state)
-    with st.spinner("Anomaly Detector..."):
-        state = anomaly_detector_node(state)
-    with st.spinner("Unified Remediation..."):
-        state = unified_node(state)
-
-    st.session_state.pipeline_state = state
-    st.session_state.snapshots = snapshots
-    st.session_state.fix_decisions = {}
-    st.session_state.editing = {}
-
-state: PipelineState | None = st.session_state.pipeline_state
-if state is None:
-    st.stop()
-
-snapshots = st.session_state.snapshots
-
-st.subheader("Profiler output")
-st.json({"detected_domain": state.detected_domain, "detected_language": state.detected_language})
-
-st.subheader("Semantic payload")
-st.json([p.model_dump() for p in state.payload])
-
-st.subheader("NaN handler — disguised NaNs replaced")
-nan_diff = {
-    col: {"before": int(snapshots["nan_before"][col]), "after": int(snapshots["nan_after"][col])}
-    for col in snapshots["nan_before"]
-    if snapshots["nan_after"][col] != snapshots["nan_before"][col]
-} or {"info": "no disguised NaNs were detected"}
-st.json(nan_diff)
-
-nullability_issues = [
-    {"column": r.column_name, "violations": [v.model_dump() for v in r.violations]}
-    for r in state.validation_reports
-    if any(v.kind == "completeness" and v.expected_pattern == "not nullable" for v in r.violations)
-]
-if nullability_issues:
-    st.subheader("Nullability issues — non-nullable columns with NaN")
-    st.json(nullability_issues)
-
-dropped = [c for c in snapshots["cols_before_dup"] if c not in state.surviving_columns]
-filled = {
-    c: int(snapshots["nan_pre_dup"][c] - snapshots["nan_post_dup"][c])
-    for c in state.surviving_columns
-    if snapshots["nan_pre_dup"].get(c, 0) > snapshots["nan_post_dup"].get(c, 0)
-}
-st.subheader("Duplicate-Column output")
-st.json({
-    "surviving_columns": state.surviving_columns,
-    "dropped_columns": dropped,
-    "gaps_filled_from_siblings": filled,
-})
-if state.duplicate_resolutions:
-    st.subheader("Name election rationales")
-    st.json([r.model_dump() for r in state.duplicate_resolutions])
-st.caption(f"Dataset after pruning: {state.dataset.shape[0]} rows x {state.dataset.shape[1]} columns")
-st.dataframe(state.dataset.head(20))
-
-format_violations_by_col = {
-    r.column_name: sum(
-        1 for v in r.violations
-        if v.kind == "format"
-    )
-    for r in state.validation_reports
-}
-inference_rows = [
-    {
-        "column": col,
-        "source": info.get("source", "skipped"),
-        "profiler_spec": info.get("profiler_spec"),
-        "final_spec": info.get("final_spec"),
-        "format_violations": format_violations_by_col.get(col, 0),
-        "missing": int(state.dataset[col].isna().sum()) if col in state.dataset.columns else 0,
-    }
-    for col, info in state.inferred_format_specs.items()
-]
-if inference_rows:
-    st.subheader("Format-consistency — per-column inference")
-    st.caption(
-        "source: 'deterministic' = profiler's spec kept (LLM confirmed or punted); "
-        "'deterministic-refined' = LLM upgraded the profiler's spec (e.g. regex -> date); "
-        "'llm-only' = profiler found no dominant shape, LLM produced one; "
-        "'skipped' = neither found a pattern (treated as free text). "
-        "missing = NaN count surfaced as a violation for the unified agent to impute."
-    )
-    st.dataframe(inference_rows, use_container_width=True)
-
-if state.auto_remediations:
-    st.subheader("Corrections applied automatically")
-    st.caption(
-        "Values the data determines on its own, through a functional dependency of "
-        "near-perfect purity. They are deductions rather than judgement calls, so they are "
-        "applied before the approval gate and recorded in the change log."
-    )
-    st.dataframe(pd.DataFrame(state.auto_remediations), use_container_width=True, hide_index=True)
-
-st.subheader("Anomaly Detection")
-if not state.anomaly_reports:
-    st.info("No anomalies detected.")
-else:
-    numeric_reports = [r for r in state.anomaly_reports if r.method == "iqr"]
-    cat_reports = [r for r in state.anomaly_reports if r.method == "rare_category"]
-    col1, col2 = st.columns(2)
-    col1.metric("Columns with numeric outliers", len(numeric_reports))
-    col2.metric("Columns with rare categories", len(cat_reports))
-
-    if numeric_reports:
-        st.markdown("#### Numeric Outliers (IQR)")
-        for r in numeric_reports:
-            with st.expander(f"`{r.column_name}` — {r.stats.get('detected', len(r.anomalies))} outliers"):
-                if r.comment:
-                    st.info(r.comment)
-                c1, c2, c3 = st.columns(3)
-                c1.metric("Q1", r.stats.get("q1"))
-                c2.metric("Q3", r.stats.get("q3"))
-                c3.metric("IQR", r.stats.get("iqr"))
-                c1.metric("Lower bound", r.stats.get("lower_bound"))
-                c2.metric("Upper bound", r.stats.get("upper_bound"))
-                if r.anomalies:
-                    st.caption("Sample outlier values (up to 10):")
-                    st.dataframe(
-                        pd.DataFrame([{"row": a.row_index, "value": a.value} for a in r.anomalies[:10]]),
-                        use_container_width=True,
-                        hide_index=True,
-                    )
-
-    if cat_reports:
-        st.markdown("#### Rare Categories")
-        for r in cat_reports:
-            with st.expander(f"`{r.column_name}` — {r.stats.get('detected', len(r.anomalies))} rare value(s) out of {r.stats.get('distinct_values', '?')} distinct"):
-                if r.comment:
-                    st.info(r.comment)
-                top = r.stats.get("top_values", [])
-                if top:
-                    st.caption("Most common values:")
-                    st.dataframe(
-                        pd.DataFrame(top).rename(columns={"value": "Value", "count": "Count", "pct": "%"}),
-                        use_container_width=True,
-                        hide_index=True,
-                    )
-                if r.anomalies:
-                    st.caption(f"Rare values (threshold: < {r.stats.get('threshold')} occurrences):")
-                    st.dataframe(
-                        pd.DataFrame([{"value": a.value, "reason": a.reason} for a in r.anomalies]),
-                        use_container_width=True,
-                        hide_index=True,
-                    )
+def _card(title: str, detail: str) -> str:
+    return f"<div class='card'><div class='t'>{title}</div><div class='d'>{detail}</div></div>"
 
 
 def _group_id_of(fix_id: str) -> str:
@@ -233,250 +163,375 @@ def _group_id_of(fix_id: str) -> str:
 
 
 def _repropose(group_id: str, feedback: str) -> None:
-    s: PipelineState = st.session_state.pipeline_state
-    group = s.fix_groups.get(group_id, [])
+    current: PipelineState = st.session_state.pipeline_state
+    group = current.fix_groups.get(group_id, [])
     if not group:
         return
     from agents.unified import _specs_by_col
-    new_proposals = propose_for_group(
+
+    replacements = propose_for_group(
         group_id,
         group,
-        {p.column_name: p for p in s.payload},
-        {r.column_name: r for r in s.validation_reports},
-        s.dataset,
-        s.baseline,
-        value_corrections=s.value_corrections,
+        {p.column_name: p for p in current.payload},
+        {r.column_name: r for r in current.validation_reports},
+        current.dataset,
+        current.baseline,
+        value_corrections=current.value_corrections,
         feedback=feedback,
-        specs_by_col=_specs_by_col(s.inferred_format_specs),
-        imputation_hints=s.imputation_hints,
+        specs_by_col=_specs_by_col(current.inferred_format_specs),
+        imputation_hints=current.imputation_hints,
     ).proposals
-    remaining = [p for p in s.proposed_fixes if _group_id_of(p.id) != group_id]
-    st.session_state.pipeline_state = s.model_copy(update={"proposed_fixes": remaining + new_proposals})
-    for p in s.proposed_fixes:
-        if _group_id_of(p.id) == group_id:
-            st.session_state.fix_decisions.pop(p.id, None)
-            st.session_state.editing.pop(p.id, None)
-
-
-st.subheader(f"Approval gate — {len(state.proposed_fixes)} proposed fix(es)")
-if not state.proposed_fixes:
-    st.info("No remediation proposed. Either no violations were detected, or every violation was declared unaddressable.")
-
-for proposal in state.proposed_fixes:
-    decision = st.session_state.fix_decisions.get(proposal.id)
-    label = f"{proposal.id} — {proposal.description}"
-    if decision:
-        label = f"[{decision.upper()}] {label}"
-    with st.expander(label, expanded=decision is None):
-        cols = st.columns([2, 1, 1])
-        cols[0].markdown(f"**Affects:** `{', '.join(proposal.affected_columns) or '—'}`")
-        cols[1].markdown(f"**Addresses:** `{', '.join(proposal.addresses_violations) or '—'}`")
-        cols[2].markdown(f"**~Rows:** `{proposal.estimated_rows_affected}`")
-        if proposal.depends_on:
-            st.caption(f"Depends on: {', '.join(proposal.depends_on)}")
-        st.markdown(f"_{proposal.rationale}_")
-        generated = [o for o in proposal.operations if o.kind == "apply_generated_function"]
-        if generated:
-            st.markdown(
-                "**Generated code** on "
-                f"`{', '.join(o.column for o in generated)}` — read it before accepting."
-            )
-        st.code(operations_as_python(proposal.operations), language="python")
-        if generated:
-            st.caption(
-                "The cleaning function above is the code that will run, written by the model for "
-                "this column. It was refused any import outside re, datetime, decimal and math, "
-                "then executed in a sandbox against this column's own conforming and violating "
-                "values before reaching you. The remaining lines are the equivalent pandas "
-                "expression for the typed operations."
-            )
-        else:
-            st.caption(
-                "Equivalent pandas expression, shown so you can see exactly what the proposal "
-                "does. The pipeline executes the typed operations, not this text."
-            )
-
-        btns = st.columns(3)
-        if btns[0].button("Accept", key=f"acc_{proposal.id}"):
-            st.session_state.fix_decisions[proposal.id] = "accepted"
+    kept = [p for p in current.proposed_fixes if _group_id_of(p.id) != group_id]
+    st.session_state.pipeline_state = current.model_copy(
+        update={"proposed_fixes": kept + replacements}
+    )
+    for proposal in current.proposed_fixes:
+        if _group_id_of(proposal.id) == group_id:
+            st.session_state.fix_decisions.pop(proposal.id, None)
             st.session_state.editing.pop(proposal.id, None)
-            st.rerun()
-        if btns[1].button("Reject", key=f"rej_{proposal.id}"):
-            st.session_state.fix_decisions[proposal.id] = "rejected"
-            st.session_state.editing.pop(proposal.id, None)
-            st.rerun()
-        if btns[2].button("Edit", key=f"edt_{proposal.id}"):
-            st.session_state.editing[proposal.id] = True
+
+
+with st.sidebar:
+    st.markdown("<div class='eyebrow'>NoiPA</div>", unsafe_allow_html=True)
+    st.markdown("## Data Quality")
+    uploaded = st.file_uploader("Dataset", type=["csv"], label_visibility="collapsed")
+
+    if uploaded is not None:
+        frame = pd.read_csv(uploaded)
+        st.caption(f"{uploaded.name}")
+        facts = st.columns(2)
+        facts[0].metric("Rows", f"{frame.shape[0]:,}")
+        facts[1].metric("Columns", frame.shape[1])
+        if st.button("Run pipeline", type="primary", use_container_width=True):
+            st.session_state.source_name = uploaded.name
+            st.session_state.pipeline_state = None
+            st.session_state.fix_decisions = {}
+            st.session_state.editing = {}
+            st.session_state.execution = None
+            st.session_state.report = None
+            st.session_state.pending_run = frame
             st.rerun()
 
-        if st.session_state.editing.get(proposal.id):
-            feedback = st.text_area(
-                "What should the LLM change?",
-                key=f"fb_{proposal.id}",
-                placeholder="e.g. don't impute eta_max from sesso, use eta_min's enum mapping instead",
-            )
-            if st.button("Re-propose with this feedback", key=f"rep_{proposal.id}"):
-                if feedback.strip():
-                    with st.spinner("Re-proposing..."):
-                        _repropose(_group_id_of(proposal.id), feedback.strip())
-                    st.rerun()
+    if st.session_state.timings:
+        st.divider()
+        st.markdown("<div class='eyebrow'>Stages</div>", unsafe_allow_html=True)
+        st.markdown("".join(
+            f"<div class='stage'><span class='n'>{label}</span>"
+            f"<span class='s'>{seconds:.1f}s</span></div>"
+            for label, seconds in st.session_state.timings.items()
+        ), unsafe_allow_html=True)
 
+    reported: PipelineState | None = st.session_state.pipeline_state
+    if reported is not None and reported.reliability:
+        st.divider()
+        st.markdown("<div class='eyebrow'>Reliability</div>", unsafe_allow_html=True)
+        delivered = reported.reliability["as_delivered"]
+        st.metric(
+            "As delivered",
+            f"{delivered['after']['score']:.3f}",
+            delta=f"{delivered['after']['score'] - delivered['before']['score']:+.3f}",
+        )
+
+if st.session_state.get("pending_run") is not None:
+    queued = st.session_state.pop("pending_run")
+    st.markdown(f"# {st.session_state.source_name}")
+    st.session_state.pipeline_state = _run(queued, st.session_state.source_name)
+    st.rerun()
+
+state: PipelineState | None = st.session_state.pipeline_state
+
+if state is None:
+    st.markdown("# Data quality for NoiPA datasets")
+    st.markdown(
+        "<p class='lede'>A multi-agent pipeline that reads a raw CSV, measures it against the "
+        "NoiPA schema registry and against itself, proposes corrections for a person to approve, "
+        "and produces a data quality report. Upload a file in the sidebar to begin.</p>",
+        unsafe_allow_html=True,
+    )
+    areas = st.columns(5)
+    for column, (title, detail) in zip(areas, (
+        ("Schema", "Type per column, and names against the registry's convention."),
+        ("Completeness", "Nulls and the placeholders standing in for them, per column and row."),
+        ("Consistency", "Cross-column rules, format drift, duplicate rows and columns."),
+        ("Anomalies", "Statistical outliers and rare categories, reported not corrected."),
+        ("Remediation", "Every issue carries an action, or a reason none exists."),
+    )):
+        column.markdown(_card(title, detail), unsafe_allow_html=True)
+    st.stop()
+
+frame_now = state.dataset
+totals = _violation_totals(state)
 accepted = [p for p in state.proposed_fixes if st.session_state.fix_decisions.get(p.id) == "accepted"]
 rejected = [p for p in state.proposed_fixes if st.session_state.fix_decisions.get(p.id) == "rejected"]
 pending = [p for p in state.proposed_fixes if st.session_state.fix_decisions.get(p.id) is None]
 
-st.subheader("Approval summary")
-st.json({
-    "accepted": [p.id for p in accepted],
-    "rejected": [p.id for p in rejected],
-    "pending": [p.id for p in pending],
-})
+st.markdown(f"# {st.session_state.source_name or 'Dataset'}")
+st.markdown(
+    f"<p class='lede'>Domain {state.detected_domain or 'not detected'} - language "
+    f"{state.detected_language or 'not detected'}. "
+    f"{len(state.proposed_fixes)} proposal(s) awaiting review.</p>",
+    unsafe_allow_html=True,
+)
 
-if accepted and st.button("Apply accepted fixes"):
-    before_df = state.dataset.copy()
-    with st.spinner("Executing fixes..."):
-        applied_state = apply_fixes_node(
-            state.model_copy(update={"approved_fix_ids": [p.id for p in accepted]})
+overview, findings, review, report_tab = st.tabs(
+    ["Overview", "Findings", "Review and apply", "Report"]
+)
+
+with overview:
+    head = st.columns(5)
+    head[0].metric("Rows", f"{frame_now.shape[0]:,}")
+    head[1].metric("Columns", frame_now.shape[1])
+    head[2].metric("Null cells", f"{int(frame_now.isna().sum().sum()):,}")
+    head[3].metric("Applied automatically", len(state.auto_remediations))
+    head[4].metric("Proposals", len(state.proposed_fixes))
+
+    st.markdown("### What was found")
+    areas = st.columns(5)
+    for column, (label, value) in zip(areas, (
+        ("Schema", totals.get("schema", 0)),
+        ("Completeness", totals.get("completeness", 0)),
+        ("Consistency", totals.get("consistency", 0)),
+        ("Format", totals.get("format", 0)),
+        ("Anomalies", sum(len(r.anomalies) for r in state.anomaly_reports)),
+    )):
+        column.metric(label, f"{value:,}")
+
+    completeness = state.completeness or {}
+    by_column = completeness.get("by_column") or {}
+    if by_column:
+        st.markdown("### Fill rate by column")
+        fill = pd.DataFrame([
+            {"column": name, "filled": round(info["completeness"] * 100, 1),
+             "nulls": info["nulls"]}
+            for name, info in sorted(by_column.items(), key=lambda kv: kv[1]["completeness"])
+        ])
+        st.dataframe(
+            fill, use_container_width=True, hide_index=True,
+            column_config={"filled": st.column_config.ProgressColumn(
+                "filled", format="%.1f%%", min_value=0, max_value=100)},
         )
-    st.session_state.pipeline_state = applied_state
-    st.session_state.execution = {
-        "applied": applied_state.applied_fix_ids,
-        "rejected": applied_state.errors,
-        "before": before_df,
-    }
-    st.rerun()
 
-execution = st.session_state.execution
-if execution is not None:
-    st.subheader("Execution result")
-    st.json({"applied": execution.get("applied", []), "rejected": execution.get("rejected", [])})
-    before_df = execution["before"]
-    after_df = st.session_state.pipeline_state.dataset
-    diff = [
-        {
-            "column": c,
-            "nans_before": int(before_df[c].isna().sum()),
-            "nans_after": int(after_df[c].isna().sum()) if c in after_df.columns else None,
-            "uniques_before": int(before_df[c].nunique(dropna=True)),
-            "uniques_after": int(after_df[c].nunique(dropna=True)) if c in after_df.columns else None,
-        }
-        for c in before_df.columns
-    ]
-    st.caption(f"Before: {before_df.shape[0]} x {before_df.shape[1]}  |  After: {after_df.shape[0]} x {after_df.shape[1]}")
-    st.dataframe(diff, use_container_width=True)
-    st.subheader("Cleaned dataset preview")
-    st.dataframe(after_df.head(20))
+    st.markdown("### The data as it now stands")
+    st.dataframe(frame_now.head(25), use_container_width=True)
 
+with findings:
+    if state.duplicate_resolutions:
+        st.markdown("### Duplicate columns")
+        st.dataframe(pd.DataFrame([
+            {"kept as": r.canonical_name, "data from": r.data_survivor,
+             "removed": ", ".join(r.dropped), "backfilled": r.cells_backfilled,
+             "overwritten": sum(r.cells_overwritten.values())}
+            for r in state.duplicate_resolutions
+        ]), use_container_width=True, hide_index=True)
 
-final_state: PipelineState = st.session_state.pipeline_state
-if final_state is not None and final_state.dataset is not None:
-    st.divider()
-    st.subheader("Download")
-    st.caption(
-        "Available as soon as the pipeline has run. Before approving any fix this is the "
-        "dataset as the detection stages left it; after approving, it includes the applied "
-        "remediations. The full report also runs the duplicate-row pass and writes the PDF "
-        "and JSON next to the dataset."
-    )
-    name = Path(final_state.dataset_path or "dataset").stem
-    applied_count = len(final_state.applied_fix_ids)
-    pending_count = len([p for p in final_state.proposed_fixes if p.id not in final_state.applied_fix_ids])
-    suffix = "cleaned" if applied_count else "processed"
+    if state.auto_remediations:
+        st.markdown("### Corrections applied without asking")
+        st.caption(
+            "Values the data determines on its own. They are deductions rather than judgement "
+            "calls, so they are applied before the gate and recorded in the change log."
+        )
+        st.dataframe(pd.DataFrame(state.auto_remediations),
+                     use_container_width=True, hide_index=True)
 
-    if applied_count:
-        st.success(f"{applied_count} fix applied, {len(final_state.change_log)} cells changed.")
+    if state.anomaly_reports:
+        st.markdown("### Anomalies")
+        st.caption("An outlier is unusual, which is not the same as wrong. These are reported, "
+                   "and left for a person to judge unless the value is impossible.")
+        numeric = [r for r in state.anomaly_reports if r.method == "iqr"]
+        categorical = [r for r in state.anomaly_reports if r.method == "rare_category"]
+        for report in numeric + categorical:
+            found = report.stats.get("detected", len(report.anomalies))
+            kind = "outliers" if report.method == "iqr" else "rare values"
+            with st.expander(f"{report.column_name} - {found:,} {kind}"):
+                if report.comment:
+                    st.caption(report.comment)
+                if report.method == "iqr":
+                    bounds = st.columns(4)
+                    for slot, key in zip(bounds, ("q1", "q3", "lower_bound", "upper_bound")):
+                        slot.metric(key.replace("_", " "), report.stats.get(key))
+                if report.anomalies:
+                    st.dataframe(
+                        pd.DataFrame([{"row": a.row_index, "value": a.value, "reason": a.reason}
+                                      for a in report.anomalies[:25]]),
+                        use_container_width=True, hide_index=True,
+                    )
+
+    if state.unaddressed_violations:
+        st.markdown("### Carried without a corrective action")
+        st.dataframe(pd.DataFrame([
+            {"columns": ", ".join(u.columns), "rows": u.affected_rows or None, "why": u.reason}
+            for u in state.unaddressed_violations
+        ]), use_container_width=True, hide_index=True)
+
+    with st.expander("Diagnostics - the full state each agent produced"):
+        st.caption("Everything the run recorded, for auditing rather than approving.")
+        st.markdown("**Semantic payload**")
+        st.dataframe(pd.DataFrame([
+            {"column": p.column_name, "dtype": p.dtype, "canonical": p.canonical_hint,
+             "placeholders": ", ".join(str(v) for v in p.placeholders),
+             "related": ", ".join(p.related_columns)}
+            for p in state.payload
+        ]), use_container_width=True, hide_index=True)
+        if state.inferred_format_specs:
+            st.markdown("**Inferred format specs**")
+            st.dataframe(pd.DataFrame([
+                {"column": column, "source": info.get("source", "skipped"),
+                 "final spec": str(info.get("final_spec"))}
+                for column, info in state.inferred_format_specs.items()
+            ]), use_container_width=True, hide_index=True)
+        if state.imputation_hints:
+            st.markdown("**Mined imputation hints**")
+            st.dataframe(pd.DataFrame([
+                {"column": column, "from": ", ".join(hint.predictor_columns),
+                 "purity": round(hint.purity, 4), "coverage": round(hint.coverage, 4)}
+                for column, hint in state.imputation_hints.items()
+            ]), use_container_width=True, hide_index=True)
+        if state.errors:
+            st.markdown("**Errors recorded**")
+            for error in state.errors:
+                st.warning(error)
+
+with review:
+    if not state.proposed_fixes:
+        st.info("No remediation proposed. Either nothing was detected, or every violation was "
+                "declared unaddressable.")
     else:
-        st.warning(
-            "No fix has been applied yet: this file still contains every violation the "
-            "pipeline detected. Accept the proposals above and press Apply first."
-        )
-    if pending_count:
-        st.caption(f"{pending_count} proposal(s) not applied.")
+        counts = st.columns(3)
+        counts[0].metric("Accepted", len(accepted))
+        counts[1].metric("Rejected", len(rejected))
+        counts[2].metric("Awaiting a decision", len(pending))
 
-    columns = st.columns(3)
-    columns[0].download_button(
-        f"Dataset ({suffix}, {applied_count} fix applied)",
-        final_state.dataset.to_csv(index=False).encode("utf-8"),
-        file_name=f"{name}.{suffix}.csv",
-        mime="text/csv",
-    )
-    if final_state.change_log:
-        columns[1].download_button(
-            f"Change log ({len(final_state.change_log)} cells)",
-            pd.DataFrame(final_state.change_log).to_csv(index=False).encode("utf-8"),
-            file_name=f"{name}.changes.csv",
-            mime="text/csv",
+    for proposal in state.proposed_fixes:
+        decision = st.session_state.fix_decisions.get(proposal.id)
+        chip = {"accepted": "<span class='chip ok'>accepted</span>",
+                "rejected": "<span class='chip no'>rejected</span>"}.get(
+            decision, "<span class='chip wait'>pending</span>")
+        with st.expander(f"{proposal.description}", expanded=decision is None):
+            st.markdown(
+                f"{chip} &nbsp; <code>{proposal.id}</code> &nbsp; affects "
+                f"<code>{', '.join(proposal.affected_columns) or 'nothing'}</code> &nbsp; "
+                f"about {proposal.estimated_rows_affected:,} row(s)",
+                unsafe_allow_html=True,
+            )
+            st.markdown(f"_{proposal.rationale}_")
+            if proposal.depends_on:
+                st.caption(f"Depends on {', '.join(proposal.depends_on)}")
+            generated = [o for o in proposal.operations if o.kind == "apply_generated_function"]
+            st.code(operations_as_python(proposal.operations), language="python")
+            st.caption(
+                "The cleaning function above is the code that will run, written by the model for "
+                "this column. It was refused any import outside re, datetime, decimal and math, "
+                "then executed against this column's own conforming and violating values before "
+                "reaching you."
+                if generated else
+                "Equivalent pandas expression, shown so you can see exactly what the proposal "
+                "does. The pipeline executes the typed operations, not this text."
+            )
+            actions = st.columns([1, 1, 1, 5])
+            if actions[0].button("Accept", key=f"acc_{proposal.id}", use_container_width=True):
+                st.session_state.fix_decisions[proposal.id] = "accepted"
+                st.session_state.editing.pop(proposal.id, None)
+                st.rerun()
+            if actions[1].button("Reject", key=f"rej_{proposal.id}", use_container_width=True):
+                st.session_state.fix_decisions[proposal.id] = "rejected"
+                st.session_state.editing.pop(proposal.id, None)
+                st.rerun()
+            if actions[2].button("Revise", key=f"edt_{proposal.id}", use_container_width=True):
+                st.session_state.editing[proposal.id] = True
+                st.rerun()
+
+            if st.session_state.editing.get(proposal.id):
+                feedback = st.text_area(
+                    "What should the model change?",
+                    key=f"fb_{proposal.id}",
+                    placeholder="e.g. do not impute eta_max from sesso, use eta_min's mapping",
+                )
+                if st.button("Re-propose", key=f"rep_{proposal.id}") and feedback.strip():
+                    with st.spinner("Re-proposing"):
+                        _repropose(_group_id_of(proposal.id), feedback.strip())
+                    st.rerun()
+
+    if accepted:
+        st.divider()
+        if st.button(f"Apply {len(accepted)} accepted fix(es)", type="primary"):
+            before = state.dataset.copy()
+            with st.spinner("Executing"):
+                applied = apply_fixes_node(
+                    state.model_copy(update={"approved_fix_ids": [p.id for p in accepted]})
+                )
+            st.session_state.pipeline_state = applied
+            st.session_state.execution = {"applied": applied.applied_fix_ids,
+                                          "refused": applied.errors, "before": before}
+            st.rerun()
+
+    execution = st.session_state.execution
+    if execution is not None:
+        st.divider()
+        st.markdown("### What the run applied")
+        result = st.columns(2)
+        result[0].metric("Fixes applied", len(execution["applied"]))
+        result[1].metric("Refused", len(execution["refused"]))
+        for refusal in execution["refused"]:
+            st.warning(refusal)
+        applied_state = st.session_state.pipeline_state
+        before_frame, after_frame = execution["before"], applied_state.dataset
+        landed = set(applied_state.applied_fix_ids)
+        renames = {
+            operation.column: operation.new_name
+            for proposal in applied_state.proposed_fixes if proposal.id in landed
+            for operation in proposal.operations
+            if operation.kind == "rename_column" and operation.new_name
+        }
+        st.dataframe(pd.DataFrame(column_diff(before_frame, after_frame, renames)),
+                     use_container_width=True, hide_index=True)
+
+with report_tab:
+    final: PipelineState = st.session_state.pipeline_state
+    applied_count = len(final.applied_fix_ids)
+    if not applied_count:
+        st.warning(
+            "No fix has been applied yet, so the file below still carries every violation the "
+            "run detected. Accept the proposals under Review and apply them first."
         )
-    if columns[2].button("Generate full report"):
-        with st.spinner("Deduplicating rows and writing the report..."):
-            reported = report_generator_node(duplicate_row_node(final_state))
-        st.session_state.pipeline_state = reported
-        st.session_state.report = _read_report(reported)
+    name = Path(final.dataset_path or "dataset").stem
+    downloads = st.columns(3)
+    downloads[0].download_button(
+        "Dataset (CSV)",
+        final.dataset.to_csv(index=False).encode("utf-8"),
+        file_name=f"{name}.{'cleaned' if applied_count else 'processed'}.csv",
+        mime="text/csv", use_container_width=True,
+    )
+    if final.change_log:
+        downloads[1].download_button(
+            f"Change log ({len(final.change_log):,} cells)",
+            pd.DataFrame(final.change_log).to_csv(index=False).encode("utf-8"),
+            file_name=f"{name}.changes.csv", mime="text/csv", use_container_width=True,
+        )
+    if downloads[2].button("Generate the full report", type="primary", use_container_width=True):
+        with st.spinner("Deduplicating rows and writing the report"):
+            produced = report_generator_node(duplicate_row_node(final))
+        st.session_state.pipeline_state = produced
+        st.session_state.report = _read_report(produced)
         st.rerun()
 
-report = st.session_state.report
-if report:
-    st.divider()
-    st.subheader("Data quality report")
-    st.caption(
-        "The same document the PDF renders. Every figure in it is computed from the run; the "
-        "model wrote only the verdict, the comment under each area, and the recommendations."
-    )
-    downloads = st.columns(3)
-    for column, extension, mime in (
-        (downloads[0], "md", "text/markdown"),
-        (downloads[1], "html", "text/html"),
-        (downloads[2], "pdf", "application/pdf"),
-    ):
-        content = report.get(extension)
-        if content is not None:
-            column.download_button(
-                f"Report ({extension})", content,
-                file_name=f"{report['stem']}.{extension}", mime=mime,
-            )
-    if report.get("pdf") is None:
-        st.caption(
-            "No browser was available to print the PDF. Download the HTML and print it from "
-            "any browser: it is one self-contained file and looks identical."
-        )
-    st.markdown(report["md"], unsafe_allow_html=True)
-
-    if final_state.reliability:
-        delivered = final_state.reliability["as_delivered"]
-        like_for_like = final_state.reliability["like_for_like"]
-        st.subheader("Reliability score")
-        st.caption(
-            "As delivered compares the file received with the file produced. Like for like "
-            "compares the same columns before and after remediation, over every dimension "
-            "measurable on both. Anomalies are reported but deliberately not scored: an "
-            "outlier is not necessarily an error."
-        )
-        scores = st.columns(2)
-        scores[0].metric(
-            "As delivered",
-            f"{delivered['after']['score']:.4f}",
-            delta=f"{delivered['after']['score'] - delivered['before']['score']:+.4f}",
-        )
-        if like_for_like:
-            scores[1].metric(
-                "Like for like",
-                f"{like_for_like['after']['score']:.4f}",
-                delta=f"{like_for_like['after']['score'] - like_for_like['before']['score']:+.4f}",
-            )
-        table = pd.DataFrame([
-            {
-                "dimension": dimension,
-                "before": delivered["before"]["components"].get(dimension),
-                "after": delivered["after"]["components"].get(dimension),
-                "weight": delivered["after"]["weights"].get(dimension),
-            }
-            for dimension in final_state.reliability["dimensions_compared"]
-        ])
-        st.dataframe(table, use_container_width=True, hide_index=True)
-        excluded = final_state.reliability["dimensions_excluded"]
-        if excluded:
-            st.caption(f"Not comparable as delivered, so excluded from that score: {', '.join(excluded)}.")
-
-    if final_state.change_log:
-        st.subheader("What changed, cell by cell")
-        st.dataframe(pd.DataFrame(final_state.change_log), use_container_width=True)
+    report = st.session_state.report
+    if not report:
+        st.info("The report runs the duplicate-row pass, recomputes the residual violations and "
+                "writes Markdown, HTML and PDF beside the dataset.")
+    else:
+        files = st.columns(3)
+        for slot, extension, mime in (
+            (files[0], "md", "text/markdown"),
+            (files[1], "html", "text/html"),
+            (files[2], "pdf", "application/pdf"),
+        ):
+            content = report.get(extension)
+            if content is not None:
+                slot.download_button(f"Report ({extension})", content,
+                                     file_name=f"{report['stem']}.{extension}", mime=mime,
+                                     use_container_width=True)
+        if report.get("pdf") is None:
+            st.caption("No browser was available to print the PDF. The HTML is one "
+                       "self-contained file and prints identically.")
+        with st.container(border=True, height=760):
+            st.markdown(report["md"], unsafe_allow_html=True)
