@@ -1,4 +1,4 @@
-"""Unified Remediation agent. Groups columns by the transitive closure of related_columns, aggregates upstream validation reports into identified violations, and asks the model for proposals per group: typed catalogue operations for anything structural, generated cleaning functions for value-level repair, so a format rule generalises rather than enumerating the values already seen. Every generated function is cleared by a static gate and executed against its own column's evidence before the proposal is dry-run; a failure becomes deterministic feedback and another attempt, and a failure that repeats identically escalates once to a critic that diagnoses without writing code. What survives is dry-run, self-reviewed and written to state.proposed_fixes; the Apply step owns execution against the dataset."""
+"""Unified Remediation agent. Groups columns by the transitive closure of related_columns, aggregates upstream validation reports into identified violations, and asks the model for proposals per group: typed catalogue operations for anything structural, generated cleaning functions for value-level repair, so a format rule generalises rather than enumerating the values already seen. Every generated function is cleared by a static gate and executed against its own column's evidence before the proposal is dry-run; a failure becomes deterministic feedback and another attempt, and a failure that repeats identically escalates once to a critic that diagnoses without writing code. What survives is dry-run, self-reviewed and written to state.proposed_fixes; the Apply step owns execution against the dataset. A group the model cannot answer at all - a reply cut off at the output limit, or one no decoding path parses - costs that group and no more: it is recorded on state.errors as unaddressed and the run continues, so the remaining groups, the schema proposals and the report still reach the user."""
 from __future__ import annotations
 
 import json
@@ -32,7 +32,7 @@ from tools.generated_function import (
 )
 from tools.trial_execute import trial_execute
 from tools.validate_format import specs_by_column
-from utils.llm import structured_model
+from utils.llm import EmptyModelResponse, structured_model
 from utils.prompts import load_prompt
 
 
@@ -77,17 +77,24 @@ def unified_node(state: PipelineState) -> PipelineState:
     }
     all_proposals: list[FixProposal] = []
     fix_groups: dict[str, list[str]] = {}
+    failures: list[str] = []
     for group_idx, group in enumerate(actionable):
         group_id = f"g{group_idx + 1}"
         fix_groups[group_id] = group
-        all_proposals.extend(propose_for_group(
-            group_id, group, payload_by_name, reports_by_name, state.dataset, state.baseline,
-            value_corrections=state.value_corrections,
-            specs_by_col=specs_by_col,
-            imputation_hints=state.imputation_hints,
-            removable_by_column=removable_values(state.payload, state.validation_reports),
-            anomalies=anomalies_by_column,
-        ))
+        try:
+            all_proposals.extend(propose_for_group(
+                group_id, group, payload_by_name, reports_by_name, state.dataset, state.baseline,
+                value_corrections=state.value_corrections,
+                specs_by_col=specs_by_col,
+                imputation_hints=state.imputation_hints,
+                removable_by_column=removable_values(state.payload, state.validation_reports),
+                anomalies=anomalies_by_column,
+            ))
+        except EmptyModelResponse as error:
+            failures.append(
+                f"{group_id} ({', '.join(group)}): no proposals, the model returned no usable "
+                f"answer ({error}). The violations in this group are reported but unaddressed."
+            )
 
     schema = schema_proposals(state.validation_reports, list(state.dataset.columns))
     deduped = _drop_redundant_schema_fixes(dedupe_proposals(all_proposals), schema)
@@ -97,6 +104,7 @@ def unified_node(state: PipelineState) -> PipelineState:
         "proposed_fixes": [_with_readable_code(p) for p in schema + deduped],
         "fix_groups": fix_groups,
         "generated_function_runs": runs,
+        "errors": state.errors + failures,
     })
 
 
@@ -738,11 +746,15 @@ def _jsonable(value):
 def _invoke_with_retry(
     chain, system: str, ctx: dict, input_violation_ids: set[str], group: list[str]
 ) -> FixGroupResponse | None:
+    result: FixGroupResponse | None = None
     for attempt in range(2):
-        result: FixGroupResponse = chain.invoke([
-            {"role": "system", "content": system},
-            {"role": "user", "content": json.dumps(ctx, ensure_ascii=False, default=str)},
-        ])
+        try:
+            result = chain.invoke([
+                {"role": "system", "content": system},
+                {"role": "user", "content": json.dumps(ctx, ensure_ascii=False, default=str)},
+            ])
+        except EmptyModelResponse:
+            return None
         errors = _coverage_errors(result, input_violation_ids, group)
         if not errors:
             return result

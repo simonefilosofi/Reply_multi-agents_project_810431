@@ -1,4 +1,4 @@
-"""Single construction point for the DeepSeek chat model behind every LLM-backed agent and tool. Pins the model and disables the provider's reasoning mode, so temperature is honoured and a run stays reproducible. Schema-constrained answers go through tool calling, which the provider occasionally serialises as malformed JSON; that answer is detectable but unrecoverable, so the request is retried in JSON mode, whose constrained decoding cannot emit invalid JSON, with the schema carried in the prompt because DeepSeek implements no schema-typed response format. An answer neither path produces raises rather than travelling on as a None."""
+"""Single construction point for the DeepSeek chat model behind every LLM-backed agent and tool. Pins the model and disables the provider's reasoning mode, so temperature is honoured and a run stays reproducible. Schema-constrained answers go through tool calling, which the provider occasionally serialises as malformed JSON or cuts off at the output limit mid-object; either way the attempt yields nothing usable, so the request is retried in JSON mode, whose constrained decoding cannot emit invalid JSON, with the schema carried in the prompt because DeepSeek implements no schema-typed response format. An answer neither path produces raises EmptyModelResponse, which a caller able to continue without it can catch, rather than travelling on as a None or escaping as a provider exception that ends the run."""
 from __future__ import annotations
 
 import json
@@ -10,6 +10,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, co
 from langchain_core.prompt_values import PromptValue
 from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_deepseek import ChatDeepSeek
+from openai import ContentFilterFinishReasonError, LengthFinishReasonError
 from pydantic import BaseModel, ValidationError
 
 MODEL = "deepseek-v4-pro"
@@ -23,6 +24,9 @@ _SCHEMA_INSTRUCTION = (
     "Schema:\n{schema}"
 )
 _UNUSABLE = "{model} produced no answer matching {schema} through tool calling or JSON mode."
+_TRUNCATED = (LengthFinishReasonError, ContentFilterFinishReasonError)
+_UNPARSEABLE_TOOL_CALL = (OutputParserException, ValidationError, *_TRUNCATED)
+_UNPARSEABLE_JSON_OBJECT = (OutputParserException, ValidationError, ValueError, *_TRUNCATED)
 
 SchemaT = TypeVar("SchemaT", bound=BaseModel)
 
@@ -59,13 +63,13 @@ def _answer(
 ) -> SchemaT:
     try:
         answer = by_tool_call.invoke(messages)
-    except (OutputParserException, ValidationError):
+    except _UNPARSEABLE_TOOL_CALL:
         answer = None
     if answer is not None:
         return answer
     try:
         return _from_json_object(schema, by_json_object, messages)
-    except (OutputParserException, ValidationError, ValueError) as error:
+    except _UNPARSEABLE_JSON_OBJECT as error:
         raise EmptyModelResponse(
             _UNUSABLE.format(model=MODEL, schema=schema.__name__)
         ) from error

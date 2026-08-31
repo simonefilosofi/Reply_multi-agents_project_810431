@@ -1,4 +1,4 @@
-"""Applies the corrections the data itself determines, before any proposal reaches the human gate: an unambiguous alternative layout, representation noise on a number of known precision, the year and month a period key states directly, and a gap fillable from a mined dependency of near-perfect purity. These are deductions rather than judgement calls, so holding them behind an approval adds no safety; anything needing a choice about what a value ought to be stays with the Unified Remediation agent. Whatever it rewrites it re-measures, so downstream agents reason about the dataset as it now stands."""
+"""Applies the corrections the data itself determines, before any proposal reaches the human gate: an unambiguous alternative layout, representation noise on a number of known precision, the year or month a period key states directly where the column does not already hold a readable one, and a gap fillable from a mined dependency of near-perfect purity. These are deductions rather than judgement calls, so holding them behind an approval adds no safety; anything needing a choice about what a value ought to be stays with the Unified Remediation agent. A period disagreeing with a year or month that is itself well formed is exactly such a choice - neither side is demonstrably the wrong one - so those rows are reported as consistency violations instead of being rewritten here. Whatever it rewrites it re-measures, so downstream agents reason about the dataset as it now stands."""
 from __future__ import annotations
 
 import pandas as pd
@@ -11,7 +11,7 @@ from tools.decimal_precision import recorded_precision, rounds_cleanly
 from tools.merge_reports import merge_reports
 from tools.mine_functional_deps import mine_functional_deps
 from tools.normalize_period_format import is_canonical
-from tools.derive_from_period import derivable_columns, derive
+from tools.derive_from_period import contested_rows, derivable_columns, derive
 from tools.operations import apply_operation
 from tools.temporal_stability import time_column
 from tools.validate_format import specs_by_column, validate_format
@@ -39,22 +39,25 @@ def auto_remediation_node(state: PipelineState) -> PipelineState:
                 "rationale": "alternative period layouts rewritten to the canonical YYYYMM form",
             })
 
+    contested: list[ValidationReport] = []
     for period in _period_columns(state):
         for column, part in derivable_columns(df, period).items():
+            disputed = contested_rows(df, period, column, part)
             corrected = derive(df, period, column, part)
             changed = int((df[column].astype(str) != corrected.astype(str)).sum())
-            if not changed:
-                continue
-            df[column] = corrected
-            applied.append({
-                "column": column,
-                "operation": f"derive_{part}_from_period",
-                "cells_changed": changed,
-                "rationale": (
-                    f"{column} holds the {part} of {period}, which states it directly; "
-                    f"rows contradicting their own period were corrected"
-                ),
-            })
+            if changed:
+                df[column] = corrected
+                applied.append({
+                    "column": column,
+                    "operation": f"derive_{part}_from_period",
+                    "cells_changed": changed,
+                    "rationale": (
+                        f"{column} could not be read as a {part} on these rows, and {period} "
+                        f"states it directly, so the value was filled from the period"
+                    ),
+                })
+            if len(disputed):
+                contested.append(_contested_report(df, period, column, part, disputed))
 
     for column in df.columns:
         precision = recorded_precision(df[column])
@@ -103,7 +106,7 @@ def auto_remediation_node(state: PipelineState) -> PipelineState:
                 "rationale": hint.rationale,
             })
 
-    if not applied:
+    if not applied and not contested:
         return state
 
     changes, _ = diff_cells(before, df, "auto_remediation")
@@ -117,12 +120,35 @@ def auto_remediation_node(state: PipelineState) -> PipelineState:
             df,
             touched,
             specs_by_column(specs),
-            _recheck_cross_column(state, df),
+            _recheck_cross_column(state, df) + contested,
         ),
         "value_corrections": _drop_settled_corrections(state.value_corrections, df, touched),
         "change_log": state.change_log + changes,
         "auto_remediations": state.auto_remediations + applied,
     })
+
+
+def _contested_report(
+    df: pd.DataFrame, period: str, column: str, part: str, rows: pd.Index
+) -> ValidationReport:
+    """One report for the rows where a well-formed value and its period disagree. Neither side is
+    demonstrably the wrong one, so the disagreement is carried to the approval gate rather than
+    settled here."""
+    expected = f"{part} of {period}"
+    return ValidationReport(
+        column_name=column,
+        violations=[
+            FormatViolation(
+                column_name=column,
+                row_index=int(row),
+                value=df.at[row, column],
+                expected_pattern=expected,
+                kind="consistency",
+            )
+            for row in rows
+        ],
+        detected_total=len(rows),
+    )
 
 
 def _apply(df: pd.DataFrame, operation: Operation, hints: dict | None = None) -> int:
