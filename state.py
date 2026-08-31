@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from models import AnomalyReport, BaselineFile, ColumnPayload, DuplicateResolution, FixProposal, ImputationHint, ValidationReport
+from models import AnomalyReport, BaselineFile, ColumnPayload, DuplicateResolution, FixProposal, ImputationHint, UnaddressedViolations, ValidationReport
 
 
 class PipelineState(BaseModel):
@@ -35,6 +35,7 @@ class PipelineState(BaseModel):
     approved_fix_ids: list[str] = Field(default_factory=list)
     applied_fix_ids: list[str] = Field(default_factory=list)
     auto_remediations: list[dict] = Field(default_factory=list)
+    unaddressed_violations: list[UnaddressedViolations] = Field(default_factory=list)
     generated_function_runs: list[dict] = Field(default_factory=list)
 
     change_log: list[dict] = Field(default_factory=list)

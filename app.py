@@ -249,7 +249,7 @@ def _repropose(group_id: str, feedback: str) -> None:
         feedback=feedback,
         specs_by_col=_specs_by_col(s.inferred_format_specs),
         imputation_hints=s.imputation_hints,
-    )
+    ).proposals
     remaining = [p for p in s.proposed_fixes if _group_id_of(p.id) != group_id]
     st.session_state.pipeline_state = s.model_copy(update={"proposed_fixes": remaining + new_proposals})
     for p in s.proposed_fixes:

@@ -92,7 +92,7 @@ def _received(payload: dict) -> str:
         ["rows in key conflict", _number(before.get("rows_in_key_conflict"))],
         ["columns badly named", _number(before.get("columns_badly_named"))],
         ["columns almost empty", _number(before.get("columns_sparse"))],
-        ["columns duplicating another", _number(before.get("columns_redundant"))],
+        ["columns duplicating another", _number(payload.get("duplicate_column_groups"))],
         ["columns still holding the wrong type", _number(before.get("columns_untyped"))],
     ]
     lines = [
@@ -300,8 +300,35 @@ def _remediation_body(payload: dict) -> str:
             ["proposals carrying a generated function", _number(len(generated))],
             ["generated functions validated in a sandbox", _sandbox_runs(payload)],
             ["cells changed in total", _number((payload.get("changes_summary") or {}).get("total_cells_changed"))],
+            ["issues carried without an action", _number(len(payload.get("unaddressed_violations") or []))],
         ],
-    )
+    ) + ("\n\n" + _unaddressed(payload) if payload.get("unaddressed_violations") else "")
+
+
+def _unaddressed(payload: dict) -> str:
+    """Issues the run detected and could not act on. The contract asks that every detected issue
+    carry a corrective action; where none exists the honest action is to say so and why, which is
+    what this section records rather than leaving the gap unexplained."""
+    carried = payload.get("unaddressed_violations") or []
+    if not carried:
+        return ""
+    rows = [
+        [
+            ", ".join(f"`{c}`" for c in (entry.get("columns") or [])) or "-",
+            _number(entry.get("affected_rows")) if entry.get("affected_rows") else "-",
+            entry.get("reason") or "no reason recorded",
+        ]
+        for entry in carried
+    ]
+    return "\n".join([
+        "### Issues carried without a corrective action",
+        "",
+        "These were detected and reported. No correction is proposed for them, because none can be",
+        "expressed as code over the columns the file actually contains; acting anyway would mean",
+        "inventing values. They are listed so the gap is visible rather than silently carried.",
+        "",
+        _table(["column", "rows affected", "why no action is proposed"], rows),
+    ])
 
 
 def _sandbox_runs(payload: dict) -> str:

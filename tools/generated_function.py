@@ -93,6 +93,28 @@ def validate_against_examples(
     return issues, executor
 
 
+def execution_issues(source: str, values: Iterable[Any]) -> list[CleanerIssue]:
+    """Runs the cleaner over values whose conformity is unknown and reports only what raised.
+    Sampling a column straight gives no way to tell which values ought to change, so the single
+    claim these values can support is that the function executes over the column's own rendering
+    rather than over the shapes the collected examples happened to carry."""
+    blocking = check_source(source)
+    if blocking:
+        return blocking
+    scalars = [_as_scalar(value) for value in values]
+    results, _ = run_on_values(source, scalars)
+    return [
+        CleanerIssue(
+            category="runtime_exception",
+            message=f"the cleaner raised on {value!r}: {result.get('error', '')}",
+            input_value=value,
+            expected_behavior="return a value or None for every input, never raise.",
+        )
+        for value, result in zip(scalars, results)
+        if not result.get("ok")
+    ]
+
+
 def run_on_values(source: str, values: list[str | None]) -> tuple[list[dict], str]:
     """Executes the cleaner over a handful of values, preferring the sandbox; the local
     fallback degrades the isolation of a first run rather than stopping the pipeline. A

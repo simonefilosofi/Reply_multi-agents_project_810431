@@ -6,6 +6,7 @@ import pandas as pd
 from models import FormatSpec, FormatViolation, ImputationHint, Operation, ValidationReport
 from state import PipelineState
 from tools.change_log import diff_cells
+from tools.arithmetic_identities import arithmetic_reports
 from tools.cross_column_checks import candidate_predictors, cross_column_reports
 from tools.decimal_precision import recorded_precision, rounds_cleanly
 from tools.merge_reports import merge_reports
@@ -233,7 +234,7 @@ def _recheck_cross_column(state: PipelineState, df: pd.DataFrame) -> list[Valida
         df,
         candidate_predictors(state.payload, set(state.surviving_columns), df),
         clock=time_column(df, state.inferred_format_specs),
-    )
+    ) + arithmetic_reports(df)
 
 
 def _revalidated_violations(

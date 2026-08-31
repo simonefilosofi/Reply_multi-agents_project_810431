@@ -159,6 +159,7 @@ CleanerIssueCategory = Literal[
     "dominant_value_modified",
     "outlier_unchanged",
     "not_parseable_as_target_dtype",
+    "not_validated",
 ]
 
 
@@ -206,6 +207,17 @@ class FixGroupResponse(BaseModel):
 class FixReviewResponse(BaseModel):
     decision: Literal["approve", "revise"]
     feedback: str = ""
+
+
+class UnaddressedViolations(BaseModel):
+    """Violations carried to the report with no corrective action, and why none exists. The model
+    declares its own where it can; the pipeline fills in what it fails to declare."""
+    group_id: str
+    columns: list[str] = Field(default_factory=list)
+    violation_ids: list[str] = Field(default_factory=list)
+    reason: str = ""
+    affected_rows: int = 0
+    source: Literal["model", "pipeline"] = "model"
 
 
 class ImputationHint(BaseModel):

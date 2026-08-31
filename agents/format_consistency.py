@@ -9,9 +9,10 @@ from models import BaselineFile, ColumnPayload, EnumFormat, FormatViolation, Imp
 from state import PipelineState
 from tools.baseline_accessors import find_spec_by_hint
 from tools.duplicate_rows import duplicate_row_analysis
-from tools.reliability_score import checked_cells_by_column, compute_metrics
+from tools.reliability_score import checked_cells_by_column, compute_metrics, violation_counts
 from tools.correct_violations import correct_violations
 from tools.merge_reports import merge_reports
+from tools.arithmetic_identities import arithmetic_reports
 from tools.cross_column_checks import candidate_predictors, cross_column_reports
 from tools.infer_format_spec import infer_format_spec
 from tools.match_canonical import compact_format_summary
@@ -88,7 +89,7 @@ def format_consistency_node(state: PipelineState) -> PipelineState:
         state.dataset,
         candidate_predictors(state.payload, set(state.surviving_columns), state.dataset),
         clock=time_column(state.dataset, inferred_specs),
-    )
+    ) + arithmetic_reports(state.dataset)
     merged = merge_reports(state.validation_reports, new_reports + consistency_reports)
     imputation_hints = _mine_imputation_hints(
         state.dataset, payload_by_col, merged, state.dataset, inferred_specs
@@ -101,6 +102,7 @@ def format_consistency_node(state: PipelineState) -> PipelineState:
         duplicate_analysis=duplicate_row_analysis(state.dataset),
         declared_dtypes={p.column_name: p.dtype for p in state.payload if p.dtype},
     )
+    pre_remediation["violations_by_kind"] = violation_counts(merged)
     return state.model_copy(update={
         "validation_reports": merged,
         "value_corrections": value_corrections,

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
+from typing import NamedTuple
 
 import pandas as pd
 
@@ -11,6 +12,7 @@ from models import (
     CleanerIssue,
     ColumnPayload,
     FixGroupResponse,
+    UnaddressedViolations,
     FixProposal,
     FixReviewResponse,
     FormatSpec,
@@ -25,6 +27,7 @@ from tools.schema_proposals import schema_proposals
 from tools.fix_invariants import removable_values
 from tools.generated_function import (
     close_sandbox,
+    execution_issues,
     execution_log,
     issues_fingerprint,
     start_execution_log,
@@ -44,6 +47,110 @@ _CORRECTION_EXAMPLES = 20
 _MAX_EXAMPLE_VALUES = 8
 _MAX_REVIEW_ITERATIONS = 3
 _MAX_REPORTED_ISSUES = 5
+
+
+class GroupOutcome(NamedTuple):
+    """Both halves of a group's answer: what the model proposed, and what it could not fix."""
+    proposals: list[FixProposal]
+    unaddressed: list[UnaddressedViolations]
+
+
+def declared_unaddressed(
+    group_id: str, columns: list[str], response: FixGroupResponse, affected_rows: int = 0
+) -> UnaddressedViolations | None:
+    """The model's own statement of what it cannot fix. The prompt requires it and _coverage_errors
+    refuses a response that omits one, so this is an answer already being produced and validated.
+    The columns recorded are the ones still carrying a violation, not the whole group, because a
+    group is a unit of reasoning and naming all of it would blame columns that came out clean."""
+    if not response.unaddressed_violation_ids:
+        return None
+    return UnaddressedViolations(
+        group_id=group_id,
+        columns=list(columns),
+        violation_ids=list(response.unaddressed_violation_ids),
+        reason=response.rationale_for_unaddressed,
+        affected_rows=affected_rows,
+        source="model",
+    )
+
+
+def unexplained_columns(
+    group: list[str], reports_by_name: dict, proposals: list[FixProposal]
+) -> list[str]:
+    """Columns of the group that still carry a violation no proposal touches. Schema proposals
+    count here as much as the model's: a column with a rename waiting at the gate has an action,
+    and listing it as unactionable would be wrong."""
+    proposed = {column for p in proposals for column in p.affected_columns}
+    return [
+        column for column in group
+        if column not in proposed
+        and reports_by_name.get(column) and reports_by_name[column].violations
+    ]
+
+
+def violation_rows(columns: list[str], reports_by_name: dict) -> int:
+    return sum(
+        sum(v.affected_rows or 1 for v in reports_by_name[column].violations)
+        for column in columns if reports_by_name.get(column)
+    )
+
+
+def unaddressed_backstop(
+    group_id: str,
+    group: list[str],
+    reports_by_name: dict,
+    proposals: list[FixProposal],
+    declared: list[UnaddressedViolations],
+    imputation_hints: dict,
+    reason: str = "",
+) -> UnaddressedViolations | None:
+    """What the group still leaves unexplained once the proposals and the model's declaration are
+    both accounted for. _invoke_with_retry returns the second attempt even when coverage errors
+    remain, so a violation can reach the report having been neither fixed nor declared."""
+    covered = {vid for p in proposals for vid in p.addresses_violations}
+    covered |= {vid for entry in declared for vid in entry.violation_ids}
+    outstanding = [
+        column for column in unexplained_columns(group, reports_by_name, proposals)
+        if not any(column in entry.columns for entry in declared)
+    ]
+    if not outstanding:
+        return None
+    affected = violation_rows(outstanding, reports_by_name)
+    return UnaddressedViolations(
+        group_id=group_id,
+        columns=outstanding,
+        violation_ids=sorted({f"{column}:unaddressed" for column in outstanding} - covered),
+        reason=reason or _no_action_reason(outstanding, imputation_hints),
+        affected_rows=affected,
+        source="pipeline",
+    )
+
+
+def _no_action_reason(columns: list[str], imputation_hints: dict) -> str:
+    without_predictor = [c for c in columns if c not in imputation_hints]
+    if without_predictor:
+        return (
+            f"no column in the dataset determines {', '.join(without_predictor)}, so the gap "
+            "cannot be filled without inventing a value"
+        )
+    return "no corrective action could be expressed as code over the existing columns"
+
+
+def without_columns_already_actioned(
+    carried: list[UnaddressedViolations], proposals: list[FixProposal]
+) -> list[UnaddressedViolations]:
+    """Drops from each carried entry the columns some proposal does cover, and drops an entry left
+    with none. A group is answered before the schema proposals are built, so a column whose only
+    fault is its name can be declared unactionable and then be renamed at the gate anyway."""
+    proposed = {column for p in proposals for column in p.affected_columns}
+    kept: list[UnaddressedViolations] = []
+    for entry in carried:
+        remaining = [column for column in entry.columns if column not in proposed]
+        if not remaining:
+            continue
+        kept.append(entry if remaining == entry.columns
+                    else entry.model_copy(update={"columns": remaining}))
+    return kept
 
 
 def unified_node(state: PipelineState) -> PipelineState:
@@ -75,28 +182,46 @@ def unified_node(state: PipelineState) -> PipelineState:
         }
         for r in state.anomaly_reports
     }
+    schema = schema_proposals(state.validation_reports, list(state.dataset.columns))
     all_proposals: list[FixProposal] = []
     fix_groups: dict[str, list[str]] = {}
     failures: list[str] = []
+    unaddressed: list[UnaddressedViolations] = []
     for group_idx, group in enumerate(actionable):
         group_id = f"g{group_idx + 1}"
         fix_groups[group_id] = group
+        group_proposals: list[FixProposal] = []
+        group_declared: list[UnaddressedViolations] = []
+        group_reason = ""
         try:
-            all_proposals.extend(propose_for_group(
+            outcome = propose_for_group(
                 group_id, group, payload_by_name, reports_by_name, state.dataset, state.baseline,
                 value_corrections=state.value_corrections,
                 specs_by_col=specs_by_col,
                 imputation_hints=state.imputation_hints,
                 removable_by_column=removable_values(state.payload, state.validation_reports),
                 anomalies=anomalies_by_column,
-            ))
+            )
+            group_proposals = outcome.proposals
+            group_declared = outcome.unaddressed
+            all_proposals.extend(group_proposals)
+            unaddressed.extend(group_declared)
         except EmptyModelResponse as error:
             failures.append(
                 f"{group_id} ({', '.join(group)}): no proposals, the model returned no usable "
                 f"answer ({error}). The violations in this group are reported but unaddressed."
             )
+            group_reason = (
+                "the model returned no usable answer for this group, so no corrective action "
+                "was produced for the violations in it"
+            )
+        remainder = unaddressed_backstop(
+            group_id, group, reports_by_name, group_proposals + schema, group_declared,
+            state.imputation_hints, group_reason,
+        )
+        if remainder is not None:
+            unaddressed.append(remainder)
 
-    schema = schema_proposals(state.validation_reports, list(state.dataset.columns))
     deduped = _drop_redundant_schema_fixes(dedupe_proposals(all_proposals), schema)
     runs = execution_log()
     close_sandbox()
@@ -105,6 +230,9 @@ def unified_node(state: PipelineState) -> PipelineState:
         "fix_groups": fix_groups,
         "generated_function_runs": runs,
         "errors": state.errors + failures,
+        "unaddressed_violations": state.unaddressed_violations + without_columns_already_actioned(
+            unaddressed, schema + deduped
+        ),
     })
 
 
@@ -181,7 +309,7 @@ def propose_for_group(
     imputation_hints: dict[str, ImputationHint] | None = None,
     removable_by_column: dict[str, set] | None = None,
     anomalies: dict[str, dict] | None = None,
-) -> list[FixProposal]:
+) -> GroupOutcome:
     chain = structured_model(FixGroupResponse)
     system = load_prompt("unified")
     ctx, input_violation_ids = _build_group_context(
@@ -195,7 +323,7 @@ def propose_for_group(
         ctx["user_feedback_on_previous_response"] = feedback
     response = _invoke_with_retry(chain, system, ctx, input_violation_ids, group)
     if response is None:
-        return []
+        return GroupOutcome(proposals=[], unaddressed=[])
 
     reviewed = _review_and_revise_proposals(
         proposals=_drop_unusable_proposals(response.proposals, group),
@@ -211,7 +339,15 @@ def propose_for_group(
             chain, system, ctx, input_violation_ids, group, fb,
         ),
     )
-    return [_namespace_proposal(group_id, p) for p in reviewed]
+    namespaced = [_namespace_proposal(group_id, p) for p in reviewed]
+    still_open = unexplained_columns(group, reports_by_name, namespaced)
+    declared = declared_unaddressed(
+        group_id, still_open, response, violation_rows(still_open, reports_by_name)
+    )
+    return GroupOutcome(
+        proposals=namespaced,
+        unaddressed=[declared] if declared is not None and still_open else [],
+    )
 
 
 def _review_and_revise_proposals(
@@ -234,7 +370,7 @@ def _review_and_revise_proposals(
         previous_fingerprint: tuple[str, ...] = ()
         critic_spent = False
         for _ in range(_MAX_REVIEW_ITERATIONS):
-            cleaner_issues = _validate_generated_operations(current, examples_by_column)
+            cleaner_issues = _validate_generated_operations(current, examples_by_column, df)
             if cleaner_issues:
                 repeated = issues_fingerprint(cleaner_issues) == previous_fingerprint
                 previous_fingerprint = issues_fingerprint(cleaner_issues)
@@ -289,7 +425,7 @@ def _review_and_revise_proposals(
                 "id": proposal.id,
                 "depends_on": proposal.depends_on,
             })
-        if current is None or _validate_generated_operations(current, examples_by_column):
+        if current is None or _validate_generated_operations(current, examples_by_column, df):
             continue
         if not _breaks_invariants(
             current, df, value_corrections, specs_by_col, reports_by_name, imputation_hints,
@@ -300,24 +436,52 @@ def _review_and_revise_proposals(
 
 
 def _validate_generated_operations(
-    proposal: FixProposal, examples_by_column: dict[str, dict]
+    proposal: FixProposal, examples_by_column: dict[str, dict], df: pd.DataFrame | None = None
 ) -> list[CleanerIssue]:
     """Clears every generated function a proposal carries against its own column's evidence,
     before the proposal is dry-run and before a human ever sees it. The static gate runs first
-    and short-circuits, so malformed or forbidden source never reaches an interpreter."""
+    and short-circuits, so malformed or forbidden source never reaches an interpreter.
+
+    A column with no collected examples used to leave the value list empty, and a cleaner that
+    runs zero times returns no issues: the function cleared the gate having never executed and
+    could still raise on the real column. Evidence therefore falls back to the column itself, and
+    a function with nothing at all to run against is refused rather than assumed sound."""
     issues: list[CleanerIssue] = []
     for operation in proposal.operations:
         if operation.kind != "apply_generated_function":
             continue
         examples = examples_by_column.get(operation.column, {})
-        found, _ = validate_against_examples(
-            operation.source,
-            examples.get("dominant", []),
-            examples.get("inconsistent", []),
-            examples.get("dtype", ""),
-        )
+        dominant = list(examples.get("dominant", []))
+        inconsistent = list(examples.get("inconsistent", []))
+        dtype = examples.get("dtype", "")
+        if not dominant and not inconsistent:
+            sampled, _ = _sampled_evidence(df, operation.column)
+            if sampled:
+                issues.extend(execution_issues(operation.source, sampled))
+                continue
+            issues.append(CleanerIssue(
+                category="not_validated",
+                message=(
+                    f"no values were available to run the cleaner for {operation.column!r} "
+                    "against, so it cannot be shown to work."
+                ),
+                expected_behavior="be executable against at least one value of its own column.",
+            ))
+            continue
+        found, _ = validate_against_examples(operation.source, dominant, inconsistent, dtype)
         issues.extend(found)
     return issues
+
+
+def _sampled_evidence(df: pd.DataFrame | None, column: str) -> tuple[list, str]:
+    """Values taken straight from the column, as the fallback when none were collected. They are
+    read in the column's own rendering, which is what the cleaner will actually be handed."""
+    if df is None or column not in df.columns:
+        return [], ""
+    populated = df[column].dropna()
+    if populated.empty:
+        return [], ""
+    return _distinct_head(populated), str(df[column].dtype)
 
 
 def _examples_by_column(ctx: dict) -> dict[str, dict]:

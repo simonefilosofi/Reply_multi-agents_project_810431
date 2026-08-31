@@ -1,4 +1,4 @@
-"""Final reporting node. Recomputes the residual violations on the remediated dataset across format, completeness and cross-column consistency so the before/after comparison is like-for-like, derives the three-point quality metrics and the reliability score, and asks the model for the interpretation only. Emits the cleaned dataset, a cell-level audit trail, a structured JSON artefact, and the report as Markdown with an HTML and a PDF rendering. Every figure is computed here and laid out by tools.report_markdown; the model contributes the verdict, one comment per coverage area and the recommendations, so a wrong number cannot enter the document through a sentence."""
+"""Final reporting node. Recomputes the residual violations on the remediated dataset across format, completeness and cross-column consistency so the before/after comparison is like-for-like, derives the three-point quality metrics and the reliability score, and asks the model for the interpretation only. Emits the cleaned dataset, a cell-level audit trail, a structured JSON artefact, and the report as Markdown with an HTML and a PDF rendering. What the file held on arrival is read from the pre-remediation snapshot rather than from the reports this node receives, because every remediating stage re-measures and the evidence for what it corrected is gone by the time the report is written. Issues detected but left without a corrective action are carried into the document and explained instead of being dropped. Every figure is computed here and laid out by tools.report_markdown; the model contributes the verdict, one comment per coverage area and the recommendations, so a wrong number cannot enter the document through a sentence."""
 from __future__ import annotations
 
 import json
@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from models import DateFormat, EnumFormat, FormatViolation, RangeFormat, RegexFormat, ValidationReport
 from state import PipelineState
 from tools.completeness import completeness_report
+from tools.arithmetic_identities import arithmetic_reports
 from tools.cross_column_checks import candidate_predictors, cross_column_reports
 from tools.temporal_stability import time_column
 from tools.duplicate_rows import duplicate_row_analysis
@@ -90,6 +91,7 @@ def _residual_reports(state: PipelineState) -> list[ValidationReport]:
         candidate_predictors(state.payload, set(state.dataset.columns), state.dataset),
         clock=time_column(state.dataset, state.inferred_format_specs),
     ))
+    reports.extend(arithmetic_reports(state.dataset))
     return reports
 
 
@@ -288,6 +290,16 @@ def _origin_columns(state: PipelineState) -> dict[str, str]:
     return origins
 
 
+def _detected_counts(state: PipelineState) -> dict:
+    """What the file held when it was last fully measured and not yet altered. Reading the reports
+    the report node receives understates this badly: every remediating stage re-measures, so the
+    evidence for anything already corrected has gone, and a file that arrived with a thousand
+    malformed values is described as having had none."""
+    snapshot = (state.quality_snapshots or {}).get("pre_remediation") or {}
+    recorded = snapshot.get("violations_by_kind")
+    return recorded if recorded else violation_counts(state.validation_reports)
+
+
 def _violation_count(report: ValidationReport) -> int:
     counts = violation_counts([report])
     return counts["format"] + counts["completeness"] + counts["consistency"] + counts["uniqueness"]
@@ -346,6 +358,9 @@ def _build_payload(state: PipelineState, residual: list[ValidationReport], quali
             for r in state.duplicate_resolutions
         ],
         "duplicate_rows": state.duplicate_rows,
+        "duplicate_column_groups": len(state.duplicate_resolutions),
+        "columns_dropped_as_duplicates": sum(len(r.dropped) for r in state.duplicate_resolutions),
+        "unaddressed_violations": [u.model_dump() for u in state.unaddressed_violations],
         "auto_remediations": state.auto_remediations,
         "generated_function_runs": state.generated_function_runs,
         "changes_summary": _changes_summary(state.change_log),
@@ -360,7 +375,7 @@ def _build_payload(state: PipelineState, residual: list[ValidationReport], quali
             if r.violations
         ],
         "completeness": state.completeness,
-        "violations_by_kind_detected": violation_counts(state.validation_reports),
+        "violations_by_kind_detected": _detected_counts(state),
         "violations_by_kind_residual": violation_counts(residual),
         "naming_violations": [
             {"column_name": r.column_name, "suggested_name": v.value}
