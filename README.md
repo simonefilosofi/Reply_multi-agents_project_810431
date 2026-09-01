@@ -1,319 +1,615 @@
 # Agents for Data Quality — NoiPA
 
-**Team members**: Allam Eliya, Cervelli Mattia, Filosofi Simone  
-**Captain**: Filosofi Simone — student ID: 810431  
+**A multi-agent pipeline that audits a raw public-administration CSV, repairs it under human approval, and scores what it delivered.**
+
+**Team members:** {{MEMBER_1}}, {{MEMBER_2}}, {{MEMBER_3}}
+
+This repository documents a project developed for the {{COURSE_NAME}} course, academic year 2025/26, in collaboration with Reply. The project studies how a **multi-agent LLM pipeline behind a human approval gate** can be used to detect data quality defects in a raw CSV, attach a corrective action to every defect it finds, apply only what a reviewer approves, and produce a data quality report carrying **identified anomalies, correction suggestions and a reliability score**. The system is tailored to **NoiPA (MEF) administrative data** — HR, payroll and public expenditure records — in which disguised nulls, columns duplicated under different names, drifting value formats and legacy codes are the norm rather than the exception.
+
+The **central idea** is that a data quality defect is not one kind of object, and that treating it as one is exactly what makes naive LLM cleaning unaccountable. A wrong dtype, a null hiding behind the string `N/D`, two columns holding the same field under different names, a value contradicting the row it sits in, and a statistical outlier are five different problems. They rest on different evidence, they carry different risk, and — the point the whole architecture turns on — they deserve **different authority**. Some may be applied by the system on its own. Some may only ever be *proposed* to a human. And some have no honest fix at all and must be reported as such.
 
 ---
 
-## Introduction
+## 1. Introduction
 
-NoiPA is the digital platform of the Ministero dell'Economia e delle Finanze managing
-salaries, timesheets, and tax/social-security obligations for Italian Public Administration
-employees. It periodically receives datasets from heterogeneous sources (CSV, JSON, DBs)
-containing demographic, economic, and HR data. Currently, validation of these datasets is
-manual or nonexistent, creating a bottleneck for data reliability.
+### 1.1 Project Context and Institutional Setting
 
-In this project we built a **multi-agent data quality system** that takes a raw CSV dataset,
-automatically detects and fixes data quality issues, and produces a structured quality report
-including anomalies, correction suggestions, and a reliability score. The system is
-implemented as a LangGraph pipeline of specialised agents, each responsible for a distinct
-data quality dimension: schema validation, completeness analysis, consistency checking,
-anomaly detection and remediation.
+The project originates from a **realistic operating scenario inspired by NoiPA**, the Italian Ministry of Economy and Finance platform that manages payroll and HR data for public-sector employees. NoiPA aggregates datasets produced by many separate administrations, each with its own conventions, export tooling and legacy history. The incoming files are then validated **manually, or not at all**.
 
----
+Even assuming every source administration acts in good faith, that assumption fails in practice for a structural reason: nobody owns the schema across the boundary. What arrives is not corrupt data so much as *unreconciled* data. Our own measurements on `spesa.csv` illustrate every category:
 
-## Methods
+- **Nulls that do not look like nulls.** Cells reading `N/D`, `-`, `?` or `9999` are counted as data by any tool that trusts `isna()`.
+- **The same field under several names.** `cod_imposta`, `2cod_imposta` and `cod imposta ext` are one column wearing three headers.
+- **Convention drift inside the header row itself.** `Tipo Imposta` beside `tipo_imposta`; `SPESA TOTALE` beside `spesa`; `_id` and `aggregation-time` and `ente%code` all breaking the registry's naming rule in different ways.
+- **Format drift inside a column.** `rata`, an accounting period, mixing layouts that all mean the same month.
+- **Representation noise.** `spesa` recorded to two decimals but carrying floating-point tails past them.
+- **Columns that are nearly empty.** `note` and `fonte_dato` are over 98% null and cannot support any inference at all.
 
-### System architecture
+This context suits a multi-agent project because the **main difficulty is not detection**. Counting nulls is trivial. The difficulty is the **gap between noticing a defect and being allowed to act on it**: knowing which defects the data itself determines, which ones require a judgement a machine should not make alone, and which ones admit no fix. If those are not separated carefully, a cleaning run silently invents data, and the resulting file is worse than the dirty one because it now looks trustworthy.
 
-The pipeline is a directed acyclic graph of 9 agents implemented with LangGraph. Each agent
-reads from and writes to a shared `PipelineState` object, passing the cleaned dataset and a
-per-column semantic payload downstream.
+### 1.2 Problem Statement
 
-```
-baseline_builder → profiler → semantic → nan_handler → duplicate_column
-    → format_consistency → duplicate_row → report_generator
-```
+The problem is therefore broader than "clean this CSV". The task is to design a system that can **measure** a dataset against a canonical model and against itself, **classify** each finding by the kind of defect it is, **propose** a corrective action bound to that finding, **apply** only what has been authorised, and **verify** that what it delivered is better than what it received — on the same metric, measured the same way at both ends.
 
+This distinction is essential. A generic instruction such as *"use an LLM to clean this dataset"* produces output that looks plausible and is very difficult to justify. It becomes unclear which cells changed, on whose authority they changed, whether a value was corrected or invented, and whether a number in the final report describes the run or was written to sound good. For a system that touches public payroll records, **that level of opacity is not acceptable**.
 
-![Pipeline diagram](images/pipeline.png)
+### 1.3 Core Contribution and Objective
 
-### The two knowledge-base files
+The objective is a **multi-agent pipeline** that receives a raw CSV and produces **two outcomes**: a **remediated dataset with a cell-level audit trail** of every change and its cause, and a **data quality report** carrying the anomalies found, the correction suggested for each, and a reliability score measured before and after.
 
-The pipeline is grounded in two manually curated JSON files that together form a
-semi-RAG knowledge base about NoiPA's canonical data model.
+The practical goal is plain: fix what can be fixed, and say honestly what could not be. The **methodological goal** is about how. The claim is not that an LLM can clean data — it is that **the division of authority is the contribution**, and that the system works *because* of specific choices about who is allowed to decide what:
 
-**`noipa_schema_registry.json` → compiled into `baseline.json`**  
-A hand-authored schema registry covering 4 NoiPA domains (*Amministrati*, *Amministrazioni*,
-*Rapporti di lavoro*, *Trattamento economico*), 143 dataset columns, and 12 shared column
-definitions reused across datasets via `$ref` pointers. For each column it records: `dtype`,
-`format` (enum of allowed values, regex pattern, or numeric range), `case_convention`,
-`is_nullable`, and a `canonical_id` linking it to a shared definition. It also encodes global
-naming conventions, k-anonymity floors, and domain-level observations. At runtime,
-`baseline_builder` resolves all `$ref` pointers and compiles the registry into a validated
-`BaselineFile` Pydantic object that every downstream agent reads.
+- **Deterministic code measures; the model never measures.** Every count, rate, bound and violation in this system is computed by `pandas` in `tools/`. An agent receives a bounded, pre-measured evidence bundle and is asked for a judgement over it — never for a number.
+- **Value-level repair is generated code, gated three ways.** The model writes a `clean_value(value)` function so that a format rule *generalises* rather than enumerating the values already observed.
+- **Anything that can lose or invent data is a typed operation**, drawn from a fixed catalogue, never free code.
+- **Nothing structural is applied without human approval.** `apply_fixes` executes only the ids in `state.approved_fix_ids` and is a no-op otherwise.
+- **A rule that can be checked by executing the fix lives in code, not in a prompt.** A prompt-stated rule can be ignored unnoticed.
 
-**`column_descriptions.json`**  
-A separate catalog of 54 canonical NoiPA columns, each entry containing: `column_name`,
-`description` (a one-sentence domain explanation in English), `sample` (representative real
-values), and `dtype`. This file was built to support semantic retrieval — names alone are
-insufficient because incoming datasets use synonyms, abbreviations, or Italian variants.
-At startup, `retrieve_canonical.py` embeds each entry's `name + description + samples` string
-using `text-embedding-3-small` and caches the resulting 54×1536 matrix to
-`column_descriptions.embeddings.pkl`. This offline index is the retrieval backbone of the
-semantic agent.
+The LLM is not an optional garnish on this design; it is what makes the design feasible. Deciding that `cod imposta ext` and `cod_imposta` are the same field, that `descrizione` means what it means, or that a rare category is a legacy code rather than a typo, requires semantic judgement no amount of `pandas` supplies. But the LLM components are never standalone: the measurement is always done first, deterministically, and the model reasons only over the result.
 
-Together the two files encode *what* the data should look like (`noipa_schema_registry.json`)
-and *how to recognise it semantically* (`column_descriptions.json`). No agent invents
-canonical knowledge — every validation decision traces back to one of these two sources.
+### 1.4 Coverage of the Five Mandatory Areas
 
-### Agent descriptions
+| Area | Implemented in | What it produces |
+|---|---|---|
+| **Schema validation** | `tools/safe_cast.py`, `tools/validate_column_names.py`, `agents/nan_handler.py` | dtype validation per column with non-destructive casting; naming-convention violations against the registry's regex |
+| **Completeness analysis** | `tools/completeness.py`, `tools/detect_placeholders.py`, `agents/nan_handler.py` | disguised-null unmasking, fill rate per column and dataset-wide, missing values per row, sparse-column detection |
+| **Consistency validation** | `tools/cross_column_checks.py`, `tools/arithmetic_identities.py`, `tools/duplicate_rows.py`, `agents/format_consistency.py`, `agents/duplicate_column.py` | mined functional dependencies, arithmetic contradictions, intra-column format specs, exact duplicates and key collisions, duplicate columns |
+| **Anomaly detection** | `agents/anomaly_detector.py` | IQR outliers on measures, rare categorical values, with role detection so a code is never treated as a magnitude |
+| **Remediation** | `agents/unified.py`, `agents/auto_remediation.py`, `agents/apply_fixes.py` | a corrective action per finding, or an explicit `UnaddressedViolations` entry stating why none exists |
 
-**`baseline_builder`**  
-Reads `noipa_schema_registry.json`, resolves all `$ref` entries against the
-`shared_column_definitions` block, and validates the full structure into a `BaselineFile`
-Pydantic model. Writes the resolved result to `baseline.json` so downstream agents have a
-single, fully-dereferenced schema object to query. This is a pure Python step — no LLM call.
+### 1.5 Repository Structure and Technology Stack
 
-**`profiler`**  
-Builds a hierarchical signature map of the baseline (domain → dataset → column names) and
-sends it alongside the input dataset's column names and 5-row samples to `deepseek-v4-pro`. The
-LLM returns the most likely NoiPA domain and primary language. This detection gates how
-subsequent agents interpret ambiguous columns — for example, a column named `rata` means
-something different in `spesa` vs. `attivazioniCessazioni`.
+The repository exposes **two execution surfaces over one pipeline**: `main.ipynb`, the explanatory notebook that runs the graph stage by stage and shows every intermediate artifact; and `app.py`, the Streamlit application that is *also* the human approval gate. `graph.py` additionally exposes the same nodes as a compiled LangGraph object for programmatic use. There is no separate CLI and no `src/` package — the pipeline is the repository root.
 
-**`semantic`** *(core agent — semi-RAG)*  
-The most complex agent, running four sub-steps per column:
+The stack combines `langgraph` and `langchain-core` for orchestration and typed state, [`langchain-deepseek`](https://python.langchain.com/docs/integrations/chat/deepseek/) for every chat call, `openai` for the embedding index behind canonical matching, `pydantic` for the artifact contracts, `pandas` and `numpy` for all deterministic measurement, [`e2b-code-interpreter`](https://e2b.dev/docs) for the first execution of generated cleaning code, and `streamlit` for the gate.
 
-1. **Batch description pass**: sends all columns (name + dtype + 5 samples) to
-   `deepseek-v4-pro` in a single call and gets back a one-sentence factual description for each.
-   This description is the query text for retrieval — it captures meaning rather than just name.
+Of the twelve pipeline stages, **six call a model directly** (`profiler`, `semantic`, `duplicate_column`, `anomaly_detector`, `unified`, `report_generator`) and one (`format_consistency`) calls it indirectly through two tools. The remaining five are pure Python.
 
-2. **Embedding retrieval**: for each column, concatenates `name + description + samples` into
-   a query string, embeds it with `text-embedding-3-small`, and scores all 54 entries in
-   `column_descriptions.json` by cosine similarity. The score is boosted by two signals:
-   sample-value overlap (fraction of input samples that appear in the catalog entry's samples)
-   and dtype agreement (+0.1 bonus). Returns the top-5 candidates.
-
-3. **LLM verdict**: sends the column's name, dtype, 30-row sample, placeholder candidates,
-   `canonical_suggestion` (from name-based fallback), and the top-5 retrieval candidates to
-   `deepseek-v4-pro`. The LLM confirms or rejects each candidate by comparing descriptions and
-   sample vocabularies, and returns: `canonical_match`, `dtype`, `column_meaning`,
-   `placeholders`, `related_columns`, `target_casing`.
-
-4. **Validation and dtype casting**: the returned `canonical_match` is validated by looking it
-   up in `column_descriptions.json` — if it is not a real entry, it is discarded and replaced
-   with the sentinel `"NaN"`. The resolved canonical dtype (from the registry) overrides the
-   LLM dtype suggestion. The column is then cast in-place using pandas.
-
-**`nan_handler`**  
-Iterates over each column's `placeholders` list (produced by the semantic agent) and replaces
-matching values with `pd.NA` using exact and case-insensitive string comparison. Then checks
-each column whose `canonical_hint` resolves to a `is_nullable=False` spec: if any nulls
-remain after replacement, a `ValidationReport` violation is emitted. This agent applies no
-LLM call — the intelligence was already applied upstream in the semantic agent.
-
-**`duplicate_column`**  
-Computes pairwise column similarity (value-overlap Jaccard at 0.80 threshold) to find groups
-of near-duplicate columns. Within each group, elects the data survivor as the column with
-fewest nulls, then backfills its missing values from the other group members. Calls
-`deepseek-v4-pro` once per group to elect the canonical output name (the name most consistent
-with the NoiPA registry and the detected domain). Drops all non-survivors and records a
-`DuplicateResolution` entry per group.
-
-**`format_consistency`**  
-For each surviving column with a resolved `canonical_hint`, retrieves the column's `format`
-spec from the baseline and validates every value against it: enum specs check membership,
-regex specs test pattern match, range specs check numeric bounds. Each violation is recorded
-as a `FormatViolation` with the row index and observed value. Recoverable formatting is not
-corrected here: `normalize_date_format` and the other normalisers are remediation operations in
-`tools/operations.py`, applied only once a fix carrying them is approved.
-
-**`duplicate_row`**  
-Drops exact duplicate rows using pandas `drop_duplicates()` as a final cleaning step after
-all column-level operations are complete. Runs last among the cleaning agents so that
-column renaming, backfilling, and format normalisation have already been applied — deduplication
-on the clean data is more precise than on the raw data.
-
-**`report_generator`**  
-Builds a structured payload from the final pipeline state — dataset shape, per-column null
-percentages, the semantic payload (column meanings, dtypes, placeholders), duplicate
-resolutions, and validation violations — and sends it to `deepseek-v4-pro` to produce five
-narrative sections: executive summary, dataset overview, quality findings, actions taken, and
-recommendations. Renders the result to a PDF using `fpdf2`.
-
-### Key design decisions
-
-**Why a semi-RAG approach instead of a pure LLM call?**  
-Early versions asked the LLM to pick a canonical match from the full 54-entry catalog in a
-single prompt. This consistently failed on columns whose names differed from the canonical id
-(synonyms, abbreviations, Italian/English variants). The failure mode was silent — the LLM
-would return a plausible-sounding but wrong canonical id, propagating incorrect dtype and
-format expectations to every downstream agent. Moreover we wanted to have an official noiPA 'book' to use as reference, so that for shared columns or similar ones we could know for sure what dtype or format to choose in order to fix the dataset. 
-
-The semi-RAG approach splits the problem: embeddings retrieve semantically close candidates
-cheaply and deterministically; the LLM only adjudicates among the top-5 shortlist. The
-retrieval score combines three signals — description cosine similarity (captures meaning),
-sample-value overlap (captures actual data), dtype agreement (coarse type filter) — so the
-top-1 candidate is almost always the right column before the LLM even sees it.
-
-**Why two separate knowledge-base files?**  
-`noipa_schema_registry.json` encodes structural constraints (what values are valid, what dtype
-is required, whether nulls are allowed). `column_descriptions.json` encodes semantic
-fingerprints (what the column means, what it looks like). These are different concerns: the
-schema is used for validation; the descriptions are used for retrieval. Merging them into one
-file would couple retrieval quality to schema maintenance and make the catalog harder to extend
-independently.
-
-**Why pre-generate column descriptions offline rather than asking the LLM at query time?**  
-Embedding the catalog once and caching the matrix to disk costs one API call at first run.
-Every subsequent pipeline execution retrieves from the cached index in microseconds, regardless
-of dataset size. Generating descriptions on the fly would require an LLM call per catalog
-entry per pipeline run — 54 extra calls per execution with no benefit, since the catalog does
-not change between runs.
-
-**Why LangGraph?**  
-Each agent has a single responsibility and mutates a different part of the shared
-`PipelineState`. LangGraph's explicit graph makes the execution order auditable, allows agents
-to be replaced or parallelised independently, and keeps the orchestration logic separate from
-the agent logic.
-
-### Environment
-
-Python 3.11. Key dependencies:
-
-```
-langchain-deepseek
-langgraph
-openai
-pandas
-pydantic
-fpdf2
-streamlit
-numpy
-scikit-learn   # for anomaly detection
+```text
+Reply_multi-agents_project_810431/
+|-- agents/                            # one LangGraph node per file
+|   |-- baseline_builder.py            # resolves the schema registry into baseline.json
+|   |-- profiler.py                    # detects the NoiPA domain and language
+|   |-- semantic.py                    # canonical match, dtype, placeholders per column
+|   |-- nan_handler.py                 # unmasks disguised nulls, enforces dtypes, completeness
+|   |-- duplicate_column.py            # elects a canonical name among redundant columns
+|   |-- format_consistency.py          # format specs, cross-column rules, arithmetic identities
+|   |-- auto_remediation.py            # applies only what the data determines on its own
+|   |-- anomaly_detector.py            # IQR outliers and rare categories
+|   |-- unified.py                     # writes clean_value() code and typed FixProposals
+|   |-- apply_fixes.py                 # executes ONLY approved_fix_ids
+|   |-- duplicate_row.py               # removes exact duplicate rows
+|   `-- report_generator.py            # the report payload and its narrative
+|-- tools/                             # deterministic helpers (two exceptions call the model)
+|   |-- generated_function.py          # static gate, sandbox and judge for generated code
+|   |-- fix_invariants.py              # post-fix checks no remediation may violate
+|   |-- reliability_score.py           # the five dimensions and the aggregate score
+|   `-- ...                            # profiling, matching, validation, execution
+|-- prompts/                           # one markdown prompt per LLM-calling agent
+|-- utils/llm.py                       # the single construction point for the chat model
+|-- tests/                             # 291 tests; no network and no API key required
+|-- datasets/                          # additional NoiPA CSVs used as held-out inputs
+|-- Datasets-Reply-20260313/           # the two datasets required by the brief
+|-- images/                            # figures used by this README
+|-- models.py                          # the typed artifact contracts
+|-- state.py                           # PipelineState, shared by every node
+|-- graph.py                           # LangGraph wiring and the compiled default graph
+|-- app.py                             # Streamlit GUI and human approval gate
+|-- main.ipynb                         # explanatory notebook
+|-- noipa_schema_registry.json         # hand-curated canonical registry
+|-- column_descriptions.json(+.pkl)    # retrieval index for canonical matching
+|-- requirements.txt
+`-- .env                               # DEEPSEEK_API_KEY, OPENAI_API_KEY, E2B_API_KEY (local only)
 ```
 
-To recreate:
+### 1.6 Reproducibility and Environment
+
+On **macOS / Linux**:
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Set `DEEPSEEK_API_KEY` and `OPENAI_API_KEY` in a `.env` file at the project root. Every chat
-call goes through `utils/llm.py`, which pins `deepseek-v4-pro` and disables the provider's
-reasoning mode so that `temperature=0` is honoured. Canonical retrieval stays on OpenAI's
-`text-embedding-3-small`; the embedding index for `column_descriptions.json` is cached to disk
-on first run, so only the per-column query is embedded live.
+On **Windows (PowerShell)**:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+Every LLM-calling stage requires a `DEEPSEEK_API_KEY`. Canonical matching by embedding retrieval additionally requires an `OPENAI_API_KEY`. `E2B_API_KEY` is **optional**: it sandboxes the first execution of every generated cleaning function, and without it that execution falls back to the local cage described in Section 2.6. Variables are loaded from `.env` at the repository root through `python-dotenv`:
+
+```dotenv
+DEEPSEEK_API_KEY=your_value_here
+OPENAI_API_KEY=your_value_here
+E2B_API_KEY=your_value_here   # optional
+```
+
+The GUI and approval gate:
+
+```bash
+streamlit run app.py
+```
+
+The narrated end-to-end run:
+
+```bash
+jupyter notebook main.ipynb
+```
+
+The test suite, which runs offline with no key:
+
+```bash
+pytest tests/
+```
+
+Input CSVs live in `Datasets-Reply-20260313/project_data_quality/`; the GUI accepts an upload of any CSV.
+
+The figures in Section 4 are regenerated from a run's own artefacts — the report JSON and the per-stage timings — by `make_readme_figures.py`, which requires `matplotlib` and computes nothing of its own, so a figure cannot disagree with the report beside it:
+
+```bash
+pip install matplotlib
+python make_readme_figures.py
+```
 
 ---
 
-## Experimental Design
+## 2. Methods
 
-The core contribution of this project is a multi-agent pipeline that automatically identifies
-and fixes data quality issues in NoiPA datasets. We validate it through three experiments.
+### 2.1 General System Architecture
 
-### Experiment 1 — Canonical matching accuracy
+The architecture rests on a strict separation between **measuring**, **deciding**, **authorising** and **executing**. Each is a different kind of act with a different failure mode, and collapsing them is what makes an LLM cleaning script unauditable.
 
-**Purpose**: measure how often the semantic agent assigns the correct `canonical_hint` to an
-input column.
+```mermaid
+flowchart LR
+  subgraph I["Ingest"]
+    direction TB
+    A[baseline_builder] --> B[profiler] --> C[semantic]
+  end
+  subgraph D["Detect"]
+    direction TB
+    E[nan_handler] --> F[duplicate_column] --> G[format_consistency]
+  end
+  subgraph P["Auto-repair and propose"]
+    direction TB
+    H[auto_remediation] --> J[anomaly_detector] --> K[unified]
+  end
+  subgraph R["Gate, apply, report"]
+    direction TB
+    L[apply_fixes] --> M[duplicate_row] --> N[report_generator]
+  end
+  I --> D --> P --> R
+  HUMAN{{"human reviewer"}} -. approved_fix_ids .-> L
+```
 
-**Baseline**: name-only programmatic matching (exact → accent-normalised → difflib fuzzy at
-0.85 cutoff), which was the original approach.
+The workflow begins by grounding the dataset in a canonical model, then measuring it — against that model and against itself. Only once those measurements are formalised as typed artifacts does the system decide whether a finding is data-determined, judgement-requiring, or unfixable. After a fix executes, every column it touched is re-measured, so the report describes the dataset as delivered rather than as expected.
 
-**Method**: manually label the ground-truth canonical id for each column in both test datasets
-(`spesa.csv` and `attivazioniCessazioni.csv`). Compare the fraction of correct canonical_hint
-assignments between baseline (name-only) and the embeddings-based retrieval approach.
+This serves two purposes. The first is **technical safety**: a stage that cannot measure cannot silently justify its own output, and a stage that cannot execute cannot act on a bad judgement. The second is **interpretability**: because every handoff is a typed object, a reader can point at any cell in the delivered file and trace it back to the operation, the proposal and the violation that produced it.
 
-**Metric**: canonical match accuracy = correctly matched columns / total columns.
+Conceptually the system reads as **four layers**:
 
-### Experiment 2 — Placeholder detection precision and recall
+```mermaid
+flowchart TB
+  L1["<b>1 · Deterministic measurement</b><br/>tools/ — pandas only, no model.<br/>Counts, rates, bounds, violations, mined dependencies."]
+  L2["<b>2 · Bounded model reasoning</b><br/>agents/ — each receives a packaged evidence bundle,<br/>never the dataframe. Returns a typed artifact."]
+  L3["<b>3 · Authority separation</b><br/>data-determined → auto-applied ·<br/>judgement → proposed to a human · unfixable → reported"]
+  L4["<b>4 · Execution and audit</b><br/>typed operations + gated generated code,<br/>invariant-checked, cell-level change log, re-measurement"]
+  L1 --> L2 --> L3 --> L4
+```
 
-**Purpose**: measure how accurately the pipeline detects disguised NaN tokens.
+This decomposition explains how two properties coexist that usually trade off: the system is **free to reason semantically** (layer 2) while remaining **unable to act on that reasoning unchecked** (layers 3 and 4).
 
-**Baseline**: pandas `isnull()` count only — no placeholder detection.
+### 2.2 The Two Knowledge-Base Files
 
-**Method**: manually annotate a sample of rows in both datasets with known placeholder values.
-Compare detected placeholders against the annotation.
+The pipeline is grounded in two hand-curated files that together form a semi-RAG knowledge base of NoiPA's canonical data model.
 
-**Metrics**: precision = true placeholder detections / total detections; recall = true
-placeholder detections / total annotated placeholders.
+**`noipa_schema_registry.json`** is the canonical schema. It declares four domains — `Amministrati`, `Amministrazioni`, `Rapporti_di_lavoro`, `Trattamento_economico` — holding eighteen dataset definitions between them, plus a `shared_column_definitions` block of twelve reusable column contracts referenced by `$ref`. It also carries the global conventions the whole pipeline validates against:
 
-### Experiment 3 — End-to-end quality improvement
+```json
+{
+  "naming_convention": "snake_case_lower_with_uppercase_acronym_suffix",
+  "naming_regex": "^[a-z][a-z0-9_]*(_[A-Z]{2,})?$",
+  "encoding": "utf-8",
+  "csv_separator": ",",
+  "decimal_separator": ".",
+  "k_anonymity_floor_for_person_counts": 6
+}
+```
 
-**Purpose**: demonstrate that the full pipeline improves dataset quality in measurable terms
-across both datasets.
+`baseline_builder` resolves every `$ref` against the shared block and validates the whole structure into a `BaselineFile`, written out as `baseline.json` so that no downstream agent ever has to interpret a reference itself.
 
-**Baseline**: raw CSV with no processing.
+**`column_descriptions.json`** and its cached `.embeddings.pkl` are the retrieval index. Each canonical column carries a natural-language description and sample values; the pair is embedded once with `text-embedding-3-small` and cached to disk. This is what makes canonical matching work on columns whose names carry no signal — see Section 3.1.
 
-**Method**: run the full pipeline on `spesa.csv` and `attivazioniCessazioni.csv`. Measure
-before/after on: (a) null count per column, (b) format violation count, (c) duplicate row
-count, (d) columns with correct dtype.
+### 2.3 Typed Artifacts as the Pipeline Contract
 
-**Metrics**: absolute reduction in nulls, violations, and duplicates; dtype correctness rate.
+The defining engineering choice is that **every handoff between stages is a validated Pydantic model**, declared in `models.py`. A stage does not return prose, or a dict, or a dataframe with an understanding attached — it returns an object that either validates or fails loudly.
+
+The contracts that carry the pipeline are `ColumnPayload` (what a column *means*), `ValidationReport` and `FormatViolation` (what is wrong with it, each violation tagged with a `ViolationKind`), `ImputationHint` (a mined dependency with its purity and coverage), `AnomalyReport`, `FixProposal` (a proposed repair as a sequence of typed `Operation`s), and `UnaddressedViolations` (a defect carried to the report with no fix and the reason why).
+
+`Operation.kind` is a closed `Literal`, and this is deliberate — it is the enumeration of everything the system is capable of doing to a dataset:
+
+```python
+OperationKind = Literal[
+    "replace_values", "normalize_numeric", "normalize_date", "normalize_period",
+    "strip_whitespace", "collapse_casing", "round_decimals", "cast_dtype",
+    "impute_from_lookup", "drop_column", "rename_column", "drop_duplicate_rows",
+    "apply_generated_function",
+]
+```
+
+In a pipeline of this class the main risk is not that a model returns something wrong — it is that it returns something **plausible that nobody can check**. A typed artifact converts that risk into a validation error at the boundary. It also makes it possible to dry-run a proposal before showing it to a human, to render it as equivalent `pandas` for review, and to reference a violation by a stable id from detection all the way to the report.
+
+### 2.4 Detailed Pipeline Stages
+
+#### 2.4.1 Ingest — grounding the dataset in a canonical model
+
+`baseline_builder` resolves the registry (pure Python, no model). `profiler` sends a hierarchical signature map of the resolved baseline plus the input column names and 5-row samples, and identifies the **domain** and **language** of the dataset — the frame within which every later match is interpreted.
+
+`semantic` then resolves each input column to a canonical definition through a **cascade**: a programmatic name and alias match first; where that is insufficient, embedding retrieval over `column_descriptions.json` proposes top-*k* candidates; the model then confirms or rejects each candidate by comparing descriptions, dtypes and sample values, and returns a `ColumnPayload`:
+
+```json
+{
+  "column_name": "cod_imposta",
+  "description": "Code identifying the specific tax withheld",
+  "dtype": "string",
+  "canonical_hint": "codice_imposta",
+  "placeholders": ["N/D", "-"],
+  "related_columns": ["imposta", "cod_tipoimposta"],
+  "target_casing": "lowercase"
+}
+```
+
+The `canonical_hint` is the value on which everything downstream depends: it determines which format spec applies, whether nulls are permitted, and which columns are considered related and therefore grouped together for remediation. A wrong hint does not merely produce a wrong match — it silently retargets three later stages. This is why the match is a cascade with an explicit model verdict rather than a similarity threshold.
+
+The agent never receives the dataframe. It receives a bounded instance: the column name, dtype, a 30-row sample, the placeholder candidates found deterministically, and the retrieved canonical candidates with their descriptions.
+
+#### 2.4.2 Detect — measuring against the schema and against itself
+
+`nan_handler` **unmasks disguised nulls** using the per-column placeholder lists from the payload, then enforces the proposed dtype *non-destructively*: a column is cast only if every non-null value survives the cast, and blocking values are reported as violations rather than coerced away. It then records the full completeness analysis — fill rate per column and dataset-wide, missing values per row, sparse columns.
+
+One guard here is worth its own sentence. A placeholder list is **refused if it matches more than 30% of a column**, because at that scale the list has stopped describing the gaps in the column and started describing the column's own vocabulary. Without it, a status column whose legitimate dominant value happens to resemble a placeholder token would be erased wholesale.
+
+`duplicate_column` detects columns that hold the same field, elects a canonical name among them, and — importantly — picks the **data survivor by measured coherence, not by column order**, recording every cell backfilled, every cell where the survivor disagreed with the dropped column, and every value that existed only in the dropped one. Redundancy removed and data changed are reported separately.
+
+`format_consistency` infers a format spec per column, validates against it, mines cross-column functional dependencies, and checks arithmetic identities between numeric columns.
+
+**A subtlety that shapes the whole reporting design:** unmasking disguised nulls makes measured completeness go **down**. The pipeline therefore records quality at **three snapshots** — `raw` (the file as it arrived), `detected` (once placeholders are unmasked) and `final` (as delivered) — precisely so that *discovering* a hidden gap is never mistaken for *creating* one. See Section 4.1.
+
+#### 2.4.3 Auto-remediation — what the data determines on its own
+
+This is the one stage that writes to the dataset **before** the human gate, and the justification is narrow: it applies only corrections that are **deductions rather than judgement calls**, where holding them behind an approval would add no safety.
+
+Four cases qualify: an unambiguous alternative layout for a period key; representation noise on a number of known recorded precision; a year or month that a period column states directly; and a gap fillable from a mined dependency of **purity ≥ 0.99**.
+
+The boundary is drawn explicitly. When a period disagrees with a year or month that is *itself* well formed, neither side is demonstrably wrong — that is a choice about what a value *ought* to be, so those rows are reported as consistency violations and left to the Unified agent instead of being rewritten here.
+
+Whatever this node rewrites, it **re-measures**, so every downstream agent reasons about the dataset as it now stands rather than as it arrived.
+
+#### 2.4.4 Proposal — generated code and typed operations
+
+`unified` groups columns by the transitive closure of `related_columns`, aggregates the upstream violations for each group, and asks the model for proposals. The split between the two kinds of remediation is the core design claim of the project:
+
+- **Generated code for value-level repair.** The model writes a `clean_value(value)` function. It is a *pure scalar transform*: it never sees the dataframe, so it cannot change the row count and cannot reach another column. A format rule is thereby expressed as code that **generalises**, not as an enumeration of the values that happened to appear in the sample.
+- **Typed catalogue operations for everything structural or data-creating** — `drop_column`, `rename_column`, `drop_duplicate_rows`, `impute_from_lookup`, `cast_dtype`. These are exactly the actions that can lose or invent data, and they stay bounded on purpose.
+
+The prompt reflects this by *specifying the target*, not the answer. Each column carries `dominant_example_values` (up to 8 values that already conform — the function must return every one of them **unchanged**) and `example_inconsistent_values` (up to 8 that violate the format — the function must transform every one, or return `null` for those genuinely unrecoverable; returning one unchanged is a failure). The model is given the shape of correctness and must write a rule that reaches it.
+
+Every proposal is then **dry-run against the dataset** and checked against `tools/fix_invariants.py` before a human ever sees it.
+
+#### 2.4.5 The human approval gate
+
+`apply_fixes` executes **only** the ids present in `state.approved_fix_ids`, and is a no-op otherwise. This is the mechanism, not a convention: there is no code path by which a proposal reaches the dataset without an explicit id in that list.
+
+The gate itself is the Streamlit **Review and apply** view. For each proposal the reviewer sees the description, the rationale, the affected columns, the estimated row count, and the **generated source verbatim** — the actual code that will run, rendered as executable Python. Three actions are available: **Accept**, **Reject**, and **Revise**, where Revise sends natural-language feedback back to the Unified agent and re-proposes that group alone, leaving every other decision intact.
+
+After execution the gate reports what actually landed, including **every approved fix that did not** — whether it errored, breached an invariant, or was skipped — so a silent partial application is impossible.
+
+> **[TODO — screenshot]** Add `images/approval_gate.png`: the **Review and apply** tab of `streamlit run app.py`, with a proposal expanded so the operation source and the Accept / Reject / Revise buttons are visible. This is the only figure in the README that must be captured by hand.
+
+#### 2.4.6 Reporting — facts first, prose second
+
+The system separates **what is true about the run** from **how it is described**. `report_generator` first recomputes the residual violations on the remediated dataset, derives the three-point quality metrics, and assembles a **fully deterministic payload** — every count, table and chart in the document. Only then is the model called, and it is asked exclusively for the *interpretation*: the verdict, one comment per coverage area, and the recommendations.
+
+The prompt states this directly: *"You do not report figures. Every number, table and chart in the report is computed from the run and laid out before your text reaches the reader."* The consequence is structural — **a wrong number cannot enter the document through a sentence**, because sentences are not where numbers come from. `tests/test_report_truthfulness.py` enforces the property.
+
+The report is emitted as Markdown, HTML and PDF, alongside the cleaned dataset and the cell-level change log.
+
+### 2.5 The Reliability Score
+
+The reliability score is computed in `tools/reliability_score.py` over **five dimensions**: `completeness`, `validity`, `consistency`, `uniqueness` and `schema_conformity`.
+
+Two properties matter more than the formula. First, **every dimension divides by the units it actually evaluated**, not by the whole cell grid — a validity score over three columns that have a format spec is a statement about those three columns, and diluting it across eighteen would make it meaningless. Second, `compare()` scores the two ends of a run **over the same set of dimensions**, excluding any dimension that could only be measured at one end, so the delta is genuinely like-for-like rather than an artefact of what became measurable along the way.
+
+The score is reported at the three snapshots described in 2.4.2, which is what makes the completeness behaviour in Section 4.1 legible rather than alarming.
+
+### 2.6 Safety of Generated Code
+
+Nothing executes generated source without passing through `tools/generated_function.py`. There are four layers, and they are not interchangeable.
+
+```mermaid
+flowchart TB
+  GEN["model writes clean_value(value)"] --> GATE
+  GATE["<b>1 · Static gate</b> — ast walk<br/>imports limited to re, datetime, decimal, math<br/>refuses eval, exec, open, compile, input, __import__,<br/>getattr/setattr, globals/locals/vars, while, dunder access"]
+  GATE -->|refused| FEED
+  GATE -->|cleared| SBX
+  SBX["<b>2 · Sandbox</b> — E2B, 20s timeout<br/>first execution ever, against this column's own<br/>conforming and violating values<br/>(falls back to the local cage with no key)"]
+  SBX -->|issues found| FEED
+  SBX -->|validated| HUM
+  FEED["<b>4 · Failure as feedback</b><br/>deterministic CleanerIssues drive a regeneration;<br/>an identical repeat escalates once to a critic<br/>that diagnoses without writing code"]
+  FEED --> GEN
+  HUM["<b>3 · Human gate</b><br/>source shown verbatim before it runs<br/>on the full column"]
+```
+
+The **static gate** parses the source and walks the AST, refusing imports outside `re`/`datetime`/`decimal`/`math`, the names `eval`, `exec`, `open`, `compile`, `input`, `__import__`, `getattr`, `setattr`, `globals`, `locals`, `vars` and others, `while` loops, and any dunder attribute access. Builtins are replaced by an explicit safe list.
+
+The **sandbox** executes never-yet-run code in an E2B container against the column's own evidence. When no key or network is available it falls back to a local cage.
+
+It is worth stating plainly, because it is the kind of thing a project of this sort usually glosses over: **the sandbox isolates the host but does not restrain the code.** It is the *static gate* that makes local execution on the full column safe. The two layers do different jobs and neither substitutes for the other.
+
+The **failure path** is the fourth layer. A failed validation does not discard the function — it produces typed `CleanerIssue` objects (`forbidden_construct`, `runtime_exception`, `dominant_value_modified`, `outlier_unchanged`, `not_parseable_as_target_dtype`, …) which are fed back as deterministic evidence for another attempt. A failure that repeats **identically** escalates once to a critic model that diagnoses the bug without writing code, on the reasoning that a model repeating itself needs a different question, not another try.
+
+### 2.7 Invariants: rules that are executed, not stated
+
+`tools/fix_invariants.py` evaluates the before/after dataframes of every single proposal and refuses it if it:
+
+- **changes the row count** outside a declared `drop_duplicate_rows`;
+- **invents data** — fills missing values with no imputation hint backing them;
+- **fills a column too sparse to speak for itself** — more than 50% empty before the fix;
+- **deletes more than 2%** of a column's populated values beyond its declared placeholders;
+- **splits a column into casing variants** it did not have before.
+
+The sparsity invariant exists because of a specific bug: an imputation was once proposed on a column that was **98.5% empty**. The rule had been stated in the prompt, and the model ignored it — unnoticed, because nothing checked. The principle we drew from it governs the codebase: **a rule that can be checked by executing the fix belongs in code, not in a prompt.**
+
+### 2.8 Design Choices and Prompt Strategy
+
+**LangGraph** was chosen because the pipeline is a fixed sequence over a single shared state with an interruption point in the middle; a conversational or free-routing agent framework would have made that gate a convention rather than a mechanism. **Pydantic** carries the contracts because the alternative — dicts by agreement — is exactly the failure the project is arguing against.
+
+The prompt strategy follows the same logic. **A prompt does not create the evidence.** The evidence has already been measured and packaged upstream; the prompt's job is to delimit what the agent may do with it: which evidence is authoritative, which single decision it is being asked to make, which facts it must not invent, and which typed output it must return. The Unified prompt is explicit that the agent proposes and never executes; the Report prompt is explicit that the agent interprets and never counts.
+
+Prompts are versioned in git, one markdown file per LLM-calling agent, loaded through `utils/prompts.py` — so a prompt change is a reviewable diff rather than an edit buried in a string literal.
+
+The model configuration in `utils/llm.py` is a **single construction point** for the whole system. `temperature=0` and the provider's reasoning mode explicitly disabled, so temperature is honoured and a run is reproducible. Schema-constrained answers go through tool calling; when the provider serialises malformed JSON or truncates at the output limit, the request is retried in **JSON mode**, whose constrained decoding cannot emit invalid JSON, with the schema carried in the prompt. An answer neither path produces raises `EmptyModelResponse`, which a caller able to continue without it catches — so one unanswerable group costs that group and no more, rather than the run.
 
 ---
 
-## Results
+## 3. Experimental Design
 
-> **[TODO: fill in after running experiments on both datasets. All figures must be generated
-> from `main.ipynb`.]**
+The purpose of the project was not only to build the artifact but to understand **which architectural choices make an LLM pipeline reliable enough to be trusted with a repair**. In practice the project evolved through trial and error: several early designs proved too unconstrained, too opaque, or too difficult to verify, and were replaced by more bounded alternatives. The experiments below are those transitions. Each is documented in the repository's history.
 
-### Canonical matching accuracy
+### 3.1 From name matching to embedding retrieval for canonical matching
 
-| Method | spesa.csv | attivazioniCessazioni.csv |
-|---|---|---|
-| Name-only (baseline) | — | — |
-| Embeddings retrieval (ours) | — | — |
+The first design resolved an input column to a canonical definition by **name similarity**. It failed immediately on the real datasets, because the columns that most need resolving are exactly the ones whose names carry no signal — `2cod_imposta`, `ente%code`, `cod imposta ext`. The adopted solution builds a retrieval index over `column_descriptions.json`, embedding `name + description + sample values` with `text-embedding-3-small`, ranking candidates by cosine similarity boosted by sample-value overlap and dtype agreement, and passing the top-*k* to the model for an explicit verdict.
 
-### Placeholder detection
+- **Main Purpose**: determine whether semantic retrieval over descriptions resolves columns that name matching cannot.
+- **Baseline**: programmatic name and alias matching alone.
+- **Evaluation metrics**: **canonical match accuracy** against a hand-labelled ground truth for both datasets, and **abstention correctness** — how often the system correctly returns `NaN` for a genuinely novel column. The second metric matters as much as the first: a matcher that always guesses is worse than one that declines, because a wrong `canonical_hint` silently retargets three downstream stages.
+- **Resulting design decision**: the cascade in `agents/semantic.py` — programmatic match first, retrieval second, model verdict last — with the embedding index cached to disk.
 
-| Dataset | Precision | Recall |
-|---|---|---|
-| spesa.csv | — | — |
-| attivazioniCessazioni.csv | — | — |
+### 3.2 From free-form model edits to a typed operation catalogue, and back to bounded generated code
 
-### End-to-end quality improvement
+This was the longest arc in the project and produced its central design claim. The first remediation agent asked the model to **write arbitrary cleaning code** against the dataframe. It was powerful and unauditable: the code could drop rows, reach across columns and rewrite anything, and a reviewer had no bounded question to answer.
 
-| Metric | Before | After | Δ |
+The reaction was to replace generated code entirely with a **typed operation catalogue**. This was safe and immediately too weak: a format rule became a `replace_values` mapping, i.e. an **enumeration of the values already observed**, which does not generalise to the next month's file.
+
+The synthesis is the current split. Generated code returned, but confined to a `clean_value(value)` **pure scalar transform** that cannot see the dataframe — so it generalises as a rule while remaining structurally incapable of losing a row or reaching another column. Everything structural or data-creating stayed in the typed catalogue.
+
+- **Main Purpose**: determine whether generalisation and safety can be obtained simultaneously by constraining the *interface* of generated code rather than its content.
+- **Baselines**: (a) unrestricted generated code against the dataframe; (b) typed operations only.
+- **Evaluation metrics**: **generalisation** — does the rule correct held-out violating values it was never shown, rather than only the sampled ones; **conformance preservation** — are all `dominant_example_values` returned unchanged; and **blast radius** — the set of dataset mutations the mechanism makes structurally impossible. The third is the one that justifies the design: it is a property of the interface, not a rate to be measured.
+- **Resulting design decision**: the two-track remediation of Section 2.4.4, plus the `apply_generated_function` operation as the only channel through which generated source reaches the data.
+
+### 3.3 From prompt-stated rules to executable invariants
+
+Early safety rules lived in the prompt: *do not invent data*, *do not fill a sparse column*. The failure was observed directly — an imputation proposed on a column **98.5% empty**. The prompt had said not to; nothing verified it, so nothing caught it.
+
+- **Main Purpose**: determine whether safety properties stated in natural language are enforceable, or whether they must be executed.
+- **Baseline**: the same rules as prompt instructions only.
+- **Evaluation metrics**: **violation escape rate** — how many proposals breaching a stated rule survive to the human gate. The right metric here is not model accuracy but whether a breach is *detectable at all*, since an undetected breach and a compliant proposal are indistinguishable to a reviewer.
+- **Resulting design decision**: `tools/fix_invariants.py`, evaluated on the before/after frames of every proposal in the dry run, and the standing rule that a checkable rule never lives only in a prompt.
+
+### 3.4 From discarding a failed cleaner to failure-as-feedback with a critic escalation
+
+The first generated-code loop **discarded** a function that failed validation and asked again with the same prompt, which reliably produced the same failure. The adopted design converts each failure into typed `CleanerIssue` objects — the offending input, the actual output, the expected behaviour — and feeds them back as deterministic evidence. A failure that repeats **identically** escalates once to a critic model that diagnoses without writing code.
+
+- **Main Purpose**: determine whether a failed generation is more cheaply repaired than replaced.
+- **Baseline**: regeneration from the unchanged prompt.
+- **Evaluation metrics**: **repair rate within the attempt budget** and **model calls per accepted function**. Cost per accepted artifact is the honest metric here, because a loop that eventually succeeds after unbounded retries has not solved anything.
+- **Resulting design decision**: the feedback loop in `agents/unified.py` with a single critic escalation on an identical repeat, and `prompts/cleaner_critic.md` as a diagnose-only prompt.
+
+### 3.5 From one global completeness number to three measured snapshots
+
+A single completeness figure made the pipeline look like it was **destroying data**: unmasking `N/D` as a null lowers measured completeness, so the system was penalised for finding the very defect it was built to find.
+
+- **Main Purpose**: determine at which points quality must be measured for a before/after comparison to be honest.
+- **Baseline**: one measurement on the raw file and one on the output.
+- **Evaluation metrics**: **like-for-like validity of the delta** — whether the reported improvement is attributable to remediation rather than to a change in what was measurable. This replaced a headline "score improvement" number that was, on inspection, partly an artefact of measurement timing.
+- **Resulting design decision**: the `raw` / `detected` / `final` snapshots, and `compare()` scoring both ends over the same dimension set.
+
+### 3.6 Further decisions shaped by observed failures
+
+1. **Anomaly method chosen from column role, not dtype.** Numeric-looking code columns were being IQR-scanned and reported as outlier-ridden; a numeric column with few distinct values is a code, whatever its dtype says.
+2. **Duplicate-column survivor picked by measured coherence, not column order.** The original left-to-right rule discarded the better-populated column whenever it happened to appear second.
+3. **Mined dependencies rejected when they shift over time.** A dependency that holds only within a period is not a rule; ambiguity was made to cost its own rows rather than the whole column.
+4. **Enums no longer inferred from the frequent values of an open set**, which was turning free-text columns into closed vocabularies and generating violations for every legitimate new value.
+5. **Every approved fix that fails to land is now reported**, skips included, after a silent partial application was observed.
+
+Taken together these are not a benchmark suite. They document the process by which the final contribution emerged: **an LLM pipeline made accountable by dividing authority according to the kind of defect.**
+
+---
+
+## 4. Results
+
+The figures below are drawn from a **single end-to-end run on `spesa.csv`** — 7,543 rows × 18 columns — executed on the pipeline as committed, with **every proposal approved** at the gate so that the full remediation path is exercised. `spesa.csv` is used as the readable case because it exhibits all five defect categories at once: disguised nulls, three-way column redundancy, header-convention drift, format drift inside a period column, and near-empty columns.
+
+Approving everything is the *upper bound* on what the system will do, not its default. The point of the gate is that a reviewer can decline any of it; running with all six proposals accepted is what makes the delta measurable.
+
+### 4.1 The reliability score, and why there are two of them
+
+The headline result is that the pipeline raised the aggregate reliability score from **0.7562 to 0.9933**. That number is true but incomplete, and the report deliberately publishes a second one beside it.
+
+![Reliability by dimension before and after remediation, like-for-like](images/reliability_dimensions.png)
+
+The two scores answer different questions. **As delivered** (0.7562 → 0.9933) compares only the three dimensions measurable on the raw file — completeness, uniqueness and schema conformity — because *validity* and *consistency* cannot be scored before the pipeline has inferred a format spec and mined the cross-column rules to score them against. **Like-for-like** (0.938 → 0.996) is the stricter comparison: it scores both ends over all five dimensions, using the pre-remediation snapshot taken once those specs exist.
+
+The like-for-like figure is the smaller improvement and the more honest one, which is why `compare()` computes it and the report prints both. A system that quoted only the first would be taking credit for the arrival of its own measuring instruments.
+
+Per dimension, the movements are **schema conformity 0.8182 → 1.0000** (the largest, and the one the human gate authorised), **consistency 0.9319 → 0.9999**, **validity 0.9931 → 1.0000**, **uniqueness 0.9885 → 1.0000**, and **completeness 0.9702 → 0.9801** — the smallest, and the one that needs explaining.
+
+### 4.2 The completeness dip is the system working
+
+Read naively, this figure shows the pipeline *destroying* data before recovering it.
+
+![Completeness measured at the raw, detected and delivered snapshots](images/completeness_journey.png)
+
+The raw file measures **0.8752** complete. After the pipeline unmasks disguised nulls it measures **0.8680** — *lower*. Nothing was lost between those two bars. **988 cells** that read as data to `pandas` — `N/D`, `-`, `?` and similar tokens — were nulls wearing a costume, and the second bar is the first honest measurement of the file. The report labels this explicitly as `hidden_defects_unmasked: {disguised_nulls_unmasked: 988, apparent_completeness: 0.8752, true_completeness: 0.8680}`.
+
+This is precisely why quality is captured at three snapshots rather than two. Against the raw figure the delivered **0.9801** looks like a modest +0.010; against the true baseline it is **+0.112**, and it is the second number that describes what remediation actually achieved. A two-point measurement would have made the system's most valuable single behaviour — finding defects that are invisible to the naive check — register as a regression.
+
+### 4.3 Detection and what remains
+
+Across the four active coverage areas the run detected **18,369 violations** and left **1,637** standing.
+
+![Violations by coverage area, detected versus residual, log scale](images/violations_by_area.png)
+
+**Format violations went 510 → 0** and **schema violations 5 → 0**: these are the categories where a defect has a determinate correct answer, and the pipeline closes them completely. **Consistency went 517 → 4.** **Completeness went 17,337 → 1,633**, a 90.6% reduction.
+
+The 1,633 residual nulls are the interesting number, because they are **not a failure to detect**. They break down as `area_geografica` (1,567), `spesa` (58) and `descrizione` (8), and every one of them is carried into the report as an `UnaddressedViolations` entry with a stated reason. The model's own justification, quoted from the run:
+
+> *"`area_geografica` has no imputation hint and no deterministic rule to derive the macro-area from other columns in the group. `note` and `fonte_dato` are free-text/provenance fields with no imputation hint and no derivable source; filling them would invent data. `spesa` is a monetary amount with no imputation hint, and monetary values cannot be imputed without a deterministic rule from the user."*
+
+A system optimising for the headline number would have imputed all 1,633 and reported completeness 1.0000. The invariant in `tools/fix_invariants.py` forbids exactly that, and the residual count is the visible cost of the guarantee that nothing was invented.
+
+### 4.4 What actually changed, and on whose authority
+
+**5,768 cells** changed across the run. The split by origin is the clearest single picture of the authority argument in Section 1.3.
+
+![Cells changed by the stage that changed them](images/cells_changed_by_source.png)
+
+**Auto-remediation accounts for 4,324 cells (75%)** — the corrections the data determines on its own: 2,987 cells of floating-point noise rounded off `spesa` to its recorded two-decimal precision, 414 `rata` period labels rewritten to canonical form, 448 `descrizione` values filled from a mined `ente → descrizione` dependency at purity 0.9928, 379 `imposta` values filled likewise, and 96 partial periods completed. None of these required a human, because none of them required a *choice*.
+
+**Null unmasking accounts for 988**, duplicate-column resolution for **424**, and casing collapse for **22**. The **six human-approved proposals** account for the rest — and strikingly little of it: `g2_f2` changed 4 cells, and the structural proposals changed column names and column counts rather than cells.
+
+The proposals were nonetheless the highest-impact decisions in the run, because they were the only ones that changed the *shape* of the dataset: dropping `note` (98.0% null) and `fonte_dato` (99.0% null), renaming `_id` → `id` and `aggregation-time` → `aggregation_time` to satisfy the registry's naming regex. Combined with four duplicate-column groups collapsed automatically — `{ente, ente%code}`, `{tipo_imposta, Tipo Imposta}`, `{cod_imposta, 2cod_imposta, cod imposta ext}`, `{spesa, SPESA TOTALE}` — the dataset went from **18 columns to 11**, and from **7,543 rows to 7,478** after 65 exact duplicates were removed.
+
+That duplicate count is itself a second-order effect worth noting: the raw file contained **40** exact duplicate rows, but **65** were removed. Collapsing seven redundant columns made twenty-five further row pairs identical that had previously differed only in a duplicated column's spelling.
+
+**One proposal was redundant.** `g2_f1` proposed filling 456 null `descrizione` values from the `ente` lookup — but auto-remediation, running earlier in the same pipeline, had already filled 448 of them from the same mined dependency, and the remaining 8 have no `ente` key to look up. The proposal was approved, executed without error, and changed nothing. This is a real inefficiency: the Unified agent reasons about violations detected upstream of auto-remediation, so it can propose work already done. It is safe — the invariants and the dry run both pass — but it costs a reviewer's attention on a decision that no longer matters.
+
+### 4.5 Anomalies are reported, not corrected
+
+The anomaly stage flagged two columns and corrected neither, which is the intended behaviour.
+
+On `imposta` it found two rare categories, `'imposta x'` (3 occurrences, 0.04%) and `'Altro'` (1 occurrence, 0.01%), against a dominant vocabulary. On `spesa` it found **1,352 IQR outliers** above an upper bound of ≈1.58M, ranging up to ≈43.37M. The second is the instructive case: in a public expenditure dataset a 43M figure is not an error, it is a large administration, and a system that "corrected" it would be destroying the most important rows in the file. The report states the finding and leaves the judgement to a reader.
+
+The rare categories on `imposta` did feed a remediation, but by a different route: `g2_f2` corrected them because the **cross-column rule** `cod_imposta → imposta` holds at purity 1.00, so the correct value was determined by evidence rather than by the value's rarity. Rarity flagged the cell; a functional dependency justified the fix.
+
+### 4.6 Where the run spends its time
+
+![Per-stage timings for the full run](images/stage_timings.png)
+
+The full run took **383.7 seconds**. `unified` alone accounts for **259.5s — 68% of the total** — because it is the stage that calls a model per column group, validates what comes back, and retries on failure. `semantic` (53.2s) is second, calling the model once per column. `format_consistency` (33.4s) and `report_generator` (24.5s) follow.
+
+The architectural point is at the other end of the chart. Every purely deterministic stage is effectively free: `nan_handler` **0.14s**, `baseline_builder` **0.08s**, `duplicate_row` **0.05s**, `auto_remediation` **2.5s** — and between them, in **3.2 seconds of the 384**, they changed **5,338 of the 5,768 cells (92.5%)**. The expensive stages are the ones that reason; the cheap stages are the ones that measure and act. That is the intended cost profile, and it is what makes the design affordable: pushing work down into deterministic tools is not only safer, it is where the throughput is.
+
+### 4.7 A caveat on this run
+
+**No generated cleaning function was produced.** On `spesa.csv` the Unified agent found that every value-level repair it needed was expressible as a typed catalogue operation — `impute_from_lookup` and a four-cell `replace_values` — so the code-generation path described in Sections 2.4.4 and 2.6, with its static gate, sandbox and critic escalation, **was not exercised by this run**. That machinery is covered by the test suite (`tests/test_generated_function.py`, `tests/test_unified_generated_gate.py`, `tests/test_unified_repair_loop.py`, `tests/test_generated_function_pipeline.py`) rather than by these results.
+
+This is an honest limitation of a single-dataset results section, and it cuts in an interesting direction: given a choice between writing code and selecting a bounded operation, the agent chose the bounded operation every time.
+
+### 4.8 Summary of run outcomes
+
+| Metric | Raw file | Detected | As delivered |
 |---|---|---|---|
-| Total null cells | — | — | — |
-| Format violations | — | — | — |
-| Duplicate rows | — | — | — |
-| Columns with correct dtype | — | — | — |
+| Rows | 7,543 | 7,543 | **7,478** |
+| Columns | 18 | 18 | **11** |
+| Cells | 135,774 | 135,774 | **82,258** |
+| Null cells | 16,939 | 17,927 | **1,633** |
+| Exact duplicate rows | 40 | 40 | **0** |
+| Rows in key conflict | 50 | 0 | **0** |
+| Badly named columns | 7 | 7 | **0** |
+| Sparse columns | 2 | 2 | **0** |
+| Redundant columns | 1 | 1 | **0** |
+| Completeness | 0.8752 | 0.8680 | **0.9801** |
+| Uniqueness | 0.9881 | 0.9947 | **1.0000** |
+| Schema conformity | 0.5000 | 0.5000 | **1.0000** |
 
-*(figures generated from main.ipynb — see `images/` folder)*
+| Run metric | Value |
+|---|---|
+| Violations detected | 18,369 |
+| Violations residual | 1,637 |
+| Cells changed | 5,768 |
+| Disguised nulls unmasked | 988 |
+| Auto-remediations applied | 5 operations, 4,324 cells |
+| Proposals put to the reviewer | 6 |
+| Proposals approved and applied | 6 (0 errors, 0 refused) |
+| Duplicate-column groups collapsed | 4 |
+| Generated cleaning functions | 0 |
+| **Reliability, as delivered** | **0.7562 → 0.9933** |
+| **Reliability, like-for-like** | **0.9380 → 0.9960** |
+| Total runtime | 383.7s |
 
 ---
 
-## Conclusions
+## 5. Conclusions
 
-This project shows that a multi-agent LLM pipeline can automate the majority of data quality
-tasks that NoiPA analysts currently perform manually. The key takeaway is that grounding LLM
-decisions in a curated canonical schema registry — via embedding retrieval rather than name
-matching — substantially improves the reliability of downstream validation: format checks and
-dtype casting only produce meaningful results when the canonical match is correct.
+### 5.1 Main Takeaway
 
-**Limitations and open questions**:
+The run supports a narrower claim than "the pipeline improves data quality", and the narrower claim is the one worth making: **the system improved the dataset while remaining able to account for every change it made, and it declined the changes it could not account for.**
 
-- **NaN imputation coverage is limited by data redundancy.** The unanimity-based imputation
-  only fills cells where another row with the same related-column value exists and all such
-  rows agree on the target value. In sparse or highly granular datasets, most nulls remain
-  unfilled. A more aggressive strategy (mode-based fill, LLM-guided interpolation) would
-  improve coverage at the cost of potentially inventing values.
+Concretely, on `spesa.csv` it raised like-for-like reliability from **0.9380 to 0.9960**, eliminated **100%** of format and schema violations, reduced completeness violations by **90.6%**, removed **7 redundant or empty columns** and **65 duplicate rows**, and changed **5,768 cells** — each one recorded in a cell-level change log naming the stage that changed it.
 
-- **Anomaly detection thresholds are heuristic.** IQR and frequency-based cutoffs are
-  starting points; the right thresholds depend on each column's distribution and the
-  operational tolerance for false positives. Future work could learn domain-specific
-  thresholds from labelled historical data.
+The shape of that improvement matters as much as its size. **75% of the cells were changed by deterministic auto-remediation**, on evidence strong enough that a human decision would have added nothing: mined dependencies at purity ≥ 0.99, a column's own recorded decimal precision, an unambiguous period layout. The human gate was reserved for the seven **structural** decisions — which columns to drop, which to rename — that no measurement can settle.
 
-- **Evaluation depends on manual annotation.** A proper ground-truth evaluation requires
-  human-labelled datasets, which are expensive to produce. Future work could use synthetic
-  data injection (deliberately inserting known errors) as a more scalable evaluation approach.
+And **1,633 nulls were deliberately left in place.** No imputation hint supported them, so the invariants refused to fill them and the report explains why for each column. That number is not a shortfall against a target; it is the visible price of the guarantee that the pipeline never invented a value. A system built to maximise a completeness score would have reported 1.0000 and been worth less.
 
-- **The pipeline is sequential.** Each agent waits for the previous one to finish.
-  LangGraph supports parallelism; agents that operate on independent column subsets
-  (e.g. format_consistency and duplicate_row) could run concurrently to reduce latency on
-  wide datasets.
+The defensible conclusion is therefore not that an LLM can clean data. It is that **an LLM pipeline can be made accountable for data repair when authority is divided by the kind of defect** — deterministic tools measuring, models reasoning only over bounded evidence, typed operations bounding what can be executed, invariants enforcing what a prompt cannot, and a human owning every decision that changes the shape of the data.
+
+### 5.2 Observed Failure Modes
+
+Several concrete failure modes emerged during development, and they are worth naming because they justify safeguards that would otherwise look over-cautious.
+
+**Imputation on a near-empty column.** A fix was proposed to fill a column that was 98.5% empty. What little such a column holds cannot speak for what it does not; the safeguard is the sparsity invariant in `tools/fix_invariants.py`.
+
+**Cleaning functions that enumerate instead of generalising.** Given eight violating example values, a model will happily write a function that maps those eight and returns everything else unchanged. It passes the examples and fails the column. The safeguard is validation against held-out conforming and violating values, with `outlier_unchanged` as an explicit issue category.
+
+**Placeholder lists that describe the column's vocabulary.** A placeholder list matching most of a column is no longer describing gaps. The safeguard is the 30% share guard in `nan_handler`.
+
+**Enums inferred from an open set.** Taking the frequent values of a free-text column as an enum turns every legitimate new value into a violation. The safeguard is the cardinality check in `profile_format_spec`.
+
+**Silent partial application.** Approved fixes that errored or were skipped once vanished without trace, leaving the reviewer believing more had been applied than had. The safeguard is that `apply_fixes` now surfaces every approved id that did not land.
+
+**Identical regeneration loops.** A model asked the same question after a failure gives the same answer. The safeguard is failure-as-feedback plus a single critic escalation.
+
+### 5.3 Limitations
+
+Several limitations are **deliberate design constraints** rather than accidental gaps.
+
+The **canonical registry is hand-curated for NoiPA**. The system is grounded in a specific institutional data model and is not domain-general; applying it elsewhere means writing a new registry, not retraining anything.
+
+**Anomalies are reported, not corrected.** An outlier is unusual, which is not the same as wrong. The system deliberately declines to act on statistical unusualness alone, and leaves it for a person to judge unless a value is impossible.
+
+**Duplicate detection is exact plus key-collision, not fuzzy record linkage.** Records that differ by a typo in a key are surfaced as conflicts, not resolved. Genuine entity resolution is out of scope.
+
+**The report's narrative is model-written.** It is structurally prevented from introducing figures, and `tests/test_report_truthfulness.py` enforces that, but its *interpretation* is not proved correct beyond that constraint.
+
+**Single-provider dependency.** Every chat call goes through one model pinned in `utils/llm.py`. This buys reproducibility and a single place to change; it also means provider availability is a hard dependency of any live run.
+
+**Proposals can duplicate work auto-remediation has already done.** The Unified agent reasons about the violations detected *upstream* of auto-remediation, so it may propose a repair that has since been applied — as `g2_f1` did in Section 4.4, proposing 456 imputations of which 448 were already filled and 8 were unfillable. The outcome is safe (the dry run and the invariants both pass, and the operation is idempotent) but it spends a reviewer's attention on a decision that no longer matters. The fix is to re-scope the violation set handed to `unified` against the post-auto-remediation state.
+
+**The results section exercises one dataset and one path.** `spesa.csv` did not require a single generated cleaning function, so the code-generation chain is evidenced by tests rather than by these figures. A results section over both required datasets would cover more of the architecture than this one does.
+
+**The gate assumes an informed reviewer.** The system shows the generated source verbatim, which is the right thing to show, but it presumes someone able to read it. A reviewer who approves everything gets a system with much weaker guarantees than the architecture nominally provides.
+
+### 5.4 Future Work
+
+The most direct extension is **learning from gate decisions**: the accept / reject / revise record is a labelled dataset of what a domain expert considers a good repair, and nothing currently consumes it. Feeding rejection feedback back into the Unified prompt across runs would let the system converge on a particular administration's conventions.
+
+A second direction is **widening the operation catalogue under the same discipline** — adding fuzzy record linkage as a typed, invariant-checked operation rather than as free code, which is precisely the pattern Section 3.2 established.
+
+A third is **automating registry construction**. The registry is currently the main cost of onboarding a new domain; deriving a candidate registry from a corpus of that domain's files, for human correction rather than human authorship, would make the approach portable at a reasonable cost.
+
+Finally, the pipeline currently runs **one dataset at a time**. Many of the defects it detects — a code drifting in meaning, a dependency decaying — are only visible *across* monthly files. Extending the state to carry a history would turn several one-shot checks into trend detection.
