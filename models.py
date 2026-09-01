@@ -96,12 +96,12 @@ class DuplicateResolution(BaseModel):
     canonical_name: str
     rationale: str
     dropped: list[str]
+    cells_backfilled: int = 0
+    cells_overwritten: dict[str, int] = Field(default_factory=dict)
+    values_lost: dict[str, list] = Field(default_factory=dict)
 
 
-class ColumnClassification(BaseModel):
-    column_name: str
-    normalized_name: str
-    description: str
+ViolationKind = Literal["format", "completeness", "schema", "consistency", "uniqueness"]
 
 
 class FormatViolation(BaseModel):
@@ -109,11 +109,81 @@ class FormatViolation(BaseModel):
     row_index: int
     value: Any
     expected_pattern: str | None
+    kind: ViolationKind
+    affected_rows: int = 1
 
 
 class ValidationReport(BaseModel):
     column_name: str
     violations: list[FormatViolation] = Field(default_factory=list)
+    detected_total: int | None = None
+
+
+OperationKind = Literal[
+    "replace_values",
+    "normalize_numeric",
+    "normalize_date",
+    "normalize_period",
+    "strip_whitespace",
+    "collapse_casing",
+    "round_decimals",
+    "cast_dtype",
+    "impute_from_lookup",
+    "drop_column",
+    "rename_column",
+    "drop_duplicate_rows",
+    "apply_generated_function",
+]
+
+
+class ValueMapping(BaseModel):
+    value: str
+    replacement: str | None = None
+
+
+class Operation(BaseModel):
+    kind: OperationKind
+    column: str = ""
+    mapping: list[ValueMapping] = Field(default_factory=list)
+    digits: int = 2
+    dtype: str = ""
+    new_name: str = ""
+    subset: list[str] = Field(default_factory=list)
+    source: str = ""
+
+
+CleanerIssueCategory = Literal[
+    "malformed_source",
+    "forbidden_construct",
+    "runtime_exception",
+    "dominant_value_modified",
+    "outlier_unchanged",
+    "not_parseable_as_target_dtype",
+    "not_validated",
+]
+
+
+class CleanerIssue(BaseModel):
+    category: CleanerIssueCategory
+    message: str
+    input_value: str | None = None
+    actual_output: str | None = None
+    expected_behavior: str = ""
+
+
+class CleanerRepair(BaseModel):
+    input_value: str
+    actual_output: str | None = None
+    expected_output: str | None = None
+    fix_note: str
+
+
+class CleanerDiagnosis(BaseModel):
+    root_cause: str
+    bug_location: str
+    planned_fix: str
+    exact_repairs: list[CleanerRepair] = Field(default_factory=list)
+    confidence: Literal["low", "medium", "high"] = "medium"
 
 
 class FixProposal(BaseModel):
@@ -123,14 +193,47 @@ class FixProposal(BaseModel):
     addresses_violations: list[str] = Field(default_factory=list)
     affected_columns: list[str] = Field(default_factory=list)
     estimated_rows_affected: int = 0
-    code: str
+    operations: list[Operation] = Field(default_factory=list)
+    code: str = ""
     depends_on: list[str] = Field(default_factory=list)
+    group_id: str = ""
 
 
 class FixGroupResponse(BaseModel):
     proposals: list[FixProposal] = Field(default_factory=list)
     unaddressed_violation_ids: list[str] = Field(default_factory=list)
     rationale_for_unaddressed: str = ""
+
+
+class FixReviewResponse(BaseModel):
+    decision: Literal["approve", "revise"]
+    feedback: str = ""
+
+
+class UnaddressedViolations(BaseModel):
+    """Violations carried to the report with no corrective action, and why none exists. The model
+    declares its own where it can; the pipeline fills in what it fails to declare."""
+    group_id: str
+    columns: list[str] = Field(default_factory=list)
+    violation_ids: list[str] = Field(default_factory=list)
+    reason: str = ""
+    affected_rows: int = 0
+    affected_by_column: dict[str, int] = Field(default_factory=dict)
+    actioned_elsewhere: list[str] = Field(default_factory=list)
+    source: Literal["model", "pipeline"] = "model"
+
+
+class ImputationHint(BaseModel):
+    target_column: str
+    strategy: Literal["lookup"] = "lookup"
+    predictor_columns: list[str]
+    mapping: dict[str, Any]
+    path: Literal["raw", "normalized"]
+    purity: float
+    coverage: float
+    confidence: Literal["strict", "dominant"]
+    temporally_stable: bool = True
+    rationale: str = ""
 
 
 class AnomalyEntry(BaseModel):
@@ -141,7 +244,7 @@ class AnomalyEntry(BaseModel):
 
 class AnomalyReport(BaseModel):
     column_name: str
-    method: str  # "iqr" or "rare_category"
+    method: Literal["iqr", "rare_category"]
     anomalies: list[AnomalyEntry] = Field(default_factory=list)
     stats: dict = Field(default_factory=dict)
     comment: str = ""

@@ -1,21 +1,24 @@
-"""Detects numeric outliers (IQR method) and rare categorical values per column using pure
-pandas/numpy, then sends the aggregated findings to gpt-4o-mini for a one-sentence
-explanatory comment per column."""
+"""Detects numeric outliers (IQR method) and rare categorical values per column using pure pandas/numpy, then asks the LLM for a one-sentence explanatory comment per column. The method is chosen from what the column means rather than from its current dtype: identifiers and free-text columns are skipped, codes are never treated as magnitudes (a numeric column with few distinct values is a code, whatever its dtype says), and only genuinely categorical columns are scanned for rare values. A category counts as rare below 1% of non-null rows or under three occurrences, and at most 50 entries are kept per column."""
 from __future__ import annotations
 
 import json
 
 import pandas as pd
-from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
 from models import AnomalyEntry, AnomalyReport
+from tools.normalize_numeric_format import normalize_numeric_format
 from state import PipelineState
+from utils.llm import structured_model
 from utils.prompts import load_prompt
 
-_RARE_FREQ_THRESHOLD = 0.01  # below 1% of non-null rows
-_RARE_ABS_THRESHOLD = 3      # or fewer than 3 absolute occurrences
-_OUTLIER_CAP = 50            # max anomaly entries stored per column
+_RARE_FREQ_THRESHOLD = 0.01
+_RARE_ABS_THRESHOLD = 3
+_OUTLIER_CAP = 50
+_IDENTIFIER_UNIQUENESS = 0.9
+_MAX_CATEGORY_VALUES = 30
+_NUMERIC_READ_THRESHOLD = 0.9
+_KEY_TOKENS = ("code", "identifier", "id ", " id", "key", "codice")
 
 
 class _ColumnComment(BaseModel):
@@ -34,19 +37,17 @@ def anomaly_detector_node(state: PipelineState) -> PipelineState:
     df = state.dataset
     reports: list[AnomalyReport] = []
 
+    meanings = {p.column_name: p.description for p in state.payload}
     for col in df.columns:
         series = df[col]
         clean = series.dropna()
         if len(clean) == 0:
             continue
 
-        if pd.api.types.is_numeric_dtype(series) and not pd.api.types.is_bool_dtype(series):
+        role = _column_role(series, meanings.get(col, ""))
+        if role == "measure":
             report = _detect_numeric_outliers(series, col)
-        elif (
-            pd.api.types.is_string_dtype(series)
-            or pd.api.types.is_object_dtype(series)
-            or pd.api.types.is_categorical_dtype(series)
-        ):
+        elif role == "category":
             report = _detect_rare_categories(series, col)
         else:
             continue
@@ -60,7 +61,42 @@ def anomaly_detector_node(state: PipelineState) -> PipelineState:
     return state.model_copy(update={"anomaly_reports": reports})
 
 
+def _column_role(series: pd.Series, meaning: str) -> str:
+    populated = int(series.notna().sum())
+    if not populated:
+        return "skip"
+    if series.nunique(dropna=True) / populated >= _IDENTIFIER_UNIQUENESS:
+        return "identifier"
+
+    if pd.api.types.is_datetime64_any_dtype(series):
+        return "temporal"
+
+    numeric = pd.api.types.is_numeric_dtype(series) and not pd.api.types.is_bool_dtype(series)
+    described_as_key = any(token in meaning.lower() for token in _KEY_TOKENS)
+    if not numeric and _reads_as_numeric(series):
+        numeric, series = True, _as_numeric(series)
+    if numeric:
+        if described_as_key or series.nunique(dropna=True) <= _MAX_CATEGORY_VALUES:
+            return "code"
+        return "measure"
+    if series.nunique(dropna=True) <= _MAX_CATEGORY_VALUES:
+        return "category"
+    return "free-text"
+
+
+def _reads_as_numeric(series: pd.Series) -> bool:
+    populated = int(series.notna().sum())
+    if not populated:
+        return False
+    return _as_numeric(series).notna().sum() / populated >= _NUMERIC_READ_THRESHOLD
+
+
+def _as_numeric(series: pd.Series) -> pd.Series:
+    return pd.to_numeric(normalize_numeric_format(series), errors="coerce")
+
+
 def _detect_numeric_outliers(series: pd.Series, col_name: str) -> AnomalyReport | None:
+    series = _as_numeric(series) if not pd.api.types.is_numeric_dtype(series) else series
     clean = series.dropna()
     if len(clean) < 4:
         return None
@@ -96,7 +132,8 @@ def _detect_numeric_outliers(series: pd.Series, col_name: str) -> AnomalyReport 
             "iqr": round(iqr, 4),
             "lower_bound": round(lower, 4),
             "upper_bound": round(upper, 4),
-            "outlier_count": len(outlier_idx),
+            "detected": len(outlier_idx),
+            "sampled": min(len(outlier_idx), _OUTLIER_CAP),
         },
     )
 
@@ -126,7 +163,7 @@ def _detect_rare_categories(series: pd.Series, col_name: str) -> AnomalyReport |
             reason=f"rare category: {cnt} occurrence(s) ({cnt / n * 100:.2f}% of non-null)",
         )
         for val, cnt in rare.items()
-    ]
+    ][:_OUTLIER_CAP]
 
     return AnomalyReport(
         column_name=col_name,
@@ -135,7 +172,8 @@ def _detect_rare_categories(series: pd.Series, col_name: str) -> AnomalyReport |
         stats={
             "total_non_null": n,
             "distinct_values": int(len(counts)),
-            "rare_values_count": int(len(rare)),
+            "detected": int(len(rare)),
+            "sampled": min(int(len(rare)), _OUTLIER_CAP),
             "threshold": round(threshold, 1),
             "top_values": top2,
         },
@@ -143,7 +181,7 @@ def _detect_rare_categories(series: pd.Series, col_name: str) -> AnomalyReport |
 
 
 def _add_llm_comments(reports: list[AnomalyReport]) -> None:
-    chain = ChatOpenAI(model="gpt-4o-mini", temperature=0).with_structured_output(_AnomalyCommentResponse)
+    chain = structured_model(_AnomalyCommentResponse)
     system = load_prompt("anomaly_detector")
 
     payload = [

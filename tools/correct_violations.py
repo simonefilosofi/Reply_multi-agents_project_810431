@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import json
 
-from langchain_openai import ChatOpenAI
-from openai import LengthFinishReasonError
 from pydantic import BaseModel
 
 from models import ColumnPayload
+from utils.llm import EmptyModelResponse, structured_model
 from utils.prompts import load_prompt
+
+
+_MAX_ANSWER_TOKENS = 4096
 
 
 class _Correction(BaseModel):
@@ -29,7 +31,7 @@ def correct_violations(
 ) -> dict[str, str | None]:
     if not offending_values:
         return {}
-    chain = ChatOpenAI(model="gpt-5.4-mini", temperature=0, max_tokens=4096).with_structured_output(_CorrectionsResponse)
+    chain = structured_model(_CorrectionsResponse, max_tokens=_MAX_ANSWER_TOKENS)
     user = {
         "column_name": payload.column_name,
         "description": payload.description,
@@ -43,6 +45,6 @@ def correct_violations(
             {"role": "system", "content": load_prompt("correct_violations")},
             {"role": "user", "content": json.dumps(user, ensure_ascii=False, default=str)},
         ])
-    except LengthFinishReasonError:
+    except EmptyModelResponse:
         return {}
     return {c.value: c.corrected_value for c in result.corrections}

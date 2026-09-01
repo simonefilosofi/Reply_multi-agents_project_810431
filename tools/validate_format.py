@@ -1,4 +1,4 @@
-"""Checks each value in a column against a per-column FormatSpec. Dispatches over RegexFormat (full-match against pattern), EnumFormat (membership against allowed values), RangeFormat (numeric bounds), and DateFormat (parseability against an strftime pattern via pd.to_datetime), surfacing each violation through a uniform expected_pattern string consumed by the Format & Consistency agent."""
+"""Checks each value in a column against a per-column FormatSpec. Dispatches over RegexFormat (full-match against pattern), EnumFormat (membership against allowed values), RangeFormat (numeric bounds), and DateFormat (parseability against an strftime pattern via pd.to_datetime). A column already stored as datetime64 carries no textual layout, so its DateFormat check is skipped: the pattern would only describe how pandas renders the value, not whether the datum is valid. Each violation is surfaced through a uniform expected_pattern string consumed by the Format & Consistency agent."""
 from __future__ import annotations
 
 import re
@@ -24,6 +24,8 @@ def validate_format(
 ) -> ValidationReport:
     if spec is None:
         return ValidationReport(column_name=col_name)
+    if isinstance(spec, DateFormat) and pd.api.types.is_datetime64_any_dtype(series):
+        return ValidationReport(column_name=col_name)
 
     is_valid, expected = _checker_for(spec)
     violations = [
@@ -32,6 +34,7 @@ def validate_format(
             row_index=int(idx),
             value=val,
             expected_pattern=expected,
+            kind="format",
         )
         for idx, val in series.items()
         if pd.notna(val) and not is_valid(val)
@@ -61,3 +64,25 @@ def _in_range(value: object, lo: float | None, hi: float | None) -> bool:
     except (TypeError, ValueError):
         return False
     return (lo is None or x >= lo) and (hi is None or x <= hi)
+
+
+def spec_from_dict(spec: dict | None) -> FormatSpec | None:
+    """Rebuilds a FormatSpec from the serialised form held in state.inferred_format_specs."""
+    if not spec:
+        return None
+    by_type = {
+        "regex": RegexFormat,
+        "enum": EnumFormat,
+        "range": RangeFormat,
+        "date": DateFormat,
+    }
+    model = by_type.get(spec.get("type", ""))
+    return model(**spec) if model else None
+
+
+def specs_by_column(inferred: dict[str, dict]) -> dict[str, FormatSpec | None]:
+    """Maps every profiled column to its resolved FormatSpec, or None when none was settled on."""
+    return {
+        column: spec_from_dict((info or {}).get("final_spec"))
+        for column, info in inferred.items()
+    }

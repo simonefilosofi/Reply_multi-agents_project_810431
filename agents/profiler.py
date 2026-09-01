@@ -4,12 +4,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
 from models import BaselineFile
 from state import PipelineState
 from tools.baseline_accessors import domain_signatures
+from utils.llm import structured_model
 from utils.prompts import load_prompt
 
 
@@ -23,8 +23,7 @@ def profiler_node(state: PipelineState) -> PipelineState:
     baseline = _load_baseline(state)
     user_payload = _build_user_payload(state, baseline)
 
-    llm = ChatOpenAI(model="gpt-5.4-mini", temperature=0)
-    chain = llm.with_structured_output(_ProfilerResponse)
+    chain = structured_model(_ProfilerResponse)
 
     result: _ProfilerResponse = chain.invoke([
         {"role": "system", "content": load_prompt("profiler")},

@@ -4,8 +4,6 @@ from __future__ import annotations
 import json
 from typing import Literal
 
-from langchain_openai import ChatOpenAI
-from openai import LengthFinishReasonError
 from pydantic import BaseModel
 
 from models import (
@@ -16,7 +14,11 @@ from models import (
     RangeFormat,
     RegexFormat,
 )
+from utils.llm import EmptyModelResponse, structured_model
 from utils.prompts import load_prompt
+
+
+_MAX_ANSWER_TOKENS = 1024
 
 
 class _InferResponse(BaseModel):
@@ -31,21 +33,25 @@ class _InferResponse(BaseModel):
 def infer_format_spec(
     payload: ColumnPayload,
     baseline_hint: str | None,
+    candidate: FormatSpec | None = None,
+    extended_sample: list | None = None,
 ) -> FormatSpec | None:
-    chain = ChatOpenAI(model="gpt-5.4-mini", temperature=0, max_tokens=1024).with_structured_output(_InferResponse)
+    chain = structured_model(_InferResponse, max_tokens=_MAX_ANSWER_TOKENS)
     user = {
         "column_name": payload.column_name,
         "description": payload.description,
         "dtype": payload.dtype,
         "sample": payload.sample,
+        "extended_sample": extended_sample or [],
         "baseline_hint": baseline_hint,
+        "deterministic_candidate": candidate.model_dump() if candidate else None,
     }
     try:
         result: _InferResponse = chain.invoke([
             {"role": "system", "content": load_prompt("infer_format_spec")},
             {"role": "user", "content": json.dumps(user, ensure_ascii=False, default=str)},
         ])
-    except LengthFinishReasonError:
+    except EmptyModelResponse:
         return None
     return _to_spec(result)
 

@@ -14,18 +14,6 @@ def domain_signatures(baseline: BaselineFile) -> dict[str, dict[str, list[str]]]
     }
 
 
-def column_catalog_for_dataset(
-    baseline: BaselineFile, domain: str, dataset: str
-) -> dict[str, ColumnSchema]:
-    domain_obj = baseline.domains.get(domain)
-    if domain_obj is None:
-        return {}
-    dataset_obj = domain_obj.datasets.get(dataset)
-    if dataset_obj is None:
-        return {}
-    return dict(dataset_obj.columns)
-
-
 def column_catalog_all_domains(baseline: BaselineFile) -> dict[str, ColumnSchema]:
     catalog: dict[str, ColumnSchema] = {}
     for domain in baseline.domains.values():
@@ -53,18 +41,6 @@ def alias_index(baseline: BaselineFile) -> dict[str, str]:
                 if schema.canonical_id:
                     index.setdefault(col_name, schema.canonical_id)
     return index
-
-
-def format_spec(
-    baseline: BaselineFile, domain: str, dataset: str, column: str
-):
-    schema = column_catalog_for_dataset(baseline, domain, dataset).get(column)
-    return schema.format if schema else None
-
-
-def observations_for(baseline: BaselineFile, domain: str) -> list[str]:
-    key = f"{domain.lower()}_observations"
-    return baseline.observations.get(key, [])
 
 
 def global_conventions(baseline: BaselineFile) -> GlobalConventions:
