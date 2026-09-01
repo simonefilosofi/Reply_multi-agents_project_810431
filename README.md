@@ -88,7 +88,7 @@ Reply_multi-agents_project_810431/
 |-- prompts/                           # one markdown prompt per LLM-calling agent
 |-- utils/llm.py                       # the single construction point for the chat model
 |-- tests/                             # 291 tests; no network and no API key required
-|-- datasets/                          # four further NoiPA CSVs, held out (Section 4.10)
+|-- datasets/                          # four further NoiPA CSVs, beyond the two required
 |-- Datasets-Reply-20260313/           # the two datasets required by the brief
 |-- images/                            # figures used by this README
 |-- models.py                          # the typed artifact contracts
@@ -206,7 +206,7 @@ This decomposition explains how two properties coexist that usually trade off: t
 
 The pipeline is grounded in two hand-curated files that together form a semi-RAG knowledge base of NoiPA's canonical data model. Both were **written by hand from NoiPA open data**: we downloaded a set of published NoiPA datasets, read their fields, and distilled the recurring columns, domains and conventions into a registry. It is curation, not extraction — the registry states what a field *should* be, which no single file can tell you.
 
-That provenance is also why `datasets/` exists. Four of the files we downloaded — `assenzeMensili.csv`, `contributiPrevidenziali.csv`, `ritenuteSindacali.csv` and `trasferimentiPersonale.csv` — were deliberately **kept out of the registry** and held back as unseen inputs, so that the system could be tested on NoiPA data it has no curated knowledge of. Section 4.10 reports that run.
+That provenance is also why `datasets/` exists. Four further NoiPA files we downloaded — `assenzeMensili.csv`, `contributiPrevidenziali.csv`, `ritenuteSindacali.csv` and `trasferimentiPersonale.csv` — live there and are not among the two the brief requires. They exist to answer a question those two cannot: does the pipeline work on a NoiPA file it was not developed against, or is it fitted to the two it was? Section 4.10 reports one such run.
 
 **`noipa_schema_registry.json`** is the canonical schema. It declares four domains — `Amministrati`, `Amministrazioni`, `Rapporti_di_lavoro`, `Trattamento_economico` — holding eighteen dataset definitions between them, plus a `shared_column_definitions` block of twelve reusable column contracts referenced by `$ref`. It also carries the global conventions the whole pipeline validates against:
 
@@ -450,7 +450,7 @@ Results come from **three end-to-end runs**, each executed on the pipeline as co
 |---|---|---|---|
 | §4.1 – §4.8 | `spesa.csv` | 7,543 × 18 | required by the brief; used as the readable case |
 | §4.9 | `attivazioniCessazioni.csv` | 20,102 × 19 | required by the brief; the larger and harder of the two |
-| §4.10 | `ritenuteSindacali.csv` | 11,745 × 14 | **held out** — never used to build the registry |
+| §4.10 | `ritenuteSindacali.csv` | 11,745 × 14 | **not developed against** — a further NoiPA file, outside the brief |
 
 `spesa.csv` is unpacked in detail first because it exhibits all five defect categories at once: disguised nulls, three-way column redundancy, header-convention drift, format drift inside a period column, and near-empty columns.
 
@@ -578,7 +578,7 @@ The pipeline detected **50,225 violations** and left **7,343**, carrying reliabi
 
 Three things distinguish this run from `spesa`.
 
-**The registry matched nothing.** The Profiler correctly identified the domain as `Rapporti_di_lavoro`, but every column came back with `canonical_hint: null` — no entry in the curated registry corresponds to these fields. The run therefore proceeded entirely on **inferred** format specs and **mined** cross-column rules, with no canonical grounding at all. That it still reached 0.9798 is the strongest evidence in this README that the deterministic layer carries the system when the knowledge base does not.
+**The registry gave it almost nothing to hold on to.** The Profiler identified the domain as `Rapporti_di_lavoro`, but of the file's 19 column names exactly **one** — `anno` — appears anywhere in the curated registry, and the closest registry dataset shares that single name. The run therefore leaned overwhelmingly on **inferred** format specs and **mined** cross-column rules rather than on canonical grounding. That it still reached 0.9798 is good evidence that the deterministic layer carries the system where the knowledge base is thin.
 
 **Auto-remediation did the cross-column work.** Two mined rules dominate the file — `RATA determines mese` (1,702 rows breaking) and `RATA determines anno` (1,160 rows breaking) — and `auto_remediation` repaired 958 of those rows by deriving month and year directly from the period key, plus 802 period labels normalised.
 
@@ -586,9 +586,9 @@ Three things distinguish this run from `spesa`.
 
 ### 4.10 Generalisation: a held-out dataset
 
-The canonical registry and the retrieval index in this repository were built by hand from **NoiPA open data**. Alongside the two files the brief requires, we downloaded four further NoiPA datasets — `assenzeMensili.csv`, `contributiPrevidenziali.csv`, `ritenuteSindacali.csv` and `trasferimentiPersonale.csv` — which live in `datasets/` and were **never used to build the registry**. They exist to answer a question the two required files cannot: does the pipeline work on a NoiPA file it has no curated knowledge of, or is it fitted to the two it was developed against?
+The canonical registry and the retrieval index in this repository were built by hand from **NoiPA open data**. Alongside the two files the brief requires, we downloaded four further NoiPA datasets — `assenzeMensili.csv`, `contributiPrevidenziali.csv`, `ritenuteSindacali.csv` and `trasferimentiPersonale.csv` — which live in `datasets/`. The pipeline was never developed or tuned against any of them, so they answer a question the two required files cannot: does it work on a NoiPA file it was not built around?
 
-`ritenuteSindacali.csv` — trade-union dues, **11,745 rows × 14 columns** — is the sharpest test of the four. The registry covers `RitenuteFiscali`, `RitenutePrevidenziali` and `RitenutePrestiti` but **not** union dues, so the dataset sits in an adjacent domain that is genuinely absent from the knowledge base. It also uses a different identifier convention (`id_record`, a UUID, rather than `_id`) and carries an arithmetic identity between three of its columns.
+`ritenuteSindacali.csv` — trade-union dues, **11,745 rows × 14 columns** — is the sharpest test of the four. The registry does carry an `EntryRitenuteSindacali` definition, but it describes a different aggregation of the same subject: eight columns cut by province, age band and sex, where this file is cut by union and month. Only **two** of the file's fourteen column names, `amministrazione` and `comparto`, appear anywhere in the registry. It also uses a different identifier convention (`id_record`, a UUID, rather than `_id`) and carries an arithmetic identity between three of its columns.
 
 The pipeline handled it without a single error, and it is the cleanest of the three runs: **15,129 violations detected, 1,039 left standing**, a 93.1% reduction, with reliability moving **0.9268 → 0.9632** like-for-like.
 
@@ -605,10 +605,10 @@ The pipeline handled it without a single error, and it is the cleanest of the th
 
 | | `spesa` | `attivazioniCessazioni` | `ritenuteSindacali` |
 |---|---|---|---|
-| Role | required | required | **held out** |
+| Role | required | required | **not developed against** |
 | Rows × columns, raw | 7,543 × 18 | 20,102 × 19 | 11,745 × 14 |
 | Columns delivered | 11 | 12 | 12 |
-| Canonical registry match | partial | **none** | **none** |
+| Column names known to the registry | 1 of 18 | 1 of 19 | 2 of 14 |
 | Disguised nulls unmasked | 988 | 2,888 | 441 |
 | Violations detected → residual | 18,372 → 1,643 | 50,225 → 7,343 | 15,129 → **1,039** |
 | Cells changed | 5,764 | 8,246 | 14,117 |
@@ -632,7 +632,7 @@ Read together, the three runs support a narrower claim than any one of them woul
 
 The three runs support a narrower claim than "the pipeline improves data quality", and the narrower claim is the one worth making: **the system improved every dataset it was given while remaining able to account for each change it made, and it declined the changes it could not account for.**
 
-Concretely, on `spesa.csv` it raised like-for-like reliability from **0.9380 to 0.9959**, eliminated **100%** of schema violations and **99.4%** of format violations, reduced completeness violations by **90.6%**, removed **7 redundant or empty columns** and **65 duplicate rows**, and changed **5,764 cells** — each one recorded in a cell-level change log naming the stage that changed it. On the larger `attivazioniCessazioni.csv` it went **0.8652 → 0.9798** with no canonical registry match at all, and on the held-out `ritenuteSindacali.csv` **0.9268 → 0.9632**, closing completeness, validity, format and schema entirely and mining four cross-column rules unaided.
+Concretely, on `spesa.csv` it raised like-for-like reliability from **0.9380 to 0.9959**, eliminated **100%** of schema violations and **99.4%** of format violations, reduced completeness violations by **90.6%**, removed **7 redundant or empty columns** and **65 duplicate rows**, and changed **5,764 cells** — each one recorded in a cell-level change log naming the stage that changed it. On the larger `attivazioniCessazioni.csv` it went **0.8652 → 0.9798** with only one of nineteen column names known to the registry, and on `ritenuteSindacali.csv` — a file it was never developed against — **0.9268 → 0.9632**, closing completeness, validity, format and schema entirely and mining four cross-column rules unaided.
 
 That the held-out file worked is the result we would defend hardest: the system is not fitted to the two datasets it was developed against.
 
