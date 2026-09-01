@@ -158,10 +158,6 @@ def _card(title: str, detail: str) -> str:
     return f"<div class='card'><div class='t'>{title}</div><div class='d'>{detail}</div></div>"
 
 
-def _group_id_of(fix_id: str) -> str:
-    return fix_id.split("_", 1)[0]
-
-
 def _repropose(group_id: str, feedback: str) -> None:
     current: PipelineState = st.session_state.pipeline_state
     group = current.fix_groups.get(group_id, [])
@@ -181,12 +177,12 @@ def _repropose(group_id: str, feedback: str) -> None:
         specs_by_col=_specs_by_col(current.inferred_format_specs),
         imputation_hints=current.imputation_hints,
     ).proposals
-    kept = [p for p in current.proposed_fixes if _group_id_of(p.id) != group_id]
+    kept = [p for p in current.proposed_fixes if p.group_id != group_id]
     st.session_state.pipeline_state = current.model_copy(
         update={"proposed_fixes": kept + replacements}
     )
     for proposal in current.proposed_fixes:
-        if _group_id_of(proposal.id) == group_id:
+        if proposal.group_id == group_id:
             st.session_state.fix_decisions.pop(proposal.id, None)
             st.session_state.editing.pop(proposal.id, None)
 
@@ -448,7 +444,7 @@ with review:
                 )
                 if st.button("Re-propose", key=f"rep_{proposal.id}") and feedback.strip():
                     with st.spinner("Re-proposing"):
-                        _repropose(_group_id_of(proposal.id), feedback.strip())
+                        _repropose(proposal.group_id, feedback.strip())
                     st.rerun()
 
     if accepted:

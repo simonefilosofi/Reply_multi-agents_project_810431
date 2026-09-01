@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections import defaultdict
 from typing import NamedTuple
 
@@ -47,6 +48,7 @@ _CORRECTION_EXAMPLES = 20
 _MAX_EXAMPLE_VALUES = 8
 _MAX_REVIEW_ITERATIONS = 3
 _MAX_REPORTED_ISSUES = 5
+_GENERATED_FUNCTION = "apply_generated_function"
 
 
 class GroupOutcome(NamedTuple):
@@ -360,8 +362,7 @@ def propose_for_group(
             chain, system, ctx, input_violation_ids, group, fb,
         ),
     )
-    namespaced = [_namespace_proposal(group_id, p)
-                  for p in _without_dangling_dependencies(reviewed)]
+    namespaced = _namespace_proposals(group_id, _without_dangling_dependencies(reviewed))
     still_open = unexplained_columns(group, reports_by_name, namespaced)
     open_by_column = rows_by_column(still_open, reports_by_name)
     declared = declared_unaddressed(
@@ -1002,15 +1003,49 @@ def _coverage_errors(
     return errors
 
 
-def _namespace_proposal(group_id: str, proposal: FixProposal) -> FixProposal:
-    return proposal.model_copy(update={
-        "id": f"{group_id}_{proposal.id}",
-        "depends_on": [f"{group_id}_{d}" for d in proposal.depends_on],
-        "code": "\n".join(describe_operation(o) for o in proposal.operations),
-        "affected_columns": sorted({
-            getattr(o, "column", "") for o in proposal.operations if getattr(o, "column", "")
-        }) or proposal.affected_columns,
-    })
+def _namespace_proposals(group_id: str, proposals: list[FixProposal]) -> list[FixProposal]:
+    """Replaces the opaque token the model chose for each proposal with a name built from what the
+    proposal actually does, in the form the deterministic schema proposals already use. The rename
+    is resolved for the whole group before anything is rewritten, because depends_on cites the old
+    tokens. Columns are unique to a group, so a name collides only when one group proposes the same
+    operation on the same column twice, and the counter keeps those distinct."""
+    taken: set[str] = set()
+    renamed = {proposal.id: _proposal_name(proposal, group_id, taken) for proposal in proposals}
+    return [
+        proposal.model_copy(update={
+            "id": renamed[proposal.id],
+            "group_id": group_id,
+            "depends_on": [renamed[d] for d in proposal.depends_on if d in renamed],
+            "code": "\n".join(describe_operation(o) for o in proposal.operations),
+            "affected_columns": sorted({
+                getattr(o, "column", "") for o in proposal.operations if getattr(o, "column", "")
+            }) or proposal.affected_columns,
+        })
+        for proposal in proposals
+    ]
+
+
+def _proposal_name(proposal: FixProposal, group_id: str, taken: set[str]) -> str:
+    operation = proposal.operations[0] if proposal.operations else None
+    if operation is None:
+        stem = f"{group_id}_fix"
+    elif operation.kind == _GENERATED_FUNCTION and operation.column:
+        stem = f"clean_{operation.column}"
+    elif getattr(operation, "column", ""):
+        stem = f"{operation.kind}_{operation.column}"
+    else:
+        stem = operation.kind
+    stem = _slug(stem)
+    name, ordinal = stem, 2
+    while name in taken:
+        name, ordinal = f"{stem}_{ordinal}", ordinal + 1
+    taken.add(name)
+    return name
+
+
+def _slug(text: str) -> str:
+    cleaned = re.sub(r"[^0-9A-Za-z]+", "_", text).strip("_")
+    return cleaned or "fix"
 
 
 def _empty_report(col: str) -> ValidationReport:

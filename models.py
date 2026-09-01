@@ -196,6 +196,7 @@ class FixProposal(BaseModel):
     operations: list[Operation] = Field(default_factory=list)
     code: str = ""
     depends_on: list[str] = Field(default_factory=list)
+    group_id: str = ""
 
 
 class FixGroupResponse(BaseModel):
