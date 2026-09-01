@@ -11,7 +11,7 @@ from tools.cross_column_checks import candidate_predictors, cross_column_reports
 from tools.decimal_precision import recorded_precision, rounds_cleanly
 from tools.merge_reports import merge_reports
 from tools.mine_functional_deps import mine_functional_deps
-from tools.normalize_period_format import is_canonical
+from tools.normalize_period_format import CANONICAL_STRFTIME, is_canonical
 from tools.derive_from_period import contested_rows, derivable_columns, derive
 from tools.operations import apply_operation
 from tools.temporal_stability import time_column
@@ -29,10 +29,12 @@ def auto_remediation_node(state: PipelineState) -> PipelineState:
     df = before.copy()
     applied: list[dict] = []
     rounded_precisions: dict[str, int] = {}
+    normalized_periods: set[str] = set()
 
     for column in _period_columns(state):
         rewritten = _apply(df, Operation(kind="normalize_period", column=column))
         if rewritten:
+            normalized_periods.add(column)
             applied.append({
                 "column": column,
                 "operation": "normalize_period",
@@ -112,7 +114,10 @@ def auto_remediation_node(state: PipelineState) -> PipelineState:
 
     changes, _ = diff_cells(before, df, "auto_remediation")
     touched = {entry["column"] for entry in applied}
-    specs = _realign_range_bounds(state.inferred_format_specs, rounded_precisions)
+    specs = _realign_period_specs(
+        _realign_range_bounds(state.inferred_format_specs, rounded_precisions),
+        normalized_periods,
+    )
     return state.model_copy(update={
         "dataset": df,
         "inferred_format_specs": specs,
@@ -218,6 +223,26 @@ def _realign_range_bounds(
         if spec.get("type") != "range":
             continue
         realigned[column] = {**info, "final_spec": {**spec, **_rounded_bounds(spec, precision)}}
+    return realigned
+
+
+def _realign_period_specs(specs: dict[str, dict], normalized: set[str]) -> dict[str, dict]:
+    """A period column's spec is inferred from the layout the file arrived in, so rewriting the
+    column to the canonical YYYYMM form invalidates the very spec that described it: the residual
+    check would then fail every row this node just corrected, and report a clean column as wholly
+    non-conforming. Restating the spec in the canonical layout keeps the check measuring the
+    column as it now stands. It stays a date spec rather than becoming a pattern, because that is
+    what marks a column as a period to this node and as a clock to the cross-column checks.
+    Values the rewrite could not parse are left untouched and stay visible as violations."""
+    if not normalized:
+        return specs
+    realigned = dict(specs)
+    for column in normalized:
+        info = realigned.get(column) or {}
+        realigned[column] = {
+            **info,
+            "final_spec": {"type": "date", "strftime_pattern": CANONICAL_STRFTIME},
+        }
     return realigned
 
 

@@ -13,6 +13,8 @@ _ENGLISH_MONTHS = {
 }
 _MONTH_NAMES = {**_ENGLISH_MONTHS, **_ITALIAN_MONTHS}
 
+CANONICAL_STRFTIME = "%Y%m"
+
 _CANONICAL = re.compile(r"^(\d{4})(0[1-9]|1[0-2])$")
 _YEAR_FIRST = re.compile(r"^(\d{4})[-/. ](\d{1,2})$")
 _MONTH_FIRST = re.compile(r"^(\d{1,2})[-/. ](\d{4})$")
