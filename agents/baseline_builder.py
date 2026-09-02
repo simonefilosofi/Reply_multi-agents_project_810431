@@ -19,8 +19,9 @@ from tools.duplicate_rows import duplicate_row_analysis
 from tools.reliability_score import compute_metrics
 
 
-_REGISTRY_PATH = Path("noipa_schema_registry.json")
-_BASELINE_OUTPUT = Path("baseline.json")
+_REGISTRY_DIR = Path(__file__).resolve().parent.parent / "registry"
+_REGISTRY_PATH = _REGISTRY_DIR / "noipa_schema_registry.json"
+_BASELINE_OUTPUT = _REGISTRY_DIR / "baseline.json"
 _REF_PREFIX = "#/shared_column_definitions/"
 
 

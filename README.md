@@ -87,17 +87,24 @@ Reply_multi-agents_project_810431/
 |   `-- ...                            # profiling, matching, validation, execution
 |-- prompts/                           # one markdown prompt per LLM-calling agent
 |-- utils/llm.py                       # the single construction point for the chat model
-|-- tests/                             # 291 tests; no network and no API key required
-|-- datasets/                          # four further NoiPA CSVs, beyond the two required
+|-- tests/                             # 304 tests; no network and no API key required
+|-- datasets_extra/                    # four further NoiPA CSVs, beyond the two required
 |-- Datasets-Reply-20260313/           # the two datasets required by the brief
 |-- images/                            # figures used by this README
+|-- registry/                          # the canonical schema and its retrieval index
+|   |-- noipa_schema_registry.json     # hand-curated canonical registry
+|   |-- column_descriptions.json       # retrieval index for canonical matching
+|   |-- column_descriptions.embeddings.pkl  # its cached embedding matrix
+|   `-- baseline.json                  # the resolved registry, rewritten on every run
+|-- docs/                              # the brief, the course guidelines, the presentation
+|-- out/                               # run artefacts (gitignored; see Section 4)
 |-- models.py                          # the typed artifact contracts
 |-- state.py                           # PipelineState, shared by every node
 |-- graph.py                           # LangGraph wiring and the compiled default graph
 |-- app.py                             # Streamlit GUI and human approval gate
 |-- main.ipynb                         # explanatory notebook
-|-- noipa_schema_registry.json         # hand-curated canonical registry
-|-- column_descriptions.json(+.pkl)    # retrieval index for canonical matching
+|-- make_readme_figures.py             # regenerates images/ from a run's own artefacts
+|-- conftest.py
 |-- requirements.txt
 `-- .env                               # DEEPSEEK_API_KEY, OPENAI_API_KEY, E2B_API_KEY (local only)
 ```
@@ -206,9 +213,9 @@ This decomposition explains how two properties coexist that usually trade off: t
 
 The pipeline is grounded in two hand-curated files that together form a semi-RAG knowledge base of NoiPA's canonical data model. Both were **written by hand from NoiPA open data**: we downloaded a set of published NoiPA datasets, read their fields, and distilled the recurring columns, domains and conventions into a registry. It is curation, not extraction — the registry states what a field *should* be, which no single file can tell you.
 
-That provenance is also why `datasets/` exists. Four further NoiPA files we downloaded — `assenzeMensili.csv`, `contributiPrevidenziali.csv`, `ritenuteSindacali.csv` and `trasferimentiPersonale.csv` — live there and are not among the two the brief requires. They exist to answer a question those two cannot: does the pipeline work on a NoiPA file it was not developed against, or is it fitted to the two it was? Section 4.10 reports one such run.
+That provenance is also why `datasets_extra/` exists. Four further NoiPA files we downloaded — `assenzeMensili.csv`, `contributiPrevidenziali.csv`, `ritenuteSindacali.csv` and `trasferimentiPersonale.csv` — live there and are not among the two the brief requires. They exist to answer a question those two cannot: does the pipeline work on a NoiPA file it was not developed against, or is it fitted to the two it was? Section 4.10 reports one such run.
 
-**`noipa_schema_registry.json`** is the canonical schema. It declares four domains — `Amministrati`, `Amministrazioni`, `Rapporti_di_lavoro`, `Trattamento_economico` — holding eighteen dataset definitions between them, plus a `shared_column_definitions` block of twelve reusable column contracts referenced by `$ref`. It also carries the global conventions the whole pipeline validates against:
+**`noipa_schema_registry.json`** is the canonical schema. It declares four domains — `Amministrati`, `Amministrazioni`, `Rapporti_di_lavoro`, `Trattamento_economico` — holding nineteen dataset definitions between them, plus a `shared_column_definitions` block of twelve reusable column contracts referenced by `$ref`. It also carries the global conventions the whole pipeline validates against:
 
 ```json
 {
@@ -357,7 +364,7 @@ The mechanics are deliberately narrow. `tools/generated_function.py` builds a sm
 
 Two lifecycle details matter in practice. One sandbox is **held open for a whole run** and reused across trials, because the repair loop re-checks a proposal at the top of every iteration and again when it settles — a fresh VM per check would cross the network dozens of times for the same source. That handle survives the call that created it, so `close_sandbox()` is called explicitly at the end of `agents/unified.py`: in a long-lived process such as the Streamlit gate an unclosed sandbox stays connected and billed for the whole session. Results are additionally **cached by `(source, values)`**, which is sound precisely because a cleaner is a pure scalar function.
 
-**The fallback is a real degradation, and is recorded as one.** `E2B_API_KEY` is optional: with no key, or when the sandbox call fails, execution falls back to a **local cage** — `load_callable` behind a whitelist of builtins and a restricted import hook, in this process. That keeps the pipeline running offline, in CI and in the 291 tests, but it is a weaker guarantee, and the system does not pretend otherwise. Every execution is appended to an **execution log** (`{executor, ok, detail}`) which is carried in the state as `generated_function_runs` and printed in the delivered report as *"generated functions validated in a sandbox: N of M"* — so a reader can see whether the isolation the architecture claims actually applied to *their* run. On the `attivazioniCessazioni` run, for instance, 20 trials ran, **10 of them in E2B**; 5 sandbox attempts failed and fell back locally, each failure logged with its reason. Those five have a single cause, and it is the flip side of holding one sandbox open for the whole run: `{"message":"The sandbox was not found","code":502} … likely due to sandbox timeout`. The VM's own lifetime expired part-way through a 7-minute run, and every later trial in that run went local. Reusing one sandbox saves the network round-trips; it also means its TTL, not the pipeline, decides how long the isolation lasts. Passing an explicit `timeout` to `Sandbox.create()`, or reopening the handle when a call reports the VM gone, is the fix — the log is what made the problem visible at all.
+**The fallback is a real degradation, and is recorded as one.** `E2B_API_KEY` is optional: with no key, or when the sandbox call fails, execution falls back to a **local cage** — `load_callable` behind a whitelist of builtins and a restricted import hook, in this process. That keeps the pipeline running offline, in CI and in the 304 tests, but it is a weaker guarantee, and the system does not pretend otherwise. Every execution is appended to an **execution log** (`{executor, ok, detail}`) which is carried in the state as `generated_function_runs` and printed in the delivered report as *"generated functions validated in a sandbox: N of M"* — so a reader can see whether the isolation the architecture claims actually applied to *their* run. On the `attivazioniCessazioni` run, for instance, 20 trials ran, **10 of them in E2B**; 5 sandbox attempts failed and fell back locally, each failure logged with its reason. Those five have a single cause, and it is the flip side of holding one sandbox open for the whole run: `{"message":"The sandbox was not found","code":502} … likely due to sandbox timeout`. The VM's own lifetime expired part-way through a 7-minute run, and every later trial in that run went local. Reusing one sandbox saves the network round-trips; it also means its TTL, not the pipeline, decides how long the isolation lasts. Passing an explicit `timeout` to `Sandbox.create()`, or reopening the handle when a call reports the VM gone, is the fix — the log is what made the problem visible at all.
 
 It is worth stating plainly, because it is the kind of thing a project of this sort usually glosses over: **the sandbox isolates the host but does not restrain the code.** Inside the VM, refused source would run happily. It is the *static gate* that makes local execution on the full column safe, and the sandbox that makes the *first* execution safe to attempt at all. The two layers do different jobs and neither substitutes for the other.
 
@@ -596,7 +603,7 @@ Three things distinguish this run from `spesa`.
 
 ### 4.10 Generalisation: a held-out dataset
 
-The canonical registry and the retrieval index in this repository were built by hand from **NoiPA open data**. Alongside the two files the brief requires, we downloaded four further NoiPA datasets — `assenzeMensili.csv`, `contributiPrevidenziali.csv`, `ritenuteSindacali.csv` and `trasferimentiPersonale.csv` — which live in `datasets/`. The pipeline was never developed or tuned against any of them, so they answer a question the two required files cannot: does it work on a NoiPA file it was not built around?
+The canonical registry and the retrieval index in this repository were built by hand from **NoiPA open data**. Alongside the two files the brief requires, we downloaded four further NoiPA datasets — `assenzeMensili.csv`, `contributiPrevidenziali.csv`, `ritenuteSindacali.csv` and `trasferimentiPersonale.csv` — which live in `datasets_extra/`. The pipeline was never developed or tuned against any of them, so they answer a question the two required files cannot: does it work on a NoiPA file it was not built around?
 
 `ritenuteSindacali.csv` — trade-union dues, **11,745 rows × 14 columns** — is the sharpest test of the four. The registry does carry an `EntryRitenuteSindacali` definition, but it describes a different aggregation of the same subject: eight columns cut by province, age band and sex, where this file is cut by union and month. Only **two** of the file's fourteen column names, `amministrazione` and `comparto`, appear anywhere in the registry. It also uses a different identifier convention (`id_record`, a UUID, rather than `_id`) and carries an arithmetic identity between three of its columns.
 

@@ -1,11 +1,14 @@
 """The shared PipelineState every node reads and returns an updated copy of. Fields are grouped below by the stage that fills them: input, baseline, profiling, semantic payload, duplicate-column resolution, format validation, anomaly detection, remediation proposals and approvals, the cell-level audit trail, and the measurements the report is built from. The dataset is held as Any because Pydantic cannot serialise a DataFrame."""
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 from models import AnomalyReport, BaselineFile, ColumnPayload, DuplicateResolution, FixProposal, ImputationHint, UnaddressedViolations, ValidationReport
+
+_DEFAULT_BASELINE_PATH = str(Path(__file__).resolve().parent / "registry" / "baseline.json")
 
 
 class PipelineState(BaseModel):
@@ -13,7 +16,7 @@ class PipelineState(BaseModel):
     dataset_path: str = ""
 
     baseline: BaselineFile | None = None
-    baseline_path: str = "baseline.json"
+    baseline_path: str = _DEFAULT_BASELINE_PATH
 
     detected_domain: str = ""
     detected_language: str = ""
