@@ -4,9 +4,37 @@
 
 **Team members:** Allam Eliya, Cervelli Mattia, Filosofi Simone
 
-This repository documents a project developed for the Machine Learning course, academic year 2025/26, in collaboration with Reply. The project studies how a **multi-agent LLM pipeline behind a human approval gate** can be used to detect data quality defects in a raw CSV, attach a corrective action to every defect it finds, apply only what a reviewer approves, and produce a data quality report carrying **identified anomalies, correction suggestions and a reliability score**. The system is tailored to **NoiPA (MEF) administrative data** — HR, payroll and public expenditure records — in which disguised nulls, columns duplicated under different names, drifting value formats and legacy codes are the norm rather than the exception.
+This repository documents a project developed for the Machine Learning course, academic year 2025/26, in collaboration with Reply. The project studies how a **multi-agent LLM pipeline behind a human approval gate** can be used to detect data quality defects in a raw CSV, attach a corrective action to every defect it finds, apply only what a reviewer approves, and produce a data quality report carrying **identified anomalies, correction suggestions and a reliability score**. The system is tailored to **NoiPA (MEF) administrative data**: HR, payroll and public expenditure records, in which disguised nulls, columns duplicated under different names, drifting value formats and legacy codes are the norm rather than the exception.
 
-The **central idea** is that a data quality defect is not one kind of object, and that treating it as one is exactly what makes naive LLM cleaning unaccountable. A wrong dtype, a null hiding behind the string `N/D`, two columns holding the same field under different names, a value contradicting the row it sits in, and a statistical outlier are five different problems. They rest on different evidence, they carry different risk, and — the point the whole architecture turns on — they deserve **different authority**. Some may be applied by the system on its own. Some may only ever be *proposed* to a human. And some have no honest fix at all and must be reported as such.
+The **central idea** is that a data quality defect is not one kind of object, and that treating it as one is exactly what makes naive LLM cleaning unaccountable. A wrong dtype, a null hiding behind the string `N/D`, two columns holding the same field under different names, a value contradicting the row it sits in, and a statistical outlier are five different problems. They rest on different evidence, they carry different risk, and they deserve **different authority**. That last point is what the architecture is built around. Some may be applied by the system on its own. Some may only ever be *proposed* to a human. And some have no honest fix at all and must be reported as such.
+
+### At a glance
+
+Three NoiPA datasets, each run end to end with every proposal approved so that the full remediation
+path is exercised. No run finished with an error.
+
+| Dataset | Rows × columns | Reliability, like-for-like | Violations detected → residual |
+|---|---|---|---|
+| `spesa.csv` | 7,543 × 18 | 0.9380 → **0.9960** | 18,459 → 1,633 |
+| `attivazioniCessazioni.csv` | 20,102 × 19 | 0.8652 → **0.9798** | 50,315 → 7,343 |
+| `ritenuteSindacali.csv` *(not developed against)* | 11,745 × 14 | 0.9268 → **0.9451** | 15,300 → 1,276 |
+
+Every changed cell is recorded with the stage that changed it, and every violation left standing is
+reported with the reason no repair was available. Section 4 unpacks all three runs.
+
+### Contents
+
+| Section | What it covers |
+|---|---|
+| [1. Introduction](#1-introduction) | the setting, the problem, the contribution, and how to run everything |
+| [2. Methods](#2-methods) | the architecture, the twelve stages, the reliability score, and the safety of generated code |
+| [3. Experimental Design](#3-experimental-design) | the six design transitions that produced the final system |
+| [4. Results](#4-results) | the three recorded runs, in detail and side by side |
+| [5. Conclusions](#5-conclusions) | what the results support, where the system fails, and what comes next |
+
+Jump straight to [setup and commands](#16-reproducibility-and-environment), the
+[approval gate](#245-the-human-approval-gate), or the
+[three runs side by side](#411-the-three-runs-side-by-side).
 
 ---
 
@@ -25,7 +53,7 @@ Even assuming every source administration acts in good faith, that assumption fa
 - **Representation noise.** `spesa` recorded to two decimals but carrying floating-point tails past them.
 - **Columns that are nearly empty.** `note` and `fonte_dato` are over 98% null and cannot support any inference at all.
 
-This context suits a multi-agent project because the **main difficulty is not detection**. Counting nulls is trivial. The difficulty is the **gap between noticing a defect and being allowed to act on it**: knowing which defects the data itself determines, which ones require a judgement a machine should not make alone, and which ones admit no fix. If those are not separated carefully, a cleaning run silently invents data, and the resulting file is worse than the dirty one because it now looks trustworthy.
+This context suits a multi-agent project because the **main difficulty is not detection**. Counting nulls is trivial. The difficulty is the **gap between noticing a defect and being allowed to act on it**: knowing which defects the data itself determines, which ones need a judgement a machine should not make alone, and which ones admit no fix. If those are not separated carefully, a cleaning run silently invents data, and the resulting file is worse than the dirty one because it now looks trustworthy.
 
 ### 1.2 Problem Statement
 
@@ -40,12 +68,12 @@ The objective is a **multi-agent pipeline** that receives a raw CSV and produces
 The practical goal is plain: fix what can be fixed, and say honestly what could not be. The **methodological goal** is about how. The claim is not that an LLM can clean data — it is that **the division of authority is the contribution**, and that the system works *because* of specific choices about who is allowed to decide what:
 
 - **Deterministic code measures; the model never measures.** Every count, rate, bound and violation in this system is computed by `pandas` in `tools/`. An agent receives a bounded, pre-measured evidence bundle and is asked for a judgement over it — never for a number.
-- **Value-level repair is generated code, gated four ways — and never run on this machine first.** The model writes a `clean_value(value)` function so that a format rule *generalises* rather than enumerating the values already observed. A static gate parses that source before anything runs; its **first execution ever happens in an [E2B](https://e2b.dev/docs) cloud sandbox**, on someone else's machine, against the column's own values; a human then sees it verbatim; and a failure comes back as typed evidence rather than as a discarded attempt.
+- **Value-level repair is generated code, gated four ways, and never run on this machine first.** The model writes a `clean_value(value)` function so that a format rule *generalises* rather than enumerating the values already observed. A static gate parses that source before anything runs; its **first execution ever happens in an isolated [E2B](https://e2b.dev/docs) cloud VM**, against the column's own values; a human then sees it verbatim; and a failure comes back as typed evidence rather than as a discarded attempt.
 - **Anything that can lose or invent data is a typed operation**, drawn from a fixed catalogue, never free code.
 - **Nothing structural is applied without human approval.** `apply_fixes` executes only the ids in `state.approved_fix_ids` and is a no-op otherwise.
 - **A rule that can be checked by executing the fix lives in code, not in a prompt.** A prompt-stated rule can be ignored unnoticed.
 
-The LLM is not an optional garnish on this design; it is what makes the design feasible. Deciding that `cod imposta ext` and `cod_imposta` are the same field, that `descrizione` means what it means, or that a rare category is a legacy code rather than a typo, requires semantic judgement no amount of `pandas` supplies. But the LLM components are never standalone: the measurement is always done first, deterministically, and the model reasons only over the result.
+The model is not decoration on this design; it is what makes the design feasible. Deciding that `cod imposta ext` and `cod_imposta` are the same field, that `descrizione` means what it means, or that a rare category is a legacy code rather than a typo, requires semantic judgement no amount of `pandas` supplies. But the LLM components are never standalone: the measurement is always done first, deterministically, and the model reasons only over the result.
 
 ### 1.4 Coverage of the Five Mandatory Areas
 
@@ -59,9 +87,9 @@ The LLM is not an optional garnish on this design; it is what makes the design f
 
 ### 1.5 Repository Structure and Technology Stack
 
-The repository exposes **two execution surfaces over one pipeline**: `main.ipynb`, the explanatory notebook that runs the graph stage by stage and shows every intermediate artifact; and `app.py`, the Streamlit application that is *also* the human approval gate. `graph.py` additionally exposes the same nodes as a compiled LangGraph object for programmatic use. There is no separate CLI and no `src/` package — the pipeline is the repository root.
+The repository exposes **two execution surfaces over one pipeline**: `main.ipynb`, the explanatory notebook that runs the graph stage by stage and shows every intermediate artefact; and `app.py`, the Streamlit application that is *also* the human approval gate. `graph.py` additionally exposes the same nodes as a compiled LangGraph object for programmatic use. There is no separate CLI and no `src/` package — the pipeline is the repository root.
 
-The stack combines `langgraph` and `langchain-core` for orchestration and typed state, [`langchain-deepseek`](https://python.langchain.com/docs/integrations/chat/deepseek/) for every chat call, `openai` for the embedding index behind canonical matching, `pydantic` for the artifact contracts, `pandas` and `numpy` for all deterministic measurement, [`e2b-code-interpreter`](https://e2b.dev/docs) for the first execution of generated cleaning code, and `streamlit` for the gate.
+The stack combines `langgraph` and `langchain-core` for orchestration and typed state, [`langchain-deepseek`](https://python.langchain.com/docs/integrations/chat/deepseek/) for every chat call, `openai` for the embedding index behind canonical matching, `pydantic` for the artefact contracts, `pandas` and `numpy` for all deterministic measurement, [`e2b-code-interpreter`](https://e2b.dev/docs) for the first execution of generated cleaning code, and `streamlit` for the gate.
 
 Of the twelve pipeline stages, **six call a model directly** (`profiler`, `semantic`, `duplicate_column`, `anomaly_detector`, `unified`, `report_generator`) and one (`format_consistency`) calls it indirectly through two tools. The remaining five are pure Python.
 
@@ -87,7 +115,7 @@ Reply_multi-agents_project_810431/
 |   `-- ...                            # profiling, matching, validation, execution
 |-- prompts/                           # one markdown prompt per LLM-calling agent
 |-- utils/llm.py                       # the single construction point for the chat model
-|-- tests/                             # 347 tests; no network and no API key required
+|-- tests/                             # 348 tests; no network and no API key required
 |-- datasets_extra/                    # four further NoiPA CSVs, beyond the two required
 |-- Datasets-Reply-20260313/           # the two datasets required by the brief
 |-- images/                            # figures used by this README
@@ -103,7 +131,7 @@ Reply_multi-agents_project_810431/
 |   |-- acceptance.py                  # the delivered artefacts are complete and consistent
 |   `-- census.py                      # raw defects enumerated independently of the pipeline
 |-- out/                               # scratch run artefacts (gitignored)
-|-- models.py                          # the typed artifact contracts
+|-- models.py                          # the typed artefact contracts
 |-- state.py                           # PipelineState, shared by every node
 |-- graph.py                           # LangGraph wiring and the compiled default graph
 |-- app.py                             # Streamlit GUI and human approval gate
@@ -133,7 +161,7 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-Every LLM-calling stage requires a `DEEPSEEK_API_KEY`. Canonical matching by embedding retrieval additionally requires an `OPENAI_API_KEY`. `E2B_API_KEY` is **optional but recommended**: it moves the first execution of every generated cleaning function off this machine and into a cloud micro-VM. Without it that execution falls back to the local cage described in Section 2.6 — the pipeline still runs, with a weaker isolation guarantee, and the report states which executor validated each function. Variables are loaded from `.env` at the repository root through `python-dotenv`:
+Every LLM-calling stage requires a `DEEPSEEK_API_KEY`. Canonical matching by embedding retrieval additionally requires an `OPENAI_API_KEY`. `E2B_API_KEY` is **optional but recommended**: it moves the first execution of every generated cleaning function off this machine and into a cloud micro-VM. Without it that execution falls back to a restricted local namespace instead (the *local cage* of Section 2.6). The pipeline still runs, with a weaker isolation guarantee, and the report states which executor validated each function. Variables are loaded from `.env` at the repository root through `python-dotenv`:
 
 ```dotenv
 DEEPSEEK_API_KEY=your_value_here
@@ -168,7 +196,11 @@ python record_run.py Datasets-Reply-20260313/project_data_quality/spesa.csv runs
 python figures.py
 ```
 
-A recorded run is then graded by `checks/`, which reads only what is under `runs/` and needs no API key. `acceptance.py` asks whether what reaches the client is complete and says the same thing twice — every artefact written, every section present, every row of the coverage table reporting something rather than a zero, and the per-column appendix matching the delivered file to within 0.15%. `verify.py` pins **value-level invariants** rather than output bytes, because the model-calling nodes are not reproducible run to run and a byte diff would report model noise as a regression; it compares against `checks/invariants.json` and reports which invariant moved. `census.py` enumerates the raw defects using rules written independently of the pipeline's own detectors, so a run can be graded against an outside reading of the file rather than against itself.
+A recorded run is then graded by `checks/`, which reads only what is under `runs/` and needs no API key.
+
+- **`acceptance.py`** asks whether what reaches the client is complete and says the same thing twice: every artefact written, every section present, every row of the coverage table reporting something rather than a zero, and the per-column appendix matching the delivered file to within 0.15%.
+- **`verify.py`** pins value-level invariants rather than output bytes. The model-calling nodes are not reproducible run to run, so a byte diff would report model noise as a regression. It compares against `checks/invariants.json` and names which invariant moved.
+- **`census.py`** enumerates the raw defects using rules written independently of the pipeline's own detectors, so a run is graded against an outside reading of the file rather than against itself.
 
 ```bash
 python checks/acceptance.py     # the delivered artefacts are complete and consistent
@@ -208,26 +240,26 @@ flowchart LR
   HUMAN{{"human reviewer"}} -. approved_fix_ids .-> L
 ```
 
-The workflow begins by grounding the dataset in a canonical model, then measuring it — against that model and against itself. Only once those measurements are formalised as typed artifacts does the system decide whether a finding is data-determined, judgement-requiring, or unfixable. After a fix executes, every column it touched is re-measured, so the report describes the dataset as delivered rather than as expected.
+The workflow begins by grounding the dataset in a canonical model, then measuring it — against that model and against itself. Only once those measurements are formalised as typed artefacts does the system decide whether a finding is data-determined, judgement-requiring, or unfixable. After a fix executes, every column it touched is re-measured, so the report describes the dataset as delivered rather than as expected.
 
 This serves two purposes. The first is **technical safety**: a stage that cannot measure cannot silently justify its own output, and a stage that cannot execute cannot act on a bad judgement. The second is **interpretability**: because every handoff is a typed object, a reader can point at any cell in the delivered file and trace it back to the operation, the proposal and the violation that produced it.
 
-Conceptually the system reads as **four layers**:
+The same system can be read as **four layers**:
 
 ```mermaid
 flowchart TB
   L1["<b>1 · Deterministic measurement</b><br/>tools/ — pandas only, no model.<br/>Counts, rates, bounds, violations, mined dependencies."]
-  L2["<b>2 · Bounded model reasoning</b><br/>agents/ — each receives a packaged evidence bundle,<br/>never the dataframe. Returns a typed artifact."]
+  L2["<b>2 · Bounded model reasoning</b><br/>agents/ — each receives a packaged evidence bundle,<br/>never the dataframe. Returns a typed artefact."]
   L3["<b>3 · Authority separation</b><br/>data-determined → auto-applied ·<br/>judgement → proposed to a human · unfixable → reported"]
   L4["<b>4 · Execution and audit</b><br/>typed operations + gated generated code,<br/>invariant-checked, cell-level change log, re-measurement"]
   L1 --> L2 --> L3 --> L4
 ```
 
-This decomposition explains how two properties coexist that usually trade off: the system is **free to reason semantically** (layer 2) while remaining **unable to act on that reasoning unchecked** (layers 3 and 4).
+This is how two properties that normally trade off can coexist here: the system is **free to reason semantically** (layer 2) while remaining **unable to act on that reasoning unchecked** (layers 3 and 4).
 
 ### 2.2 The Two Knowledge-Base Files
 
-The pipeline is grounded in two hand-curated files that together form a semi-RAG knowledge base of NoiPA's canonical data model. Both were **written by hand from NoiPA open data**: we downloaded a set of published NoiPA datasets, read their fields, and distilled the recurring columns, domains and conventions into a registry. It is curation, not extraction — the registry states what a field *should* be, which no single file can tell you.
+The pipeline is grounded in two hand-curated files that together describe NoiPA's canonical data model: one states what a column should be, the other supports retrieval over those statements. Both were **written by hand from NoiPA open data**: we downloaded a set of published NoiPA datasets, read their fields, and distilled the recurring columns, domains and conventions into a registry. It is curation, not extraction — the registry states what a field *should* be, which no single file can tell you.
 
 That provenance is also why `datasets_extra/` exists. Four further NoiPA files we downloaded — `assenzeMensili.csv`, `contributiPrevidenziali.csv`, `ritenuteSindacali.csv` and `trasferimentiPersonale.csv` — live there and are not among the two the brief requires. They exist to answer a question those two cannot: does the pipeline work on a NoiPA file it was not developed against, or is it fitted to the two it was? Section 4.10 reports one such run.
 
@@ -248,7 +280,7 @@ That provenance is also why `datasets_extra/` exists. Four further NoiPA files w
 
 **`column_descriptions.json`** and its cached `.embeddings.pkl` are the retrieval index. Each canonical column carries a natural-language description and sample values; the pair is embedded once with `text-embedding-3-small` and cached to disk. This is what makes canonical matching work on columns whose names carry no signal — see Section 3.1.
 
-### 2.3 Typed Artifacts as the Pipeline Contract
+### 2.3 Typed Artefacts as the Pipeline Contract
 
 The defining engineering choice is that **every handoff between stages is a validated Pydantic model**, declared in `models.py`. A stage does not return prose, or a dict, or a dataframe with an understanding attached — it returns an object that either validates or fails loudly.
 
@@ -265,7 +297,7 @@ OperationKind = Literal[
 ]
 ```
 
-In a pipeline of this class the main risk is not that a model returns something wrong — it is that it returns something **plausible that nobody can check**. A typed artifact converts that risk into a validation error at the boundary. It also makes it possible to dry-run a proposal before showing it to a human, to render it as equivalent `pandas` for review, and to reference a violation by a stable id from detection all the way to the report.
+In a pipeline of this class the main risk is not that a model returns something wrong — it is that it returns something **plausible that nobody can check**. A typed artefact converts that risk into a validation error at the boundary. It also makes it possible to dry-run a proposal before showing it to a human, to render it as equivalent `pandas` for review, and to reference a violation by a stable id from detection all the way to the report.
 
 ### 2.4 Detailed Pipeline Stages
 
@@ -295,7 +327,7 @@ The agent never receives the dataframe. It receives a bounded instance: the colu
 
 `nan_handler` **unmasks disguised nulls** using the per-column placeholder lists from the payload, then enforces the proposed dtype *non-destructively*: a column is cast only if every non-null value survives the cast, and blocking values are reported as violations rather than coerced away. It then records the full completeness analysis — fill rate per column and dataset-wide, missing values per row, sparse columns.
 
-One guard here is worth its own sentence. A placeholder list is **refused if it matches more than 30% of a column**, because at that scale the list has stopped describing the gaps in the column and started describing the column's own vocabulary. Without it, a status column whose legitimate dominant value happens to resemble a placeholder token would be erased wholesale.
+One guard deserves naming. A placeholder list is **refused if it matches more than 30% of a column**, because at that scale the list has stopped describing the gaps in the column and started describing the column's own vocabulary. Without it, a status column whose legitimate dominant value happens to resemble a placeholder token would be erased wholesale.
 
 `duplicate_column` detects columns that hold the same field, elects a canonical name among them, and — importantly — picks the **data survivor by measured coherence, not by column order**, recording every cell backfilled, every cell where the survivor disagreed with the dropped column, and every value that existed only in the dropped one. Redundancy removed and data changed are reported separately.
 
@@ -328,11 +360,21 @@ Every proposal is then **dry-run against the dataset** and checked against `tool
 
 `apply_fixes` executes **only** the ids present in `state.approved_fix_ids`, and is a no-op otherwise. This is the mechanism, not a convention: there is no code path by which a proposal reaches the dataset without an explicit id in that list.
 
-The gate itself is the Streamlit **Review and apply** view. For each proposal the reviewer sees the description, the rationale, the affected columns, the estimated row count, and the **generated source verbatim** — the actual code that will run, rendered as executable Python. Three actions are available: **Accept**, **Reject**, and **Revise**, where Revise sends natural-language feedback back to the Unified agent and re-proposes that group alone, leaving every other decision intact.
+The gate itself is the Streamlit **Review and apply** view. For each proposal the reviewer sees the description, the rationale, the affected columns, the estimated row count, and **the code, rendered as executable Python**. Three actions are available: **Accept**, **Reject**, and **Revise**, where Revise sends natural-language feedback back to the Unified agent and re-proposes that group alone, leaving every other decision intact.
+
+What that code *is* depends on which kind of repair the proposal carries, and the gate says which, because the distinction is the whole authority argument of Section 1.3 and a reviewer must not have to guess.
+
+**A typed catalogue operation** is the common case — the great majority of proposals across the three recorded runs. The executed thing is a bounded `Operation` with validated parameters, so what the gate renders is the *equivalent* pandas expression, labelled as such:
+
+![The approval gate rendering a typed catalogue operation](images/approval_gate.png)
+
+**A generated cleaning function** is the exception, and here the code block is not an illustration but the source that will actually run, so the caption changes to say so and to name the guarantees it already passed:
+
+![The approval gate rendering a model-written cleaning function](images/approval_gate_01.png)
+
+The difference is enforced in `app.py`, which selects the caption on whether the proposal carries an `apply_generated_function` operation. It matters because the two demand different things of the reader: the first asks whether the *action* is right, the second asks whether the *code* is right.
 
 After execution the gate reports what actually landed, including **every approved fix that did not** — whether it errored, breached an invariant, or was skipped — so a silent partial application is impossible.
-
-> **[TODO — screenshot]** Add `images/approval_gate.png`: the **Review and apply** tab of `streamlit run app.py`, with a proposal expanded so the operation source and the Accept / Reject / Revise buttons are visible. This is the only figure in the README that must be captured by hand.
 
 #### 2.4.6 Reporting — facts first, prose second
 
@@ -360,7 +402,7 @@ flowchart TB
   GATE["<b>1 · Static gate</b> — ast walk<br/>imports limited to re, datetime, decimal, math<br/>refuses eval, exec, open, compile, input, __import__,<br/>getattr/setattr, globals/locals/vars, while, dunder access"]
   GATE -->|refused| FEED
   GATE -->|cleared| SBX
-  SBX["<b>2 · Sandbox</b> — E2B, 20s timeout<br/>first execution ever, against this column's own<br/>conforming and violating values<br/>(falls back to the local cage with no key)"]
+  SBX["<b>2 · Sandbox</b> — E2B micro-VM, 20s per call<br/>first execution ever, against this column's own<br/>conforming and violating values<br/>(falls back to the local cage with no key)"]
   SBX -->|issues found| FEED
   SBX -->|validated| HUM
   FEED["<b>4 · Failure as feedback</b><br/>deterministic CleanerIssues drive a regeneration;<br/>an identical repeat escalates once to a critic<br/>that diagnoses without writing code"]
@@ -380,11 +422,13 @@ The mechanics are deliberately narrow. `tools/generated_function.py` builds a sm
 
 Two lifecycle details matter in practice. One sandbox is **held open for a whole run** and reused across trials, because the repair loop re-checks a proposal at the top of every iteration and again when it settles — a fresh VM per check would cross the network dozens of times for the same source. That handle survives the call that created it, so `close_sandbox()` is called explicitly at the end of `agents/unified.py`: in a long-lived process such as the Streamlit gate an unclosed sandbox stays connected and billed for the whole session. Results are additionally **cached by `(source, values)`**, which is sound precisely because a cleaner is a pure scalar function.
 
-**The fallback is a real degradation, and is recorded as one.** `E2B_API_KEY` is optional: with no key, or when the sandbox call fails, execution falls back to a **local cage** — `load_callable` behind a whitelist of builtins and a restricted import hook, in this process. That keeps the pipeline running offline, in CI and in the 347 tests, but it is a weaker guarantee, and the system does not pretend otherwise. Every execution is appended to an **execution log** (`{executor, ok, detail}`) which is carried in the state as `generated_function_runs` and printed in the delivered report as *"generated functions validated in a sandbox: N of M"* — so a reader can see whether the isolation the architecture claims actually applied to *their* run. Across the three recorded runs, **eight of eight** first executions happened in E2B and none in the local cage.
+**The fallback is a real degradation, and is recorded as one.** `E2B_API_KEY` is optional: with no key, or when the sandbox call fails, execution falls back to a **local cage** — `load_callable` behind a whitelist of builtins and a restricted import hook, in this process. That keeps the pipeline running offline, in CI and in the 348 tests, but it is a weaker guarantee and the system does not pretend otherwise.
+
+Every execution is appended to an **execution log** (`{executor, ok, detail}`), carried in the state as `generated_function_runs` and printed in the delivered report as *"generated functions validated in a sandbox: N of M"*. A reader can therefore see whether the isolation the architecture claims actually applied to *their* run. Across the three recorded runs, **eight of eight** first executions happened in E2B and none in the local cage.
 
 That log is also what caught the one bug in this layer. An earlier recording of `attivazioniCessazioni` logged 20 trials with only **10 in E2B**; the other 10 fell back, each failure carrying the same reason: `{"message":"The sandbox was not found","code":502} … likely due to sandbox timeout`. Reusing one sandbox for a whole run saves the network round-trips, but it also meant the VM's TTL, not the pipeline, decided how long the isolation lasted — and `Sandbox.create()` was being called with no explicit lifetime, so the provider's default expired part-way through a ten-minute run and every later trial went local without anything failing. `_open_sandbox` now passes a lifetime sized for a run, and `_run_in_sandbox` reopens the handle when a call reports the VM gone. Nothing about the fallback changed; what changed is that it is no longer reached by default.
 
-It is worth stating plainly, because it is the kind of thing a project of this sort usually glosses over: **the sandbox isolates the host but does not restrain the code.** Inside the VM, refused source would run happily. It is the *static gate* that makes local execution on the full column safe, and the sandbox that makes the *first* execution safe to attempt at all. The two layers do different jobs and neither substitutes for the other.
+One boundary should be stated plainly: **the sandbox isolates the host, but it does not restrain the code.** Inside the VM, refused source would run happily. It is the *static gate* that makes local execution on the full column safe, and the sandbox that makes the *first* execution safe to attempt at all. The two layers do different jobs and neither substitutes for the other.
 
 The **failure path** is the fourth layer. A failed validation does not discard the function — it produces typed `CleanerIssue` objects (`forbidden_construct`, `runtime_exception`, `dominant_value_modified`, `outlier_unchanged`, `not_parseable_as_target_dtype`, …) which are fed back as deterministic evidence for another attempt. A failure that repeats **identically** escalates once to a critic model that diagnoses the bug without writing code, on the reasoning that a model repeating itself needs a different question, not another try.
 
@@ -408,13 +452,17 @@ The prompt strategy follows the same logic. **A prompt does not create the evide
 
 Prompts are versioned in git, one markdown file per LLM-calling agent, loaded through `utils/prompts.py` — so a prompt change is a reviewable diff rather than an edit buried in a string literal.
 
-The model configuration in `utils/llm.py` is a **single construction point** for the whole system. `temperature=0` and the provider's reasoning mode explicitly disabled, so temperature is honoured and run-to-run variance is bounded. It is not eliminated: measured across two runs of the same file, every deterministic stage reproduced exactly while the proposal stage did not (Section 4, opening). Schema-constrained answers go through tool calling; when the provider serialises malformed JSON or truncates at the output limit, the request is retried in **JSON mode**, whose constrained decoding cannot emit invalid JSON, with the schema carried in the prompt. An answer neither path produces raises `EmptyModelResponse`, which a caller able to continue without it catches — so one unanswerable group costs that group and no more, rather than the run.
+The model configuration in `utils/llm.py` is a **single construction point** for the whole system: one place to change the model, the temperature or the failure behaviour.
+
+`temperature=0` with the provider's reasoning mode disabled bounds run-to-run variance, but does not remove it. Across repeated recordings of the same file the measurements reproduced exactly, while the proposal stage did not, and neither did the counts of the deterministic stages that run downstream of a model decision (Section 4, opening).
+
+Schema-constrained answers take **two decoding paths**. Tool calling comes first; when the provider serialises malformed JSON or truncates at the output limit, the request is retried in JSON mode, whose constrained decoding cannot emit invalid JSON, with the schema carried in the prompt. An answer neither path produces raises `EmptyModelResponse`. A caller able to continue without that answer catches it, so one unanswerable column group costs that group and no more, rather than the whole run.
 
 ---
 
 ## 3. Experimental Design
 
-The purpose of the project was not only to build the artifact but to understand **which architectural choices make an LLM pipeline reliable enough to be trusted with a repair**. In practice the project evolved through trial and error: several early designs proved too unconstrained, too opaque, or too difficult to verify, and were replaced by more bounded alternatives. The experiments below are those transitions. Each is documented in the repository's history.
+The purpose of the project was not only to build the artefact but to understand **which architectural choices make an LLM pipeline reliable enough to be trusted with a repair**. In practice the project evolved through trial and error: several early designs proved too unconstrained, too opaque, or too difficult to verify, and were replaced by more bounded alternatives. The experiments below are those transitions. Each is documented in the repository's history.
 
 ### 3.1 From name matching to embedding retrieval for canonical matching
 
@@ -427,7 +475,7 @@ The first design resolved an input column to a canonical definition by **name si
 
 ### 3.2 From free-form model edits to a typed operation catalogue, and back to bounded generated code
 
-This was the longest arc in the project and produced its central design claim. The first remediation agent asked the model to **write arbitrary cleaning code** against the dataframe. It was powerful and unauditable: the code could drop rows, reach across columns and rewrite anything, and a reviewer had no bounded question to answer.
+This took the longest to settle, and it produced the project's central design claim. The first remediation agent asked the model to **write arbitrary cleaning code** against the dataframe. It was powerful and unauditable: the code could drop rows, reach across columns and rewrite anything, and a reviewer had no bounded question to answer.
 
 The reaction was to replace generated code entirely with a **typed operation catalogue**. This was safe and immediately too weak: a format rule became a `replace_values` mapping, i.e. an **enumeration of the values already observed**, which does not generalise to the next month's file.
 
@@ -435,7 +483,7 @@ The synthesis is the current split. Generated code returned, but confined to a `
 
 - **Main Purpose**: determine whether generalisation and safety can be obtained simultaneously by constraining the *interface* of generated code rather than its content.
 - **Baselines**: (a) unrestricted generated code against the dataframe; (b) typed operations only.
-- **Evaluation metrics**: **generalisation** — does the rule correct held-out violating values it was never shown, rather than only the sampled ones; **conformance preservation** — are all `dominant_example_values` returned unchanged; and **blast radius** — the set of dataset mutations the mechanism makes structurally impossible. The third is the one that justifies the design: it is a property of the interface, not a rate to be measured.
+- **Evaluation metrics**: **generalisation**, whether the rule corrects held-out violating values it was never shown rather than only the sampled ones; **conformance preservation**, whether all `dominant_example_values` are returned unchanged; and **reach**, the set of changes the mechanism makes structurally impossible. The third is the one that justifies the design: it is a property of the interface, not a rate to be measured.
 - **Resulting design decision**: the two-track remediation of Section 2.4.4, plus the `apply_generated_function` operation as the only channel through which generated source reaches the data.
 
 ### 3.3 From prompt-stated rules to executable invariants
@@ -453,7 +501,7 @@ The first generated-code loop **discarded** a function that failed validation an
 
 - **Main Purpose**: determine whether a failed generation is more cheaply repaired than replaced.
 - **Baseline**: regeneration from the unchanged prompt.
-- **Evaluation metrics**: **repair rate within the attempt budget** and **model calls per accepted function**. Cost per accepted artifact is the honest metric here, because a loop that eventually succeeds after unbounded retries has not solved anything.
+- **Evaluation metrics**: **repair rate within the attempt budget** and **model calls per accepted function**. Cost per accepted artefact is the honest metric here, because a loop that eventually succeeds after unbounded retries has not solved anything.
 - **Resulting design decision**: the feedback loop in `agents/unified.py` with a single critic escalation on an identical repeat, and `prompts/cleaner_critic.md` as a diagnose-only prompt.
 
 ### 3.5 From one global completeness number to three measured snapshots
@@ -495,7 +543,7 @@ Approving everything is the *upper bound* on what the system will do, not its de
 
 One caveat on reproducibility, stated here because it bears on every number that follows. The **measurements are stable**: every recording of `spesa.csv` reproduced all three quality snapshots exactly — the same 7,543 x 18 arrival, the same 16,939 nulls, the same 988 disguised ones, the same delivered 0.9801 completeness — along with the duplicate resolution and the completeness analysis.
 
-**The stages downstream of a model call are not, and the shape of the variance is worth being precise about.** Two independent recordings, one on an earlier revision of the code and one on the current one, agree cell for cell: 4,215 auto-remediated cells, 2,878 of them rounding `spesa` to its recorded precision, 5,659 cells changed in total, the same six proposals. An earlier third recording differed on both counts — 4,324 auto-remediated cells, 2,987 rounded, and four proposals rather than six. Its artefacts were not kept, so that difference cannot be traced to a cause after the fact.
+**The stages downstream of a model call are not.** The shape of that variance is worth stating precisely. Two independent recordings, one on an earlier revision of the code and one on the current one, agree cell for cell: 4,215 auto-remediated cells, 2,878 of them rounding `spesa` to its recorded precision, 5,659 cells changed in total, the same six proposals. An earlier third recording differed on all three: 4,324 auto-remediated cells, 2,987 of them rounded, and four proposals rather than six. Its artefacts were not kept, so that difference cannot be traced to a cause after the fact.
 
 What makes such a difference possible is structural rather than random. `round_decimals` is deterministic, but it runs on `spesa` *after* `duplicate_column` has collapsed `{spesa, SPESA TOTALE}` into one column and backfilled it — and the two source columns disagree about how much rounding they need, 2,830 cells against 2,817. Which name survives that collapse is a model call. A deterministic stage is only as reproducible as the frame handed to it, which is the argument for measuring at both ends of a run rather than trusting a single number.
 
@@ -521,7 +569,7 @@ Read naively, this figure shows the pipeline *destroying* data before recovering
 
 ![Completeness measured at the raw, detected and delivered snapshots](images/completeness_journey.png)
 
-The raw file measures **0.8752** complete. After the pipeline unmasks disguised nulls it measures **0.8680** — *lower*. Nothing was lost between those two bars. **988 cells** that read as data to `pandas` — `N/D`, `-`, `?` and similar tokens — were nulls wearing a costume, and the second bar is the first honest measurement of the file. The report labels this explicitly as `hidden_defects_unmasked: {disguised_nulls_unmasked: 988, apparent_completeness: 0.8752, true_completeness: 0.8680}`.
+The raw file measures **0.8752** complete. After the pipeline unmasks disguised nulls it measures **0.8680**, which is *lower*. Nothing was lost between those two bars. **988 cells** that read as data to `pandas` (`N/D`, `-`, `?` and similar tokens) were nulls in disguise, and the second bar is the first honest measurement of the file. The report labels this explicitly as `hidden_defects_unmasked: {disguised_nulls_unmasked: 988, apparent_completeness: 0.8752, true_completeness: 0.8680}`.
 
 This is precisely why quality is captured at three snapshots rather than two. Against the raw figure the delivered **0.9801** looks like a modest +0.010; against the true baseline it is **+0.112**, and it is the second number that describes what remediation actually achieved. A two-point measurement would have made the system's most valuable single behaviour — finding defects that are invisible to the naive check — register as a regression.
 
@@ -678,9 +726,9 @@ Read together, the three runs support a narrower claim than any one of them woul
 
 The three runs support a narrower claim than "the pipeline improves data quality", and the narrower claim is the one worth making: **the system improved every dataset it was given while remaining able to account for each change it made, and it declined the changes it could not account for.**
 
-Concretely, on `spesa.csv` it raised like-for-like reliability from **0.9380 to 0.9960**, eliminated **100%** of schema, format, consistency and uniqueness violations, reduced completeness violations by **90.6%**, removed **7 redundant or empty columns** and **65 duplicate rows**, and changed **5,659 cells** — each one recorded in a cell-level change log naming the stage that changed it. On the larger `attivazioniCessazioni.csv` it went **0.8652 → 0.9798** with only one of nineteen column names known to the registry, and on `ritenuteSindacali.csv` — a file it was never developed against — **0.9268 → 0.9451**, closing completeness entirely and mining four cross-column rules unaided.
+Concretely, on `spesa.csv` it raised like-for-like reliability from **0.9380 to 0.9960**, eliminated **100%** of schema, format, consistency and uniqueness violations, reduced completeness violations by **90.6%**, removed **7 redundant or empty columns** and **65 duplicate rows**, and changed **5,659 cells**, each one recorded in a cell-level change log naming the stage responsible. On the larger `attivazioniCessazioni.csv` it went **0.8652 → 0.9798** with only one of nineteen column names known to the registry. On `ritenuteSindacali.csv`, a file it was never developed against, it went **0.9268 → 0.9451**, closing completeness entirely and mining four cross-column rules unaided.
 
-That the held-out file worked is the result we would defend hardest: the system is not fitted to the two datasets it was developed against.
+The result on the held-out file is the one we would defend hardest, because it is the one that shows the system is not fitted to the two datasets it was developed against.
 
 The shape of that improvement matters as much as its size. **75% of the cells were changed by deterministic auto-remediation**, on evidence strong enough that a human decision would have added nothing: mined dependencies at purity ≥ 0.99, a column's own recorded decimal precision, an unambiguous period layout. The human gate was reserved for the **structural** decisions — which columns to drop, which to rename — that no measurement can settle.
 
@@ -720,7 +768,7 @@ The **canonical registry is hand-curated for NoiPA**. The system is grounded in 
 
 **Single-provider dependency.** Every chat call goes through one model pinned in `utils/llm.py`. This buys reproducibility and a single place to change; it also means provider availability is a hard dependency of any live run.
 
-**Proposals can duplicate work auto-remediation has already done.** The Unified agent reasons about the violations detected *upstream* of auto-remediation, so it may propose a repair that has since been applied — an earlier run of `spesa.csv` proposed 456 `descrizione` imputations of which auto-remediation had already filled 448, the remaining 8 being unfillable; it was approved, executed without error, and changed nothing. The outcome is safe (the dry run and the invariants both pass, and the operation is idempotent) but it spends a reviewer's attention on a decision that no longer matters. The fix is to re-scope the violation set handed to `unified` against the post-auto-remediation state.
+**Proposals can duplicate work auto-remediation has already done.** The Unified agent reasons about the violations detected *upstream* of auto-remediation, so it may propose a repair that has since been applied — in the recorded `spesa.csv` run it proposed 456 `descrizione` imputations of which auto-remediation had already filled 448, the remaining 8 being unfillable; it was approved, executed without error, and changed nothing. The outcome is safe (the dry run and the invariants both pass, and the operation is idempotent) but it spends a reviewer's attention on a decision that no longer matters. The fix is to re-scope the violation set handed to `unified` against the post-auto-remediation state.
 
 **Generated code cannot express a cross-column repair.** The scalar-transform interface that makes `clean_value` safe — it never sees the dataframe — also makes it structurally unable to derive a value from another column. Such repairs must go through the typed catalogue, and where the catalogue has no matching operation the violation is carried to the report unaddressed rather than repaired.
 
