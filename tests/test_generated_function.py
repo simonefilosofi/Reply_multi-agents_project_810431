@@ -4,8 +4,8 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-import tools.generated_function as gf
-from tools.generated_function import (
+import noipa_dq.tools.generated_function as gf
+from noipa_dq.tools.generated_function import (
     apply_to_series,
     check_source,
     execution_log,

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from tools.change_log import column_diff
+from noipa_dq.tools.change_log import column_diff
 
 
 def _before() -> pd.DataFrame:

@@ -5,9 +5,9 @@ import json
 
 from pydantic import BaseModel
 
-from models import ColumnPayload
-from utils.llm import EmptyModelResponse, structured_model
-from utils.prompts import load_prompt
+from noipa_dq.models import ColumnPayload
+from noipa_dq.utils.llm import EmptyModelResponse, structured_model
+from noipa_dq.utils.prompts import load_prompt
 
 
 _MAX_ANSWER_TOKENS = 4096

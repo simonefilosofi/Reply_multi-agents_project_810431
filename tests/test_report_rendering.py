@@ -1,8 +1,8 @@
 """Pins the report's rendering layer: the inline SVG charts and the Markdown-to-HTML step that precedes the print. The PDF itself needs a browser, so these checks stop at the HTML, which is where every layout decision actually lives; the browser step is exercised by running the pipeline."""
 from __future__ import annotations
 
-from tools.md_to_pdf import markdown_to_html
-from tools.report_charts import _LOW, _PAPER, dimension_comparison_chart, fill_rate_chart
+from noipa_dq.tools.md_to_pdf import markdown_to_html
+from noipa_dq.tools.report_charts import _LOW, _PAPER, dimension_comparison_chart, fill_rate_chart
 
 _BEFORE = {"completeness": 0.8752, "uniqueness": 0.9881, "schema_conformity": 0.5}
 _AFTER = {"completeness": 0.9801, "uniqueness": 1.0, "schema_conformity": 1.0}

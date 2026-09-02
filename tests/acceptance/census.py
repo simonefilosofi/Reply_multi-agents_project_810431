@@ -1,9 +1,9 @@
 """Ground truth for the client datasets: enumerates the defects in the raw CSVs using rules
 written independently of the pipeline's own detectors, so a run can be graded against an outside
 reading of the file rather than against itself. Reads only the CSVs, so it needs no network and no
-key, and writes checks/expected_defects.json for the other two checks to read.
+key, and writes tests/acceptance/expected_defects.json for the other two checks to read.
 
-    python checks/census.py Datasets-Reply-20260313/project_data_quality
+    python tests/acceptance/census.py data/raw/project_data_quality
 """
 from __future__ import annotations
 
@@ -252,7 +252,7 @@ def summarise(name: str, c: dict) -> None:
     print()
 
 
-DEFAULT_SOURCES = Path(__file__).resolve().parent.parent / "Datasets-Reply-20260313" / "project_data_quality"
+DEFAULT_SOURCES = Path(__file__).resolve().parents[2] / "data" / "raw" / "project_data_quality"
 EXPECTED = Path(__file__).resolve().parent / "expected_defects.json"
 
 

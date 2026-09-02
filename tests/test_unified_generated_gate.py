@@ -1,13 +1,13 @@
 """Pins what the Unified agent does with the code a model returns before that code can reach the approval gate: proposals it cannot execute are discarded, and every generated cleaning function is cleared against its own column's conforming and violating values. The gate runs without an LLM, so these checks stay cheap and deterministic."""
 from __future__ import annotations
 
-from agents.unified import (
+from noipa_dq.agents.unified import (
     _cleaner_feedback_for,
     _drop_unusable_proposals,
     _examples_by_column,
     _validate_generated_operations,
 )
-from models import FixProposal, Operation
+from noipa_dq.models import FixProposal, Operation
 
 _GROUP = ["rata", "aggregation-time"]
 

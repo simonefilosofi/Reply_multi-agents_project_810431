@@ -9,10 +9,10 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-import agents.unified as unified
-from models import ColumnPayload, FormatViolation, ValidationReport
-from state import PipelineState
-from utils.llm import EmptyModelResponse
+import noipa_dq.agents.unified as unified
+from noipa_dq.models import ColumnPayload, FormatViolation, ValidationReport
+from noipa_dq.state import PipelineState
+from noipa_dq.utils.llm import EmptyModelResponse
 
 
 def _state() -> PipelineState:

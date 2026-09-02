@@ -8,8 +8,8 @@ and a collision would silently apply one fix twice and lose the other; and depen
 rewritten in the same pass, because it cites the tokens that are being replaced."""
 from __future__ import annotations
 
-from agents.unified import _namespace_proposals
-from models import FixProposal, Operation
+from noipa_dq.agents.unified import _namespace_proposals
+from noipa_dq.models import FixProposal, Operation
 
 
 def _proposal(identifier: str, kind: str, column: str = "", depends: list[str] | None = None) -> FixProposal:

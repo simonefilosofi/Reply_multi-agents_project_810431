@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from tools.report_charts import dimension_comparison_chart, fill_rate_chart
+from noipa_dq.tools.report_charts import dimension_comparison_chart, fill_rate_chart
 
 _AREAS = (
     ("schema", "Schema validation", "schema_comment"),

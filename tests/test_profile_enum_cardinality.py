@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from models import EnumFormat
-from tools.profile_format_spec import _MAX_ENUM, profile_format_spec
+from noipa_dq.models import EnumFormat
+from noipa_dq.tools.profile_format_spec import _MAX_ENUM, profile_format_spec
 
 
 def _column(values: dict[str, int]) -> pd.Series:

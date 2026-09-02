@@ -14,10 +14,10 @@ from pathlib import Path
 
 import pytest
 
-from tools.report_charts import _AFTER, _BEFORE, _GRID, _INK, _LOW, _MUTED, _PAPER
+from noipa_dq.tools.report_charts import _AFTER, _BEFORE, _GRID, _INK, _LOW, _MUTED, _PAPER
 
 ROOT = Path(__file__).resolve().parent.parent
-RUNS = ROOT / "runs"
+RUNS = ROOT / "reports" / "runs"
 RECORDED = ("spesa", "attivazioniCessazioni", "ritenuteSindacali")
 CHART_PALETTE = frozenset({_INK, _PAPER, _BEFORE, _AFTER, _GRID, _MUTED, _LOW})
 _HEX = re.compile(r"#[0-9a-fA-F]{6}")

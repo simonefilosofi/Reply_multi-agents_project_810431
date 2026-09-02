@@ -10,9 +10,9 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-import tools.reliability_score as rs
-from models import GlobalConventions
-from tools.safe_cast import dtype_family, dtype_satisfied
+import noipa_dq.tools.reliability_score as rs
+from noipa_dq.models import GlobalConventions
+from noipa_dq.tools.safe_cast import dtype_family, dtype_satisfied
 
 
 @pytest.mark.parametrize(("declared", "realised"), [

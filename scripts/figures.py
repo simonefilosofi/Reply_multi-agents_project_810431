@@ -4,7 +4,7 @@ the table printed beside it, and both documents draw the same figure from the sa
 two that can drift apart. Every chart paints an opaque page: the notebook renders these inline, and
 on a dark editor theme a transparent figure leaves dark ink on a dark ground.
 
-    python figures.py        regenerates images/ from runs/
+    python scripts/figures.py   regenerates reports/figures/ from reports/runs/
 """
 from __future__ import annotations
 
@@ -20,9 +20,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
 
-ROOT = Path(__file__).resolve().parent
-RUNS = ROOT / "runs"
-IMAGES = ROOT / "images"
+ROOT = Path(__file__).resolve().parent.parent
+RUNS = ROOT / "reports" / "runs"
+IMAGES = ROOT / "reports" / "figures"
 
 INK, ACCENT, SOFT, MUTED, PAPER = "#0b3d0b", "#02b900", "#9ae399", "#4a7a4a", "#ffffff"
 ALERT = "#c00000"

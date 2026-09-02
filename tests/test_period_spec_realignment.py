@@ -9,11 +9,11 @@ from __future__ import annotations
 
 import pandas as pd
 
-from agents.auto_remediation import _realign_period_specs, auto_remediation_node
-from models import ColumnPayload
-from state import PipelineState
-from tools.normalize_period_format import CANONICAL_STRFTIME
-from tools.validate_format import specs_by_column, validate_format
+from noipa_dq.agents.auto_remediation import _realign_period_specs, auto_remediation_node
+from noipa_dq.models import ColumnPayload
+from noipa_dq.state import PipelineState
+from noipa_dq.tools.normalize_period_format import CANONICAL_STRFTIME
+from noipa_dq.tools.validate_format import specs_by_column, validate_format
 
 
 def _spec(strftime_pattern: str) -> dict:

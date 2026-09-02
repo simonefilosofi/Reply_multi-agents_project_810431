@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from models import ImputationHint
-from tools.cross_column_checks import period_key
+from noipa_dq.models import ImputationHint
+from noipa_dq.tools.cross_column_checks import period_key
 
 
 _DOMINANT_THRESHOLD = 0.95

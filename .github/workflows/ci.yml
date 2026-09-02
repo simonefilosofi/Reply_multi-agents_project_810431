@@ -19,22 +19,22 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -e .
 
       - name: Test suite
         run: pytest tests/ -q
 
       - name: Acceptance check over the recorded runs
-        run: python checks/acceptance.py
+        run: python tests/acceptance/acceptance.py
 
       - name: Regression check against the pinned invariants
-        run: python checks/verify.py
+        run: python tests/acceptance/verify.py
 
       - name: Execute the notebook against the recorded runs
         run: |
           pip install nbconvert ipykernel
           python -m ipykernel install --user --name python3 --display-name python3
-          python -m jupyter nbconvert --to notebook --execute --output /tmp/executed.ipynb main.ipynb
+          python -m jupyter nbconvert --to notebook --execute --output /tmp/executed.ipynb notebooks/main.ipynb
 
   live-run:
     name: End-to-end run against the real providers
@@ -55,7 +55,7 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -e .
 
       - name: Report when no credentials are configured
         if: env.DEEPSEEK_API_KEY == ''
@@ -70,11 +70,11 @@ jobs:
 
       - name: Record spesa.csv end to end
         if: env.DEEPSEEK_API_KEY != ''
-        run: python record_run.py Datasets-Reply-20260313/project_data_quality/spesa.csv runs/spesa
+        run: python scripts/record_run.py data/raw/project_data_quality/spesa.csv reports/runs/spesa
 
       - name: Grade the run this job just produced
         if: env.DEEPSEEK_API_KEY != ''
-        run: python checks/acceptance.py
+        run: python tests/acceptance/acceptance.py
 
       - name: Upload the delivered report and dataset
         if: env.DEEPSEEK_API_KEY != ''
@@ -82,10 +82,10 @@ jobs:
         with:
           name: spesa-live-run
           path: |
-            runs/spesa/spesa.md
-            runs/spesa/spesa.html
-            runs/spesa/spesa.pdf
-            runs/spesa/spesa.json
-            runs/spesa/spesa.cleaned.csv
-            runs/spesa/spesa.changes.csv
-            runs/spesa/timings.json
+            reports/runs/spesa/spesa.md
+            reports/runs/spesa/spesa.html
+            reports/runs/spesa/spesa.pdf
+            reports/runs/spesa/spesa.json
+            reports/runs/spesa/spesa.cleaned.csv
+            reports/runs/spesa/spesa.changes.csv
+            reports/runs/spesa/timings.json

@@ -17,21 +17,21 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from agents.anomaly_detector import anomaly_detector_node
-from agents.apply_fixes import apply_fixes_node
-from agents.auto_remediation import auto_remediation_node
-from agents.baseline_builder import baseline_builder_node
-from agents.duplicate_column import duplicate_column_node
-from agents.duplicate_row import duplicate_row_node
-from agents.format_consistency import format_consistency_node
-from agents.nan_handler import nan_handler_node
-from agents.profiler import profiler_node
-from agents.report_generator import output_path, report_generator_node
-from agents.semantic import semantic_node
-from agents.unified import propose_for_group, unified_node
-from state import PipelineState
-from tools.change_log import column_diff
-from tools.operations import operations_as_python
+from noipa_dq.agents.anomaly_detector import anomaly_detector_node
+from noipa_dq.agents.apply_fixes import apply_fixes_node
+from noipa_dq.agents.auto_remediation import auto_remediation_node
+from noipa_dq.agents.baseline_builder import baseline_builder_node
+from noipa_dq.agents.duplicate_column import duplicate_column_node
+from noipa_dq.agents.duplicate_row import duplicate_row_node
+from noipa_dq.agents.format_consistency import format_consistency_node
+from noipa_dq.agents.nan_handler import nan_handler_node
+from noipa_dq.agents.profiler import profiler_node
+from noipa_dq.agents.report_generator import output_path, report_generator_node
+from noipa_dq.agents.semantic import semantic_node
+from noipa_dq.agents.unified import propose_for_group, unified_node
+from noipa_dq.state import PipelineState
+from noipa_dq.tools.change_log import column_diff
+from noipa_dq.tools.operations import operations_as_python
 
 st.set_page_config(
     page_title="NoiPA Data Quality",
@@ -163,7 +163,7 @@ def _repropose(group_id: str, feedback: str) -> None:
     group = current.fix_groups.get(group_id, [])
     if not group:
         return
-    from agents.unified import _specs_by_col
+    from noipa_dq.agents.unified import _specs_by_col
 
     replacements = propose_for_group(
         group_id,

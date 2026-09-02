@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import pandas as pd
 
-from agents.apply_fixes import _failure_detail, apply_fixes_node
-from models import ColumnPayload, FixProposal, Operation
-from state import PipelineState
+from noipa_dq.agents.apply_fixes import _failure_detail, apply_fixes_node
+from noipa_dq.models import ColumnPayload, FixProposal, Operation
+from noipa_dq.state import PipelineState
 
 
 def _proposal(identifier: str, depends_on: list[str] | None = None) -> FixProposal:

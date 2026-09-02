@@ -7,9 +7,9 @@ from collections import defaultdict
 
 import pandas as pd
 
-from models import GlobalConventions, ValidationReport
-from tools.safe_cast import dtype_satisfied
-from tools.validate_column_names import is_conforming
+from noipa_dq.models import GlobalConventions, ValidationReport
+from noipa_dq.tools.safe_cast import dtype_satisfied
+from noipa_dq.tools.validate_column_names import is_conforming
 
 _COMPLETENESS_PATTERNS = {"not nullable", "missing value"}
 _SCHEMA_PATTERN_PREFIXES = ("naming convention", "sparse column", "duplicate-column divergence")

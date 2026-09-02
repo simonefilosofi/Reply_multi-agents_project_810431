@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from tools.duplicate_rows import duplicate_row_analysis, key_columns
+from noipa_dq.tools.duplicate_rows import duplicate_row_analysis, key_columns
 
 _ROWS = 40
 

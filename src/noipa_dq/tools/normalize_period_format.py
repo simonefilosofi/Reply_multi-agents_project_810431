@@ -5,7 +5,7 @@ import re
 
 import pandas as pd
 
-from tools.normalize_date_format import _ITALIAN_MONTHS
+from noipa_dq.tools.normalize_date_format import _ITALIAN_MONTHS
 
 _ENGLISH_MONTHS = {
     "jan": "01", "feb": "02", "mar": "03", "apr": "04", "may": "05", "jun": "06",

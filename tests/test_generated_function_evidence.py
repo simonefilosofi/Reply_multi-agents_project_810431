@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from agents.unified import _validate_generated_operations
-from models import FixProposal, Operation
+from noipa_dq.agents.unified import _validate_generated_operations
+from noipa_dq.models import FixProposal, Operation
 
 _BREAKS_ON_FLOAT_TEXT = """def clean_value(value):
     text = str(value).strip()

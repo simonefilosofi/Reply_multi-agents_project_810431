@@ -6,18 +6,18 @@ import json
 import pandas as pd
 from pydantic import BaseModel
 
-from models import Casing, ColumnPayload, ColumnSchema, EnumFormat, RangeFormat
-from state import PipelineState
-from tools.baseline_accessors import (
+from noipa_dq.models import Casing, ColumnPayload, ColumnSchema, EnumFormat, RangeFormat
+from noipa_dq.state import PipelineState
+from noipa_dq.tools.baseline_accessors import (
     alias_index,
     column_catalog_all_domains,
     find_spec_by_hint,
 )
-from tools.infer_and_validate_dtype import infer_and_validate_dtype
-from tools.match_canonical import compact_format_summary, programmatic_match
-from tools.retrieve_canonical import lookup_descriptor, retrieve_top_k
-from utils.llm import structured_model
-from utils.prompts import load_prompt
+from noipa_dq.tools.infer_and_validate_dtype import infer_and_validate_dtype
+from noipa_dq.tools.match_canonical import compact_format_summary, programmatic_match
+from noipa_dq.tools.retrieve_canonical import lookup_descriptor, retrieve_top_k
+from noipa_dq.utils.llm import structured_model
+from noipa_dq.utils.prompts import load_prompt
 
 
 _PLACEHOLDERS: list = [

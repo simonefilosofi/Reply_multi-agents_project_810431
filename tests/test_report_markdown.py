@@ -1,7 +1,7 @@
 """Pins the report's document builder. The point of the rewrite was that every figure is computed from the run payload and none arrives through a sentence the model wrote, so these checks assert both halves: the numbers appear where the payload puts them, and the commentary fields are carried through as text without being asked to supply any figure."""
 from __future__ import annotations
 
-from tools.report_markdown import build_report_markdown
+from noipa_dq.tools.report_markdown import build_report_markdown
 
 _COMMENTARY = {
     "verdict": "VERDICT TEXT",

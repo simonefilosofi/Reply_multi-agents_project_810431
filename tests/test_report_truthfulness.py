@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import pandas as pd
 
-from agents.report_generator import _detected_counts, _residual_counts
-from state import PipelineState
-from tools.report_markdown import _remediation_body, _unaddressed
+from noipa_dq.agents.report_generator import _detected_counts, _residual_counts
+from noipa_dq.state import PipelineState
+from noipa_dq.tools.report_markdown import _remediation_body, _unaddressed
 
 
 def _state(snapshot: dict | None) -> PipelineState:
@@ -85,7 +85,7 @@ def test_the_remediation_table_counts_what_was_carried_without_an_action():
 
 
 def test_the_cross_column_rules_are_listed_with_before_and_after():
-    from tools.report_markdown import _cross_column_rules
+    from noipa_dq.tools.report_markdown import _cross_column_rules
 
     payload = {"cross_column_rules": [
         {"rule": "saldo = trasferimenti_in - trasferimenti_out",
@@ -101,13 +101,13 @@ def test_the_cross_column_rules_are_listed_with_before_and_after():
 
 
 def test_no_rule_table_is_printed_when_none_were_checked():
-    from tools.report_markdown import _cross_column_rules
+    from noipa_dq.tools.report_markdown import _cross_column_rules
 
     assert _cross_column_rules({"cross_column_rules": []}) == ""
 
 
 def test_the_two_duplicate_row_counts_are_reconciled():
-    from tools.report_markdown import _duplicate_row_note
+    from noipa_dq.tools.report_markdown import _duplicate_row_note
 
     payload = {"quality": {"headline_before": {"duplicate_rows": 40}},
                "duplicate_rows": {"rows_removed": 65}}
@@ -119,7 +119,7 @@ def test_the_two_duplicate_row_counts_are_reconciled():
 
 
 def test_nothing_is_reconciled_when_the_counts_agree():
-    from tools.report_markdown import _duplicate_row_note
+    from noipa_dq.tools.report_markdown import _duplicate_row_note
 
     payload = {"quality": {"headline_before": {"duplicate_rows": 65}},
                "duplicate_rows": {"rows_removed": 65}}
@@ -128,7 +128,7 @@ def test_nothing_is_reconciled_when_the_counts_agree():
 
 
 def test_a_single_duplicate_group_is_not_described_in_the_plural():
-    from tools.report_markdown import _fault_table
+    from noipa_dq.tools.report_markdown import _fault_table
 
     rendered = _fault_table({
         "violations_by_kind_detected": {"consistency": 1},
@@ -141,7 +141,7 @@ def test_a_single_duplicate_group_is_not_described_in_the_plural():
 
 
 def test_the_per_column_table_lists_every_column():
-    from tools.report_markdown import _per_column
+    from noipa_dq.tools.report_markdown import _per_column
 
     payload = {"per_column": [
         {"column": "spesa", "from": "SPESA TOTALE", "dtype": "float64", "fill_rate": 0.992,
@@ -159,7 +159,7 @@ def test_the_per_column_table_lists_every_column():
 
 
 def test_several_columns_taken_over_are_named_in_the_plural():
-    from tools.report_markdown import _actioned_note
+    from noipa_dq.tools.report_markdown import _actioned_note
 
     single = _actioned_note({"actioned_elsewhere": ["note"]})
     several = _actioned_note({"actioned_elsewhere": ["note", "fonte_dato"]})
@@ -169,7 +169,7 @@ def test_several_columns_taken_over_are_named_in_the_plural():
 
 
 def test_a_rule_over_a_renamed_column_is_matched_across_the_rename():
-    from agents.report_generator import _rule_under_original_names
+    from noipa_dq.agents.report_generator import _rule_under_original_names
 
     origins = {"rata": "RATA", "id": "_id"}
 
@@ -178,7 +178,7 @@ def test_a_rule_over_a_renamed_column_is_matched_across_the_rename():
 
 
 def test_a_column_that_kept_its_name_is_left_alone():
-    from agents.report_generator import _rule_under_original_names
+    from noipa_dq.agents.report_generator import _rule_under_original_names
 
     assert _rule_under_original_names(
         "cod_imposta determines imposta", {"imposta": "imposta"}

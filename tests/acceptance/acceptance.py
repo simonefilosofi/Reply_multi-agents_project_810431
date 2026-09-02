@@ -1,10 +1,10 @@
 """Final acceptance check over the two client datasets. Confirms the run completed, every artefact
 the contract names was written, the report is internally consistent, and every coverage area in
-the report's fault table reported something rather than a zero. Complements checks/verify.py, which pins value-level invariants: this
+the report's fault table reported something rather than a zero. Complements tests/acceptance/verify.py, which pins value-level invariants: this
 asks whether what reaches the client is complete and says the same thing twice. It reads only a
-recorded run under runs/, so it needs no network and no key.
+recorded run under reports/runs/, so it needs no network and no key.
 
-    python checks/acceptance.py
+    python tests/acceptance/acceptance.py
 """
 from __future__ import annotations
 
@@ -14,11 +14,11 @@ from pathlib import Path
 
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 
 DATASETS = {
-    "spesa": ROOT / "runs/spesa",
-    "attivazioniCessazioni": ROOT / "runs/attivazioniCessazioni",
+    "spesa": ROOT / "reports/runs/spesa",
+    "attivazioniCessazioni": ROOT / "reports/runs/attivazioniCessazioni",
 }
 REQUIRED_SECTIONS = (
     "## Verdict",

@@ -1,7 +1,7 @@
 """Combines validation reports without mutating the ones handed in. The previous helper existed in three byte-identical copies that each called .violations.extend() on a shared list, so a report merged by one node changed under the feet of any node still holding it - and the tallies read after remediation no longer described the state they were measured in."""
 from __future__ import annotations
 
-from models import ValidationReport
+from noipa_dq.models import ValidationReport
 
 
 def merge_reports(

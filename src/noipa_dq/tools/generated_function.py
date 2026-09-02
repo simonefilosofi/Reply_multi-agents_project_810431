@@ -8,7 +8,7 @@ from typing import Any, Callable, Iterable
 
 import pandas as pd
 
-from models import CleanerIssue
+from noipa_dq.models import CleanerIssue
 
 FUNCTION_NAME = "clean_value"
 

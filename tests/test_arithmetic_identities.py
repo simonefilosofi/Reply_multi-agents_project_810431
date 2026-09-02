@@ -9,7 +9,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from tools.arithmetic_identities import arithmetic_reports, mine_identities
+from noipa_dq.tools.arithmetic_identities import arithmetic_reports, mine_identities
 
 
 def ledger(rows: int = 200, seed: int = 7) -> pd.DataFrame:

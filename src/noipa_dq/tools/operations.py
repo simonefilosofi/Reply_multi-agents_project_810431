@@ -3,16 +3,16 @@ from __future__ import annotations
 
 import pandas as pd
 
-from models import Operation
+from noipa_dq.models import Operation
 
 _RENDERED_MAPPINGS = 4
-from tools.apply_casing import collapse_casing_variants
-from tools.generated_function import apply_to_series
-from tools.cross_column_checks import period_key
-from tools.normalize_date_format import normalize_date_format
-from tools.normalize_numeric_format import normalize_numeric_format
-from tools.normalize_period_format import normalize_period_format
-from tools.safe_cast import safe_cast
+from noipa_dq.tools.apply_casing import collapse_casing_variants
+from noipa_dq.tools.generated_function import apply_to_series
+from noipa_dq.tools.cross_column_checks import period_key
+from noipa_dq.tools.normalize_date_format import normalize_date_format
+from noipa_dq.tools.normalize_numeric_format import normalize_numeric_format
+from noipa_dq.tools.normalize_period_format import normalize_period_format
+from noipa_dq.tools.safe_cast import safe_cast
 
 
 def apply_operations(

@@ -3,19 +3,19 @@ from __future__ import annotations
 
 import pandas as pd
 
-from models import FormatSpec, FormatViolation, ImputationHint, Operation, ValidationReport
-from state import PipelineState
-from tools.change_log import diff_cells
-from tools.arithmetic_identities import arithmetic_reports
-from tools.cross_column_checks import candidate_predictors, cross_column_reports
-from tools.decimal_precision import recorded_precision, rounds_cleanly
-from tools.merge_reports import merge_reports
-from tools.mine_functional_deps import mine_functional_deps
-from tools.normalize_period_format import CANONICAL_STRFTIME, is_canonical
-from tools.derive_from_period import contested_rows, derivable_columns, derive
-from tools.operations import apply_operation
-from tools.temporal_stability import time_column
-from tools.validate_format import specs_by_column, validate_format
+from noipa_dq.models import FormatSpec, FormatViolation, ImputationHint, Operation, ValidationReport
+from noipa_dq.state import PipelineState
+from noipa_dq.tools.change_log import diff_cells
+from noipa_dq.tools.arithmetic_identities import arithmetic_reports
+from noipa_dq.tools.cross_column_checks import candidate_predictors, cross_column_reports
+from noipa_dq.tools.decimal_precision import recorded_precision, rounds_cleanly
+from noipa_dq.tools.merge_reports import merge_reports
+from noipa_dq.tools.mine_functional_deps import mine_functional_deps
+from noipa_dq.tools.normalize_period_format import CANONICAL_STRFTIME, is_canonical
+from noipa_dq.tools.derive_from_period import contested_rows, derivable_columns, derive
+from noipa_dq.tools.operations import apply_operation
+from noipa_dq.tools.temporal_stability import time_column
+from noipa_dq.tools.validate_format import specs_by_column, validate_format
 
 _AUTO_IMPUTE_PURITY = 0.99
 _MISSING_PATTERNS = ("missing value", "not nullable")

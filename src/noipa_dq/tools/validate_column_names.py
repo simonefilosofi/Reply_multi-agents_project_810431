@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 
-from models import GlobalConventions
+from noipa_dq.models import GlobalConventions
 
 _DEFAULT_NAMING_REGEX = "^[a-z][a-z0-9_]*(_[A-Z]{2,})?$"
 _NON_ALPHANUMERIC = re.compile(r"[^0-9a-zA-Z]+")

@@ -4,10 +4,10 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from models import FixProposal, ImputationHint
-from tools.change_log import diff_cells
-from tools.fix_invariants import check_invariants
-from tools.operations import apply_operations
+from noipa_dq.models import FixProposal, ImputationHint
+from noipa_dq.tools.change_log import diff_cells
+from noipa_dq.tools.fix_invariants import check_invariants
+from noipa_dq.tools.operations import apply_operations
 
 
 def execute_fixes(

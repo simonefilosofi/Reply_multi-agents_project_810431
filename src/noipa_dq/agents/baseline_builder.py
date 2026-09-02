@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from models import (
+from noipa_dq.models import (
     BaselineFile,
     ColumnSchema,
     DatasetSchema,
@@ -14,12 +14,12 @@ from models import (
     RangeFormat,
     RegexFormat,
 )
-from state import PipelineState
-from tools.duplicate_rows import duplicate_row_analysis
-from tools.reliability_score import compute_metrics
+from noipa_dq.state import PipelineState
+from noipa_dq.tools.duplicate_rows import duplicate_row_analysis
+from noipa_dq.tools.reliability_score import compute_metrics
 
 
-_REGISTRY_DIR = Path(__file__).resolve().parent.parent / "registry"
+_REGISTRY_DIR = Path(__file__).resolve().parents[3] / "data" / "registry"
 _REGISTRY_PATH = _REGISTRY_DIR / "noipa_schema_registry.json"
 _BASELINE_OUTPUT = _REGISTRY_DIR / "baseline.json"
 _REF_PREFIX = "#/shared_column_definitions/"

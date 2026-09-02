@@ -14,7 +14,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from models import FormatViolation, ValidationReport
+from noipa_dq.models import FormatViolation, ValidationReport
 
 _MIN_AGREEMENT = 0.9
 _MIN_ROWS = 30

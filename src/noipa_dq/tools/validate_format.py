@@ -6,7 +6,7 @@ from typing import Callable
 
 import pandas as pd
 
-from models import (
+from noipa_dq.models import (
     DateFormat,
     EnumFormat,
     FormatSpec,

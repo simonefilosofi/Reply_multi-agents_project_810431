@@ -5,22 +5,22 @@ from collections import defaultdict
 
 import pandas as pd
 
-from models import BaselineFile, ColumnPayload, EnumFormat, FormatViolation, ImputationHint, RangeFormat, RegexFormat, ValidationReport
-from state import PipelineState
-from tools.baseline_accessors import find_spec_by_hint
-from tools.duplicate_rows import duplicate_row_analysis
-from tools.reliability_score import checked_cells_by_column, compute_metrics, rule_counts
-from tools.correct_violations import correct_violations
-from tools.merge_reports import merge_reports
-from tools.arithmetic_identities import arithmetic_reports
-from tools.cross_column_checks import candidate_predictors, cross_column_reports
-from tools.infer_format_spec import infer_format_spec
-from tools.match_canonical import compact_format_summary
-from tools.mine_functional_deps import mine_functional_deps
-from tools.temporal_stability import is_stable, time_column
-from tools.profile_format_spec import profile_format_spec
-from tools.validate_column_names import naming_regex, validate_column_names
-from tools.validate_format import validate_format
+from noipa_dq.models import BaselineFile, ColumnPayload, EnumFormat, FormatViolation, ImputationHint, RangeFormat, RegexFormat, ValidationReport
+from noipa_dq.state import PipelineState
+from noipa_dq.tools.baseline_accessors import find_spec_by_hint
+from noipa_dq.tools.duplicate_rows import duplicate_row_analysis
+from noipa_dq.tools.reliability_score import checked_cells_by_column, compute_metrics, rule_counts
+from noipa_dq.tools.correct_violations import correct_violations
+from noipa_dq.tools.merge_reports import merge_reports
+from noipa_dq.tools.arithmetic_identities import arithmetic_reports
+from noipa_dq.tools.cross_column_checks import candidate_predictors, cross_column_reports
+from noipa_dq.tools.infer_format_spec import infer_format_spec
+from noipa_dq.tools.match_canonical import compact_format_summary
+from noipa_dq.tools.mine_functional_deps import mine_functional_deps
+from noipa_dq.tools.temporal_stability import is_stable, time_column
+from noipa_dq.tools.profile_format_spec import profile_format_spec
+from noipa_dq.tools.validate_column_names import naming_regex, validate_column_names
+from noipa_dq.tools.validate_format import validate_format
 
 
 _VALID_SAMPLE_SIZE = 10

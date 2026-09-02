@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import pandas as pd
 
-from agents.report_generator import _origin_columns, _scope_metrics
-from models import DuplicateResolution, FixProposal, Operation
-from state import PipelineState
+from noipa_dq.agents.report_generator import _origin_columns, _scope_metrics
+from noipa_dq.models import DuplicateResolution, FixProposal, Operation
+from noipa_dq.state import PipelineState
 
 
 def _state(**overrides) -> PipelineState:

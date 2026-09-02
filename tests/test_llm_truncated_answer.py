@@ -12,7 +12,7 @@ from openai import ContentFilterFinishReasonError, LengthFinishReasonError
 from openai.types.chat import ChatCompletion
 from pydantic import BaseModel
 
-from utils.llm import EmptyModelResponse, _answer
+from noipa_dq.utils.llm import EmptyModelResponse, _answer
 
 
 class Answer(BaseModel):

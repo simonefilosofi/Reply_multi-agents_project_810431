@@ -1,5 +1,5 @@
 """Holds the README and the notebook to the runs they describe. Every figure quoted in those two
-documents comes from a recorded run under runs/, and nothing else checks that the sentence and the
+documents comes from a recorded run under reports/runs/, and nothing else checks that the sentence and the
 artefact still agree: a re-recorded run silently leaves the prose describing the previous one, which
 is how the published numbers came to describe a run whose artefacts no longer existed. Each check
 below derives the string from the artefact and asserts the document contains it, so a stale figure
@@ -13,11 +13,11 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
-RUNS = ROOT / "runs"
+RUNS = ROOT / "reports" / "runs"
 README = (ROOT / "README.md").read_text(encoding="utf-8")
 NOTEBOOK = "\n".join(
     "".join(cell["source"])
-    for cell in json.loads((ROOT / "main.ipynb").read_text(encoding="utf-8"))["cells"]
+    for cell in json.loads((ROOT / "notebooks" / "main.ipynb").read_text(encoding="utf-8"))["cells"]
 )
 
 
@@ -122,7 +122,7 @@ def test_the_notebook_quotes_the_reproducibility_evidence_it_shows() -> None:
 def test_the_readme_quotes_the_pinned_invariants_it_summarises() -> None:
     """The recovery figures in Section 1.6 come from checks/invariants.json. Pinning them here means
     a re-pin cannot leave the prose describing the previous baseline."""
-    pinned = json.loads((ROOT / "checks" / "invariants.json").read_text(encoding="utf-8"))
+    pinned = json.loads((ROOT / "tests" / "acceptance" / "invariants.json").read_text(encoding="utf-8"))
 
     recovered = [pair["ok"] for run in pinned.values()
                  for pair in run["numeric_recovery"].values() if pair.get("messy")]

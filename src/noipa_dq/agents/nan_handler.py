@@ -3,15 +3,15 @@ from __future__ import annotations
 
 import pandas as pd
 
-from models import FormatViolation, ValidationReport
-from state import PipelineState
-from tools.baseline_accessors import find_spec_by_hint
-from tools.change_log import diff_values_only
-from tools.completeness import completeness_report
-from tools.merge_reports import merge_reports
-from tools.detect_placeholders import detect_placeholders
-from tools.reliability_score import compute_metrics
-from tools.safe_cast import safe_cast
+from noipa_dq.models import FormatViolation, ValidationReport
+from noipa_dq.state import PipelineState
+from noipa_dq.tools.baseline_accessors import find_spec_by_hint
+from noipa_dq.tools.change_log import diff_values_only
+from noipa_dq.tools.completeness import completeness_report
+from noipa_dq.tools.merge_reports import merge_reports
+from noipa_dq.tools.detect_placeholders import detect_placeholders
+from noipa_dq.tools.reliability_score import compute_metrics
+from noipa_dq.tools.safe_cast import safe_cast
 
 _MAX_PLACEHOLDER_SHARE = 0.3
 

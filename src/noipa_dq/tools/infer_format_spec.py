@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from models import (
+from noipa_dq.models import (
     ColumnPayload,
     DateFormat,
     EnumFormat,
@@ -14,8 +14,8 @@ from models import (
     RangeFormat,
     RegexFormat,
 )
-from utils.llm import EmptyModelResponse, structured_model
-from utils.prompts import load_prompt
+from noipa_dq.utils.llm import EmptyModelResponse, structured_model
+from noipa_dq.utils.prompts import load_prompt
 
 
 _MAX_ANSWER_TOKENS = 1024

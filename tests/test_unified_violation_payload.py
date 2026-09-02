@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from agents.unified import _MAX_PATTERNS_PER_COLUMN, _aggregate_violations
-from models import FormatViolation, ValidationReport
+from noipa_dq.agents.unified import _MAX_PATTERNS_PER_COLUMN, _aggregate_violations
+from noipa_dq.models import FormatViolation, ValidationReport
 
 _TAIL_PATTERNS = 12
 

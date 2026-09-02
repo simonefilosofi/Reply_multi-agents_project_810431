@@ -7,7 +7,7 @@ from collections import Counter
 
 import pandas as pd
 
-from models import DateFormat, EnumFormat, FormatSpec, RangeFormat, RegexFormat
+from noipa_dq.models import DateFormat, EnumFormat, FormatSpec, RangeFormat, RegexFormat
 
 
 _DATE_FORMATS = [

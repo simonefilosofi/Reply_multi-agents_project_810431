@@ -4,9 +4,9 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-import tools.reliability_score as rs
-from models import FormatViolation, GlobalConventions, ValidationReport
-from tools.reliability_score import classify_violation
+import noipa_dq.tools.reliability_score as rs
+from noipa_dq.models import FormatViolation, GlobalConventions, ValidationReport
+from noipa_dq.tools.reliability_score import classify_violation
 
 
 def _report(column: str, pattern: str, value=None, row_index: int = -1) -> ValidationReport:

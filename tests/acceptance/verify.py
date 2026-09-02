@@ -1,12 +1,12 @@
 """Regression net for pipeline runs over the two client datasets. Pins value-level invariants -
 what was recovered, what was merged, what was overwritten - rather than the output bytes, because
 the LLM nodes are not reproducible run to run and a byte diff would report model noise as a
-regression. It reads a recorded run under runs/ and its report payload, so it needs no network and
+regression. It reads a recorded run under reports/runs/ and its report payload, so it needs no network and
 no key. Run with --pin to record the current run as the baseline, with no argument to compare a
 later run against it.
 
-    python checks/verify.py --pin      record the current runs as the baseline
-    python checks/verify.py            compare a later run against it
+    python tests/acceptance/verify.py --pin      record the current runs as the baseline
+    python tests/acceptance/verify.py            compare a later run against it
 """
 from __future__ import annotations
 
@@ -17,16 +17,16 @@ from pathlib import Path
 
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parent.parent
-PINNED = ROOT / "checks" / "invariants.json"
+ROOT = Path(__file__).resolve().parents[2]
+PINNED = Path(__file__).resolve().parent / "invariants.json"
 
 MESI = {"GEN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAG": 5, "GIU": 6,
         "LUG": 7, "AGO": 8, "SET": 9, "OTT": 10, "NOV": 11, "DIC": 12}
 
 DATASETS = {
     "spesa": {
-        "raw": ROOT / "Datasets-Reply-20260313/project_data_quality/spesa.csv",
-        "run": ROOT / "runs/spesa",
+        "raw": ROOT / "data/raw/project_data_quality/spesa.csv",
+        "run": ROOT / "reports/runs/spesa",
         "id_raw": "_id", "id_final": "id",
         "numeric_pairs": [("SPESA TOTALE", "spesa"), ("ente%code", "ente"),
                           ("2cod_imposta", "cod_imposta")],
@@ -35,8 +35,8 @@ DATASETS = {
         "period_authority": None,
     },
     "attivazioniCessazioni": {
-        "raw": ROOT / "Datasets-Reply-20260313/project_data_quality/attivazioniCessazioni.csv",
-        "run": ROOT / "runs/attivazioniCessazioni",
+        "raw": ROOT / "data/raw/project_data_quality/attivazioniCessazioni.csv",
+        "run": ROOT / "reports/runs/attivazioniCessazioni",
         "id_raw": "_id", "id_final": "id",
         "numeric_pairs": [("att ivazioni", "attivazioni"), ("cessazioni", "cessazioni"),
                           ("CODICE ENTE", "codice_ente")],

@@ -9,7 +9,7 @@ import numpy as np
 from openai import OpenAI
 
 _MODEL = "text-embedding-3-small"
-_DEFAULT_DESCRIPTIONS = Path(__file__).resolve().parent.parent / "registry" / "column_descriptions.json"
+_DEFAULT_DESCRIPTIONS = Path(__file__).resolve().parents[3] / "data" / "registry" / "column_descriptions.json"
 _client: OpenAI | None = None
 
 

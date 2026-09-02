@@ -5,8 +5,8 @@ proposal survived, was shown to the reviewer, was approved, and then failed in a
 `missing deps`. A proposal that cannot execute whatever the reviewer decides is not a proposal."""
 from __future__ import annotations
 
-from agents.unified import _drop_unusable_proposals
-from models import FixProposal, Operation
+from noipa_dq.agents.unified import _drop_unusable_proposals
+from noipa_dq.models import FixProposal, Operation
 
 
 def _proposal(identifier: str, column: str = "imposta", depends: list[str] | None = None) -> FixProposal:
@@ -43,7 +43,7 @@ def test_a_proposal_with_no_dependencies_is_untouched():
 
 
 def test_a_dependency_dropped_during_review_strands_its_dependent():
-    from agents.unified import _without_dangling_dependencies
+    from noipa_dq.agents.unified import _without_dangling_dependencies
 
     survived = [_proposal("f1", depends=["f2"])]
 
@@ -51,7 +51,7 @@ def test_a_dependency_dropped_during_review_strands_its_dependent():
 
 
 def test_review_survivors_that_still_have_their_dependency_are_kept():
-    from agents.unified import _without_dangling_dependencies
+    from noipa_dq.agents.unified import _without_dangling_dependencies
 
     survived = [_proposal("f1", depends=["f2"]), _proposal("f2")]
 
@@ -59,7 +59,7 @@ def test_review_survivors_that_still_have_their_dependency_are_kept():
 
 
 def test_a_dependency_collapsed_into_a_schema_fix_strands_its_dependent():
-    from agents.unified import _without_dangling_dependencies
+    from noipa_dq.agents.unified import _without_dangling_dependencies
 
     schema = FixProposal(
         id="schema_drop_note", description="d", rationale="r", affected_columns=["note"],
@@ -70,13 +70,13 @@ def test_a_dependency_collapsed_into_a_schema_fix_strands_its_dependent():
 
 
 def test_a_proposal_depending_on_itself_is_dropped():
-    from agents.unified import _without_dangling_dependencies
+    from noipa_dq.agents.unified import _without_dangling_dependencies
 
     assert _without_dangling_dependencies([_proposal("f2", depends=["f2"])]) == []
 
 
 def test_a_self_dependency_also_strands_whatever_relied_on_it():
-    from agents.unified import _without_dangling_dependencies
+    from noipa_dq.agents.unified import _without_dangling_dependencies
 
     proposals = [_proposal("f1", depends=["f2"]), _proposal("f2", depends=["f2"])]
 
@@ -84,7 +84,7 @@ def test_a_self_dependency_also_strands_whatever_relied_on_it():
 
 
 def test_two_proposals_depending_on_each_other_are_both_dropped():
-    from agents.unified import _without_dangling_dependencies
+    from noipa_dq.agents.unified import _without_dangling_dependencies
 
     proposals = [_proposal("f1", depends=["f2"]), _proposal("f2", depends=["f1"])]
 
@@ -92,7 +92,7 @@ def test_two_proposals_depending_on_each_other_are_both_dropped():
 
 
 def test_a_chain_of_dependencies_is_kept_in_full():
-    from agents.unified import _without_dangling_dependencies
+    from noipa_dq.agents.unified import _without_dangling_dependencies
 
     proposals = [_proposal("f1", depends=["f2"]), _proposal("f2", depends=["f3"]),
                  _proposal("f3")]

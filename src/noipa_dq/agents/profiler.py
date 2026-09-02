@@ -6,11 +6,11 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from models import BaselineFile
-from state import PipelineState
-from tools.baseline_accessors import domain_signatures
-from utils.llm import structured_model
-from utils.prompts import load_prompt
+from noipa_dq.models import BaselineFile
+from noipa_dq.state import PipelineState
+from noipa_dq.tools.baseline_accessors import domain_signatures
+from noipa_dq.utils.llm import structured_model
+from noipa_dq.utils.prompts import load_prompt
 
 
 class _ProfilerResponse(BaseModel):

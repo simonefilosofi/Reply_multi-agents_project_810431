@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "noipa-dq"
+version = "1.0.0"
+description = "A multi-agent pipeline that audits a raw public-administration CSV, repairs it under human approval, and scores what it delivered."
+readme = "README.md"
+requires-python = ">=3.11"
+dynamic = ["dependencies"]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# The prompts are markdown files inside the package, one per LLM-calling agent.
+# Without this they would be left out of an install and utils/prompts.py would raise.
+[tool.setuptools.package-data]
+"noipa_dq" = ["prompts/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

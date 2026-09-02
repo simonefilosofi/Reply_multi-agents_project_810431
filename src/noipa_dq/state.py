@@ -6,9 +6,9 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from models import AnomalyReport, BaselineFile, ColumnPayload, DuplicateResolution, FixProposal, ImputationHint, UnaddressedViolations, ValidationReport
+from noipa_dq.models import AnomalyReport, BaselineFile, ColumnPayload, DuplicateResolution, FixProposal, ImputationHint, UnaddressedViolations, ValidationReport
 
-_DEFAULT_BASELINE_PATH = str(Path(__file__).resolve().parent / "registry" / "baseline.json")
+_DEFAULT_BASELINE_PATH = str(Path(__file__).resolve().parents[2] / "data" / "registry" / "baseline.json")
 
 
 class PipelineState(BaseModel):

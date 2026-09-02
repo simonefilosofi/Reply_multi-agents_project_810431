@@ -4,8 +4,8 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-import agents.unified as unified
-from models import CleanerIssue, FixProposal, FixReviewResponse, Operation
+import noipa_dq.agents.unified as unified
+from noipa_dq.models import CleanerIssue, FixProposal, FixReviewResponse, Operation
 
 _EXAMPLES = {"rata": {"dominant": ["202401"], "inconsistent": ["MAR-2024"], "dtype": "string"}}
 

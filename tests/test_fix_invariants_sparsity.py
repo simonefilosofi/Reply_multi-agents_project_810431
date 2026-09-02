@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from models import FixProposal, Operation
-from tools.fix_invariants import check_invariants
+from noipa_dq.models import FixProposal, Operation
+from noipa_dq.tools.fix_invariants import check_invariants
 
 _HINT = {"note": {"mapping": {"a": "x"}}}
 

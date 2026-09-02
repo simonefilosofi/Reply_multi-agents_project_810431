@@ -17,9 +17,12 @@ out/**
 
 # Recorded runs: the report, the score, the timings and the delivered dataset ship.
 # The working copy of each source does not - it is already tracked at its original path.
-# The two client datasets also ship their cleaned file and change log, which checks/ grades.
-runs/*/*.csv
-!runs/spesa/spesa.cleaned.csv
-!runs/spesa/spesa.changes.csv
-!runs/attivazioniCessazioni/attivazioniCessazioni.cleaned.csv
-!runs/attivazioniCessazioni/attivazioniCessazioni.changes.csv
+# The two client datasets also ship their cleaned file and change log, which tests/acceptance/ grades.
+reports/runs/*/*.csv
+!reports/runs/spesa/spesa.cleaned.csv
+!reports/runs/spesa/spesa.changes.csv
+!reports/runs/attivazioniCessazioni/attivazioniCessazioni.cleaned.csv
+!reports/runs/attivazioniCessazioni/attivazioniCessazioni.changes.csv
+
+# Editable-install metadata
+*.egg-info/

@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import pandas as pd
 
-from models import DateFormat, FixProposal, FormatViolation, Operation, ValidationReport
-from tools.execute_fixes import execute_fixes
-from tools.trial_execute import trial_execute
+from noipa_dq.models import DateFormat, FixProposal, FormatViolation, Operation, ValidationReport
+from noipa_dq.tools.execute_fixes import execute_fixes
+from noipa_dq.tools.trial_execute import trial_execute
 
 _SOURCE = """
 def clean_value(value):

@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import pandas as pd
 
-import agents.unified as unified
-from models import FixGroupResponse, FormatViolation, ValidationReport
-from state import PipelineState
-from utils.llm import EmptyModelResponse
+import noipa_dq.agents.unified as unified
+from noipa_dq.models import FixGroupResponse, FormatViolation, ValidationReport
+from noipa_dq.state import PipelineState
+from noipa_dq.utils.llm import EmptyModelResponse
 
 
 def _state() -> PipelineState:
@@ -107,7 +107,7 @@ def test_nothing_is_carried_when_the_model_addressed_everything():
 
 
 def test_a_column_a_schema_proposal_covers_is_not_carried():
-    from models import FixProposal, Operation
+    from noipa_dq.models import FixProposal, Operation
 
     carried = [unified.UnaddressedViolations(
         group_id="g1", columns=["_id", "area_geografica"], violation_ids=["v1"],
@@ -124,7 +124,7 @@ def test_a_column_a_schema_proposal_covers_is_not_carried():
 
 
 def test_an_entry_whose_columns_are_all_actioned_is_dropped():
-    from models import FixProposal, Operation
+    from noipa_dq.models import FixProposal, Operation
 
     carried = [unified.UnaddressedViolations(
         group_id="g1", columns=["_id"], violation_ids=["v1"], reason="r", source="model",

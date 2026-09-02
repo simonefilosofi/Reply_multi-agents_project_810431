@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from models import EnumFormat, FormatSpec
+from noipa_dq.models import EnumFormat, FormatSpec
 
 
 def collapse_casing_variants(series: pd.Series, spec: FormatSpec | None = None) -> pd.Series:

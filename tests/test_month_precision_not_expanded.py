@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from tools.safe_cast import safe_cast
+from noipa_dq.tools.safe_cast import safe_cast
 
 
 def test_a_year_month_column_is_not_given_a_day():

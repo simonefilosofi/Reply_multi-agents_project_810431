@@ -1,7 +1,7 @@
 """Projection helpers exposing slice views of the resolved BaselineFile to each agent without leaking the full structure into LLM prompts. Consumed by the Profiler, Semantic, Duplicate-Column, NaN-Handler, and Format-Consistency agents."""
 from __future__ import annotations
 
-from models import BaselineFile, ColumnSchema, GlobalConventions
+from noipa_dq.models import BaselineFile, ColumnSchema, GlobalConventions
 
 
 def domain_signatures(baseline: BaselineFile) -> dict[str, dict[str, list[str]]]:

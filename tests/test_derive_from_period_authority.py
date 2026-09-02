@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from tools.derive_from_period import contested_rows, derivable_columns, derive
+from noipa_dq.tools.derive_from_period import contested_rows, derivable_columns, derive
 
 
 def frame(periods, months, years) -> pd.DataFrame:

@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import pandas as pd
 
-from agents.nan_handler import nan_handler_node
-from models import ColumnPayload
-from state import PipelineState
+from noipa_dq.agents.nan_handler import nan_handler_node
+from noipa_dq.models import ColumnPayload
+from noipa_dq.state import PipelineState
 
 _ENUM = ["FUNZIONI CENTRALI", "FUNZIONI LOCALI", "SANITA'", "ISTRUZIONE E RICERCA"]
 

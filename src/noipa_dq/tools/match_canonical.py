@@ -4,7 +4,7 @@ from __future__ import annotations
 import difflib
 import unicodedata
 
-from models import ColumnSchema, EnumFormat, RangeFormat, RegexFormat
+from noipa_dq.models import ColumnSchema, EnumFormat, RangeFormat, RegexFormat
 
 
 _FUZZY_CUTOFF = 0.85

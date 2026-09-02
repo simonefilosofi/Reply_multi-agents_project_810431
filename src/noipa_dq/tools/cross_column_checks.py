@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from models import FormatViolation, ValidationReport
-from tools.temporal_stability import is_stable
+from noipa_dq.models import FormatViolation, ValidationReport
+from noipa_dq.tools.temporal_stability import is_stable
 
 _MAX_FALLBACK_PREDICTORS = 8
 

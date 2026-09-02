@@ -7,13 +7,13 @@ from collections import defaultdict
 import pandas as pd
 from pydantic import BaseModel
 
-from models import DuplicateResolution, FormatViolation, ValidationReport
-from state import PipelineState
-from tools.change_log import diff_values_only
-from tools.cross_column_checks import coherence_score
-from tools.validate_column_names import is_conforming, normalize_column_name, uniquify
-from utils.llm import structured_model
-from utils.prompts import load_prompt
+from noipa_dq.models import DuplicateResolution, FormatViolation, ValidationReport
+from noipa_dq.state import PipelineState
+from noipa_dq.tools.change_log import diff_values_only
+from noipa_dq.tools.cross_column_checks import coherence_score
+from noipa_dq.tools.validate_column_names import is_conforming, normalize_column_name, uniquify
+from noipa_dq.utils.llm import structured_model
+from noipa_dq.utils.prompts import load_prompt
 
 
 _SIMILARITY_THRESHOLD = 0.80

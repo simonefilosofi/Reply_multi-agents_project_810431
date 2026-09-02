@@ -1,10 +1,10 @@
 """Removes exact duplicate rows and records what was removed. Records colliding on a key column while carrying different data are reported rather than dropped, because discarding one of two conflicting records is a decision that needs a human. Implements the Duplicate Row agent node."""
 from __future__ import annotations
 
-from models import FormatViolation, ValidationReport
-from state import PipelineState
-from tools.merge_reports import merge_reports
-from tools.duplicate_rows import duplicate_row_analysis
+from noipa_dq.models import FormatViolation, ValidationReport
+from noipa_dq.state import PipelineState
+from noipa_dq.tools.merge_reports import merge_reports
+from noipa_dq.tools.duplicate_rows import duplicate_row_analysis
 
 
 def duplicate_row_node(state: PipelineState) -> PipelineState:

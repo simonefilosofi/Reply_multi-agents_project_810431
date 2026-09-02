@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import pandas as pd
 
-from models import FixProposal, FormatSpec, ImputationHint, ValidationReport
-from tools.fix_invariants import check_invariants
-from tools.operations import apply_operations
-from tools.validate_format import validate_format
+from noipa_dq.models import FixProposal, FormatSpec, ImputationHint, ValidationReport
+from noipa_dq.tools.fix_invariants import check_invariants
+from noipa_dq.tools.operations import apply_operations
+from noipa_dq.tools.validate_format import validate_format
 
 
 _MAX_DIFF_ROWS = 8

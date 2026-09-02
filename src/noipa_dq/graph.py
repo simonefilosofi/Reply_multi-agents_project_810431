@@ -3,19 +3,19 @@ from __future__ import annotations
 
 from langgraph.graph import END, StateGraph
 
-from agents.anomaly_detector import anomaly_detector_node
-from agents.apply_fixes import apply_fixes_node
-from agents.auto_remediation import auto_remediation_node
-from agents.baseline_builder import baseline_builder_node
-from agents.duplicate_column import duplicate_column_node
-from agents.duplicate_row import duplicate_row_node
-from agents.format_consistency import format_consistency_node
-from agents.nan_handler import nan_handler_node
-from agents.profiler import profiler_node
-from agents.report_generator import report_generator_node
-from agents.semantic import semantic_node
-from agents.unified import unified_node
-from state import PipelineState
+from noipa_dq.agents.anomaly_detector import anomaly_detector_node
+from noipa_dq.agents.apply_fixes import apply_fixes_node
+from noipa_dq.agents.auto_remediation import auto_remediation_node
+from noipa_dq.agents.baseline_builder import baseline_builder_node
+from noipa_dq.agents.duplicate_column import duplicate_column_node
+from noipa_dq.agents.duplicate_row import duplicate_row_node
+from noipa_dq.agents.format_consistency import format_consistency_node
+from noipa_dq.agents.nan_handler import nan_handler_node
+from noipa_dq.agents.profiler import profiler_node
+from noipa_dq.agents.report_generator import report_generator_node
+from noipa_dq.agents.semantic import semantic_node
+from noipa_dq.agents.unified import unified_node
+from noipa_dq.state import PipelineState
 
 APPROVAL_GATE_NODE = "apply_fixes"
 

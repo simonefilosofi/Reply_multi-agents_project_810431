@@ -8,7 +8,7 @@ from typing import NamedTuple
 
 import pandas as pd
 
-from models import (
+from noipa_dq.models import (
     CleanerDiagnosis,
     CleanerIssue,
     ColumnPayload,
@@ -20,13 +20,13 @@ from models import (
     ImputationHint,
     ValidationReport,
 )
-from state import PipelineState
-from tools.baseline_accessors import find_spec_by_hint
-from tools.match_canonical import compact_format_summary
-from tools.operations import describe_operation
-from tools.schema_proposals import schema_proposals
-from tools.fix_invariants import removable_values
-from tools.generated_function import (
+from noipa_dq.state import PipelineState
+from noipa_dq.tools.baseline_accessors import find_spec_by_hint
+from noipa_dq.tools.match_canonical import compact_format_summary
+from noipa_dq.tools.operations import describe_operation
+from noipa_dq.tools.schema_proposals import schema_proposals
+from noipa_dq.tools.fix_invariants import removable_values
+from noipa_dq.tools.generated_function import (
     close_sandbox,
     execution_issues,
     execution_log,
@@ -34,10 +34,10 @@ from tools.generated_function import (
     start_execution_log,
     validate_against_examples,
 )
-from tools.trial_execute import trial_execute
-from tools.validate_format import specs_by_column
-from utils.llm import EmptyModelResponse, structured_model
-from utils.prompts import load_prompt
+from noipa_dq.tools.trial_execute import trial_execute
+from noipa_dq.tools.validate_format import specs_by_column
+from noipa_dq.utils.llm import EmptyModelResponse, structured_model
+from noipa_dq.utils.prompts import load_prompt
 
 
 _MAX_EVIDENCE_ROWS = 10

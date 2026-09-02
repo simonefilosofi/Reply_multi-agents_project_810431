@@ -3,12 +3,12 @@ from __future__ import annotations
 
 import pandas as pd
 
-from agents.auto_remediation import (
+from noipa_dq.agents.auto_remediation import (
     _drop_settled_corrections,
     _realign_range_bounds,
     _refresh_reports,
 )
-from models import DateFormat, FormatViolation, ValidationReport
+from noipa_dq.models import DateFormat, FormatViolation, ValidationReport
 
 _PERIOD_SPEC = DateFormat(strftime_pattern="%Y%m")
 _STALE_VALUES = {"MAR-2024": "202403", "LUG-2024": "202407"}

@@ -6,9 +6,13 @@ from __future__ import annotations
 
 import pandas as pd
 import pytest
+from pathlib import Path
+
 from streamlit.testing.v1 import AppTest
 
-from models import (
+_APP = str(Path(__file__).resolve().parent.parent / "app" / "streamlit_app.py")
+
+from noipa_dq.models import (
     AnomalyEntry,
     AnomalyReport,
     ColumnPayload,
@@ -20,7 +24,7 @@ from models import (
     UnaddressedViolations,
     ValidationReport,
 )
-from state import PipelineState
+from noipa_dq.state import PipelineState
 
 _CLEANER = "def clean_value(value):\n    return str(value).strip()\n"
 
@@ -105,14 +109,14 @@ def _state() -> PipelineState:
 
 
 def _app(**session) -> AppTest:
-    app = AppTest.from_file("app.py", default_timeout=120)
+    app = AppTest.from_file(_APP, default_timeout=120)
     for key, value in session.items():
         app.session_state[key] = value
     return app.run()
 
 
 def test_the_landing_page_renders_before_anything_is_uploaded():
-    app = AppTest.from_file("app.py", default_timeout=120).run()
+    app = AppTest.from_file(_APP, default_timeout=120).run()
 
     assert not app.exception
     assert any("Data quality for NoiPA" in block.value for block in app.markdown)

@@ -6,11 +6,11 @@ import json
 import pandas as pd
 from pydantic import BaseModel
 
-from models import AnomalyEntry, AnomalyReport
-from tools.normalize_numeric_format import normalize_numeric_format
-from state import PipelineState
-from utils.llm import structured_model
-from utils.prompts import load_prompt
+from noipa_dq.models import AnomalyEntry, AnomalyReport
+from noipa_dq.tools.normalize_numeric_format import normalize_numeric_format
+from noipa_dq.state import PipelineState
+from noipa_dq.utils.llm import structured_model
+from noipa_dq.utils.prompts import load_prompt
 
 _RARE_FREQ_THRESHOLD = 0.01
 _RARE_ABS_THRESHOLD = 3

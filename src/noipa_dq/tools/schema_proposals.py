@@ -1,8 +1,8 @@
 """Builds the remediation proposals whose form is already decided by the detection stages: dropping a column that is almost entirely empty, and renaming one whose name breaks the baseline convention. Both are schema decisions that only a person should approve, but neither needs a model to be written down - the column, the operation and the parameter are all known. Generating them deterministically keeps them out of the LLM's hands, where they were previously either ignored or turned into value fixes."""
 from __future__ import annotations
 
-from models import FixProposal, Operation, ValidationReport
-from tools.operations import describe_operation
+from noipa_dq.models import FixProposal, Operation, ValidationReport
+from noipa_dq.tools.operations import describe_operation
 
 _SPARSE_PREFIX = "sparse column"
 _NAMING_PREFIX = "naming convention"

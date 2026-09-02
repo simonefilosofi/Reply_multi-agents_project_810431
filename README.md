@@ -90,7 +90,7 @@ The model is not decoration on this design; it is what makes the design feasible
 
 ### 1.5 Repository Structure and Technology Stack
 
-The repository exposes **two execution surfaces over one pipeline**: `main.ipynb`, the explanatory notebook that runs the graph stage by stage and shows every intermediate artefact; and `app.py`, the Streamlit application that is *also* the human approval gate. `graph.py` additionally exposes the same nodes as a compiled LangGraph object for programmatic use. There is no separate CLI and no `src/` package — the pipeline is the repository root.
+The repository exposes **two execution surfaces over one pipeline**: `notebooks/main.ipynb`, the explanatory notebook that runs the graph stage by stage and shows every intermediate artefact; and `app.py`, the Streamlit application that is *also* the human approval gate. `graph.py` additionally exposes the same nodes as a compiled LangGraph object for programmatic use. There is no separate CLI and no `src/` package — the pipeline is the repository root.
 
 The stack combines `langgraph` and `langchain-core` for orchestration and typed state, [`langchain-deepseek`](https://python.langchain.com/docs/integrations/chat/deepseek/) for every chat call, `openai` for the embedding index behind canonical matching, `pydantic` for the artefact contracts, `pandas` and `numpy` for all deterministic measurement, [`e2b-code-interpreter`](https://e2b.dev/docs) for the first execution of generated cleaning code, and `streamlit` for the gate.
 
@@ -98,51 +98,55 @@ Of the twelve pipeline stages, **six call a model directly** (`profiler`, `seman
 
 ```text
 Reply_multi-agents_project_810431/
-|-- agents/                            # one LangGraph node per file
-|   |-- baseline_builder.py            # resolves the schema registry into baseline.json
-|   |-- profiler.py                    # detects the NoiPA domain and language
-|   |-- semantic.py                    # canonical match, dtype, placeholders per column
-|   |-- nan_handler.py                 # unmasks disguised nulls, enforces dtypes, completeness
-|   |-- duplicate_column.py            # elects a canonical name among redundant columns
-|   |-- format_consistency.py          # format specs, cross-column rules, arithmetic identities
-|   |-- auto_remediation.py            # applies only what the data determines on its own
-|   |-- anomaly_detector.py            # IQR outliers and rare categories
-|   |-- unified.py                     # writes clean_value() code and typed FixProposals
-|   |-- apply_fixes.py                 # executes ONLY approved_fix_ids
-|   |-- duplicate_row.py               # removes exact duplicate rows
-|   `-- report_generator.py            # the report payload and its narrative
-|-- tools/                             # deterministic helpers (two exceptions call the model)
-|   |-- generated_function.py          # static gate, sandbox and judge for generated code
-|   |-- fix_invariants.py              # post-fix checks no remediation may violate
-|   |-- reliability_score.py           # the five dimensions and the aggregate score
-|   `-- ...                            # profiling, matching, validation, execution
-|-- prompts/                           # one markdown prompt per LLM-calling agent
-|-- utils/llm.py                       # the single construction point for the chat model
+|-- src/noipa_dq/                      # the importable package: everything the pipeline is
+|   |-- agents/                        # one LangGraph node per file
+|   |   |-- baseline_builder.py        # resolves the schema registry into baseline.json
+|   |   |-- profiler.py                # detects the NoiPA domain and language
+|   |   |-- semantic.py                # canonical match, dtype, placeholders per column
+|   |   |-- nan_handler.py             # unmasks disguised nulls, enforces dtypes, completeness
+|   |   |-- duplicate_column.py        # elects a canonical name among redundant columns
+|   |   |-- format_consistency.py      # format specs, cross-column rules, arithmetic identities
+|   |   |-- auto_remediation.py        # applies only what the data determines on its own
+|   |   |-- anomaly_detector.py        # IQR outliers and rare categories
+|   |   |-- unified.py                 # writes clean_value() code and typed FixProposals
+|   |   |-- apply_fixes.py             # executes ONLY approved_fix_ids
+|   |   |-- duplicate_row.py           # removes exact duplicate rows
+|   |   `-- report_generator.py        # the report payload and its narrative
+|   |-- tools/                         # deterministic helpers (two exceptions call the model)
+|   |   |-- generated_function.py      # static gate, sandbox and judge for generated code
+|   |   |-- fix_invariants.py          # post-fix checks no remediation may violate
+|   |   |-- reliability_score.py       # the five dimensions and the aggregate score
+|   |   `-- ...                        # profiling, matching, validation, execution
+|   |-- prompts/                       # one markdown prompt per LLM-calling agent
+|   |-- utils/llm.py                   # the single construction point for the chat model
+|   |-- models.py                      # the typed artefact contracts
+|   |-- state.py                       # PipelineState, shared by every node
+|   `-- graph.py                       # LangGraph wiring and the compiled default graph
+|-- data/
+|   |-- raw/                           # the two datasets required by the brief
+|   |-- external/                      # four further NoiPA CSVs, beyond the two required
+|   `-- registry/                      # the canonical schema and its retrieval index
+|       |-- noipa_schema_registry.json # hand-curated canonical registry
+|       |-- column_descriptions.json   # retrieval index for canonical matching
+|       |-- column_descriptions.embeddings.pkl  # its cached embedding matrix
+|       `-- baseline.json              # the resolved registry, rewritten on every run
+|-- reports/
+|   |-- runs/                          # the recorded runs the notebook and the figures replay
+|   `-- figures/                       # the figures used by this README
 |-- tests/                             # 348 tests; no network and no API key required
-|-- datasets_extra/                    # four further NoiPA CSVs, beyond the two required
-|-- Datasets-Reply-20260313/           # the two datasets required by the brief
-|-- images/                            # figures used by this README
-|-- registry/                          # the canonical schema and its retrieval index
-|   |-- noipa_schema_registry.json     # hand-curated canonical registry
-|   |-- column_descriptions.json       # retrieval index for canonical matching
-|   |-- column_descriptions.embeddings.pkl  # its cached embedding matrix
-|   `-- baseline.json                  # the resolved registry, rewritten on every run
+|   `-- acceptance/                    # regression net over the runs; no API key needed
+|       |-- verify.py                  # pins value-level invariants against invariants.json
+|       |-- acceptance.py              # the delivered artefacts are complete and consistent
+|       `-- census.py                  # raw defects enumerated independently of the pipeline
+|-- scripts/
+|   |-- record_run.py                  # records one full run into reports/runs/<dataset>/
+|   `-- figures.py                     # the six figures, shared by this README and the notebook
+|-- notebooks/main.ipynb               # explanatory notebook
+|-- app/streamlit_app.py               # Streamlit GUI and human approval gate
 |-- docs/                              # the brief, the course guidelines, the presentation
-|-- runs/                              # the recorded runs the notebook and the figures replay
-|-- checks/                            # regression net over those runs; no API key needed
-|   |-- verify.py                      # pins value-level invariants against invariants.json
-|   |-- acceptance.py                  # the delivered artefacts are complete and consistent
-|   `-- census.py                      # raw defects enumerated independently of the pipeline
 |-- out/                               # scratch run artefacts (gitignored)
-|-- models.py                          # the typed artefact contracts
-|-- state.py                           # PipelineState, shared by every node
-|-- graph.py                           # LangGraph wiring and the compiled default graph
-|-- app.py                             # Streamlit GUI and human approval gate
-|-- main.ipynb                         # explanatory notebook
-|-- record_run.py                      # records one full run into runs/<dataset>/
-|-- figures.py                         # the six figures, shared by this README and the notebook
-|-- conftest.py
-|-- requirements.txt
+|-- pyproject.toml                     # packaging, and the pytest and tool configuration
+|-- requirements.txt                   # the pinned versions the recorded runs were produced with
 `-- .env                               # DEEPSEEK_API_KEY, OPENAI_API_KEY, E2B_API_KEY (local only)
 ```
 
@@ -153,7 +157,7 @@ On **macOS / Linux**:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e .
 ```
 
 On **Windows (PowerShell)**:
@@ -161,7 +165,7 @@ On **Windows (PowerShell)**:
 ```powershell
 python -m venv .venv
 .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -e .
 ```
 
 Every LLM-calling stage requires a `DEEPSEEK_API_KEY`. Canonical matching by embedding retrieval additionally requires an `OPENAI_API_KEY`. `E2B_API_KEY` is **optional but recommended**: it moves the first execution of every generated cleaning function off this machine and into a cloud micro-VM. Without it that execution falls back to a restricted local namespace instead (the *local cage* of Section 2.6). The pipeline still runs, with a weaker isolation guarantee, and the report states which executor validated each function. Variables are loaded from `.env` at the repository root through `python-dotenv`:
@@ -175,13 +179,13 @@ E2B_API_KEY=your_value_here   # optional
 The GUI and approval gate:
 
 ```bash
-streamlit run app.py
+streamlit run app/streamlit_app.py
 ```
 
 The narrated end-to-end run:
 
 ```bash
-jupyter notebook main.ipynb
+jupyter notebook notebooks/main.ipynb
 ```
 
 The test suite, which runs offline with no key:
@@ -190,25 +194,25 @@ The test suite, which runs offline with no key:
 pytest tests/
 ```
 
-Input CSVs live in `Datasets-Reply-20260313/project_data_quality/`; the GUI accepts an upload of any CSV.
+Input CSVs live in `data/raw/project_data_quality/`; the GUI accepts an upload of any CSV.
 
-A run is recorded with `record_run.py`, which runs the twelve nodes in order, approves every proposal at the gate and writes the report, the cleaned dataset, the cell-level change log and `timings.json` into `runs/<dataset>/`. The figures in Section 4 are then drawn from those artefacts by `figures.py`, which computes nothing of its own, so a figure cannot disagree with the report beside it — and `main.ipynb` renders the same six figures from the same module:
+A run is recorded with `scripts/record_run.py`, which runs the twelve nodes in order, approves every proposal at the gate and writes the report, the cleaned dataset, the cell-level change log and `timings.json` into `reports/runs/<dataset>/`. The figures in Section 4 are then drawn from those artefacts by `scripts/figures.py`, which computes nothing of its own, so a figure cannot disagree with the report beside it — and `main.ipynb` renders the same six figures from the same module:
 
 ```bash
-python record_run.py Datasets-Reply-20260313/project_data_quality/spesa.csv runs/spesa
-python figures.py
+python scripts/record_run.py data/raw/project_data_quality/spesa.csv reports/runs/spesa
+python scripts/figures.py
 ```
 
-A recorded run is then graded by `checks/`, which reads only what is under `runs/` and needs no API key.
+A recorded run is then graded by `tests/acceptance/`, which reads only what is under `reports/runs/` and needs no API key.
 
 - **`acceptance.py`** asks whether what reaches the client is complete and says the same thing twice: every artefact written, every section present, every row of the coverage table reporting something rather than a zero, and the per-column appendix matching the delivered file to within 0.15%.
-- **`verify.py`** pins value-level invariants rather than output bytes. The model-calling nodes are not reproducible run to run, so a byte diff would report model noise as a regression. It compares against `checks/invariants.json` and names which invariant moved.
+- **`verify.py`** pins value-level invariants rather than output bytes. The model-calling nodes are not reproducible run to run, so a byte diff would report model noise as a regression. It compares against `tests/acceptance/invariants.json` and names which invariant moved.
 - **`census.py`** enumerates the raw defects using rules written independently of the pipeline's own detectors, so a run is graded against an outside reading of the file rather than against itself.
 
 ```bash
-python checks/acceptance.py     # the delivered artefacts are complete and consistent
-python checks/verify.py         # 89 pinned invariants across the two client datasets
-python checks/census.py         # refresh the independent defect census
+python tests/acceptance/acceptance.py     # the delivered artefacts are complete and consistent
+python tests/acceptance/verify.py         # 89 pinned invariants across the two client datasets
+python tests/acceptance/census.py         # refresh the independent defect census
 ```
 
 On the recorded runs both pass: every messy numeric value was recovered correctly (224 of 224 in `spesa`; 600 of 600 and 599 of 599 in `attivazioniCessazioni`), every malformed date was recovered (598 and 1,600 checked), and the period-authority path overwrote **no** well-formed month or year while filling 572 malformed months and 382 malformed years.
@@ -264,7 +268,7 @@ This is how two properties that normally trade off can coexist here: the system 
 
 The pipeline is grounded in two hand-curated files that together describe NoiPA's canonical data model: one states what a column should be, the other supports retrieval over those statements. Both were **written by hand from NoiPA open data**: we downloaded a set of published NoiPA datasets, read their fields, and distilled the recurring columns, domains and conventions into a registry. It is curation, not extraction — the registry states what a field *should* be, which no single file can tell you.
 
-That provenance is also why `datasets_extra/` exists. Four further NoiPA files we downloaded — `assenzeMensili.csv`, `contributiPrevidenziali.csv`, `ritenuteSindacali.csv` and `trasferimentiPersonale.csv` — live there and are not among the two the brief requires. They exist to answer a question those two cannot: does the pipeline work on a NoiPA file it was not developed against, or is it fitted to the two it was? Section 4.10 reports one such run.
+That provenance is also why `data/external/` exists. Four further NoiPA files we downloaded — `assenzeMensili.csv`, `contributiPrevidenziali.csv`, `ritenuteSindacali.csv` and `trasferimentiPersonale.csv` — live there and are not among the two the brief requires. They exist to answer a question those two cannot: does the pipeline work on a NoiPA file it was not developed against, or is it fitted to the two it was? Section 4.10 reports one such run.
 
 **`noipa_schema_registry.json`** is the canonical schema. It declares four domains — `Amministrati`, `Amministrazioni`, `Rapporti_di_lavoro`, `Trattamento_economico` — holding nineteen dataset definitions between them, plus a `shared_column_definitions` block of twelve reusable column contracts referenced by `$ref`. It also carries the global conventions the whole pipeline validates against:
 
@@ -369,13 +373,13 @@ What that code *is* depends on which kind of repair the proposal carries, and th
 
 **A typed catalogue operation** is the common case — the great majority of proposals across the three recorded runs. The executed thing is a bounded `Operation` with validated parameters, so what the gate renders is the *equivalent* pandas expression, labelled as such:
 
-![The approval gate rendering a typed catalogue operation](images/approval_gate.png)
+![The approval gate rendering a typed catalogue operation](reports/figures/approval_gate.png)
 
 **A generated cleaning function** is the exception, and here the code block is not an illustration but the source that will actually run, so the caption changes to say so and to name the guarantees it already passed:
 
-![The approval gate rendering a model-written cleaning function](images/approval_gate_01.png)
+![The approval gate rendering a model-written cleaning function](reports/figures/approval_gate_01.png)
 
-The difference is enforced in `app.py`, which selects the caption on whether the proposal carries an `apply_generated_function` operation. It matters because the two demand different things of the reader: the first asks whether the *action* is right, the second asks whether the *code* is right.
+The difference is enforced in `app/streamlit_app.py`, which selects the caption on whether the proposal carries an `apply_generated_function` operation. It matters because the two demand different things of the reader: the first asks whether the *action* is right, the second asks whether the *code* is right.
 
 After execution the gate reports what actually landed, including **every approved fix that did not** — whether it errored, breached an invariant, or was skipped — so a silent partial application is impossible.
 
@@ -540,7 +544,7 @@ Results come from **three end-to-end runs**, each executed on the pipeline as co
 
 `spesa.csv` is unpacked in detail first because it exhibits all five defect categories at once: disguised nulls, three-way column redundancy, header-convention drift, format drift inside a period column, and near-empty columns.
 
-![Reliability before and after remediation across the three datasets](images/reliability_across_datasets.png)
+![Reliability before and after remediation across the three datasets](reports/figures/reliability_across_datasets.png)
 
 Approving everything is the *upper bound* on what the system will do, not its default. The point of the gate is that a reviewer can decline any of it; approving all of it is what makes the delta measurable.
 
@@ -550,7 +554,7 @@ One caveat on reproducibility, stated here because it bears on every number that
 
 What makes such a difference possible is structural rather than random. `round_decimals` is deterministic, but it runs on `spesa` *after* `duplicate_column` has collapsed `{spesa, SPESA TOTALE}` into one column and backfilled it — and the two source columns disagree about how much rounding they need, 2,830 cells against 2,817. Which name survives that collapse is a model call. A deterministic stage is only as reproducible as the frame handed to it, which is the argument for measuring at both ends of a run rather than trusting a single number.
 
-The figures below describe the specific runs recorded under `runs/`, not an average.
+The figures below describe the specific runs recorded under `reports/runs/`, not an average.
 
 ### 4.1 The reliability score, and why there are two of them
 
@@ -558,7 +562,7 @@ The headline result is that the pipeline raised the aggregate reliability score 
 
 
 
-![Reliability by dimension before and after remediation, like-for-like](images/reliability_dimensions.png)
+![Reliability by dimension before and after remediation, like-for-like](reports/figures/reliability_dimensions.png)
 
 The two scores answer different questions. **As delivered** (0.7562 → 0.9933) compares only the three dimensions measurable on the raw file — completeness, uniqueness and schema conformity — because *validity* and *consistency* cannot be scored before the pipeline has inferred a format spec and mined the cross-column rules to score them against. **Like-for-like** (0.9380 → 0.9960) is the stricter comparison: it scores both ends over all five dimensions, using the pre-remediation snapshot taken once those specs exist.
 
@@ -570,7 +574,7 @@ Per dimension, the movements are **schema conformity 0.8182 → 1.0000** (the la
 
 Read naively, this figure shows the pipeline *destroying* data before recovering it.
 
-![Completeness measured at the raw, detected and delivered snapshots](images/completeness_journey.png)
+![Completeness measured at the raw, detected and delivered snapshots](reports/figures/completeness_journey.png)
 
 The raw file measures **0.8752** complete. After the pipeline unmasks disguised nulls it measures **0.8680**, which is *lower*. Nothing was lost between those two bars. **988 cells** that read as data to `pandas` (`N/D`, `-`, `?` and similar tokens) were nulls in disguise, and the second bar is the first honest measurement of the file. The report labels this explicitly as `hidden_defects_unmasked: {disguised_nulls_unmasked: 988, apparent_completeness: 0.8752, true_completeness: 0.8680}`.
 
@@ -580,7 +584,7 @@ This is precisely why quality is captured at three snapshots rather than two. Ag
 
 Across the five coverage areas the run detected **18,459 violations** and left **1,633** standing.
 
-![Violations by coverage area, detected versus residual, log scale](images/violations_by_area.png)
+![Violations by coverage area, detected versus residual, log scale](reports/figures/violations_by_area.png)
 
 **Schema violations went 5 → 0**, **format violations 513 → 0**, **consistency 517 → 0** and **uniqueness 87 → 0**. **Completeness went 17,337 → 1,633**, a 90.6% reduction — and it is the only area with anything left standing.
 
@@ -596,7 +600,7 @@ A system optimising for the headline number would have imputed all 1,633 and rep
 
 **5,659 cells** changed across the run. The split by origin is the clearest single picture of the authority argument in Section 1.3.
 
-![Cells changed by the stage that changed them](images/cells_changed_by_source.png)
+![Cells changed by the stage that changed them](reports/figures/cells_changed_by_source.png)
 
 **Auto-remediation accounts for 4,215 cells (74.5%)** — the corrections the data determines on its own: 2,878 cells of floating-point noise rounded off `spesa` to its recorded two-decimal precision, 414 `rata` period labels rewritten to canonical form, 448 `descrizione` values filled from a mined `ente → descrizione` dependency at purity 0.9928, 379 `imposta` values filled likewise, and 96 partial periods completed. None of these required a human, because none of them required a *choice*.
 
@@ -618,7 +622,7 @@ The `spesa` outliers were left in place. The four rare `imposta` values were not
 
 ### 4.6 Where the run spends its time
 
-![Per-stage timings for the full run](images/stage_timings.png)
+![Per-stage timings for the full run](reports/figures/stage_timings.png)
 
 The full run took **659.1 seconds**. `unified` alone accounts for **361.2s — 55% of the total** — because it is the stage that calls a model per column group, validates what comes back, and retries on failure. `format_consistency` (84.2s) is second, reaching the model through two tools, and `semantic` (72.5s) third, calling it once per column. `apply_fixes` (42.5s), `auto_remediation` (36.8s) and `report_generator` (35.8s) follow.
 
@@ -682,7 +686,7 @@ An earlier recording of this same file read very differently — 20 trials, 10 i
 
 ### 4.10 Generalisation: a held-out dataset
 
-The canonical registry and the retrieval index in this repository were built by hand from **NoiPA open data**. Alongside the two files the brief requires, we downloaded four further NoiPA datasets — `assenzeMensili.csv`, `contributiPrevidenziali.csv`, `ritenuteSindacali.csv` and `trasferimentiPersonale.csv` — which live in `datasets_extra/`. The pipeline was never developed or tuned against any of them, so they answer a question the two required files cannot: does it work on a NoiPA file it was not built around?
+The canonical registry and the retrieval index in this repository were built by hand from **NoiPA open data**. Alongside the two files the brief requires, we downloaded four further NoiPA datasets — `assenzeMensili.csv`, `contributiPrevidenziali.csv`, `ritenuteSindacali.csv` and `trasferimentiPersonale.csv` — which live in `data/external/`. The pipeline was never developed or tuned against any of them, so they answer a question the two required files cannot: does it work on a NoiPA file it was not built around?
 
 `ritenuteSindacali.csv` — trade-union dues, **11,745 rows × 14 columns** — is the sharpest test of the four. The registry does carry an `EntryRitenuteSindacali` definition, but it describes a different aggregation of the same subject: eight columns cut by province, age band and sex, where this file is cut by union and month. Only **two** of the file's fourteen column names, `amministrazione` and `comparto`, appear anywhere in the registry. It also uses a different identifier convention (`id_record`, a UUID, rather than `_id`) and carries an arithmetic identity between three of its columns.
 

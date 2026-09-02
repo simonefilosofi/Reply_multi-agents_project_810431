@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from tools.cross_column_checks import cross_column_reports
+from noipa_dq.tools.cross_column_checks import cross_column_reports
 
 _PURE_GROUPS = {"P1": "nord", "P2": "nord", "P3": "sud", "P4": "sud",
                 "P5": "centro", "P6": "centro", "P7": "isole", "P8": "isole"}

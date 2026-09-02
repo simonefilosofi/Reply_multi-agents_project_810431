@@ -5,9 +5,9 @@ import re
 
 import pandas as pd
 
-from tools.normalize_date_format import normalize_date_format
-from tools.decimal_precision import recorded_precision
-from tools.normalize_numeric_format import normalize_numeric_format
+from noipa_dq.tools.normalize_date_format import normalize_date_format
+from noipa_dq.tools.decimal_precision import recorded_precision
+from noipa_dq.tools.normalize_numeric_format import normalize_numeric_format
 
 _DATE_TOKENS = ("date", "time")
 _MONTH_PRECISION = re.compile(r"^(\d{4}[-/.]?\d{2}|\d{2}[-/.]\d{4})$")
