@@ -5,5 +5,12 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-#ignore out folder
+# Virtualenv and tool caches
+.venv/
+.pytest_cache/
+
+# macOS
+.DS_Store
+
+# Pipeline run artefacts
 out/**
