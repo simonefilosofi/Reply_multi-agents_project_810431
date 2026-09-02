@@ -36,13 +36,15 @@ def _payload(**overrides) -> dict:
             "headline_before": {"rows": 7543, "columns": 18, "null_cells": 16939, "duplicate_rows": 40},
             "headline_after": {"rows": 7478, "columns": 11, "null_cells": 1633, "duplicate_rows": 0},
         },
-        "violations_by_kind_detected": {"format": 514, "completeness": 16958, "consistency": 517},
+        "violations_by_kind_detected": {"format": 514, "completeness": 16958, "consistency": 517,
+                                       "uniqueness": 87},
         "violations_by_kind_residual": {"format": 4, "consistency": 10},
         "naming_violations": [{"column_name": "_id", "suggested_name": "id"}],
         "format_violations_detected": [{"column_name": "rata", "violation_count": 510}],
         "anomalies": [{"column_name": "spesa", "method": "iqr", "detected": 1352, "examples": [2110811.34]}],
         "duplicate_resolutions": [],
-        "duplicate_rows": {"exact_duplicates": 65},
+        "duplicate_rows": {"exact_duplicate_rows": 65, "rows_removed": 65,
+                           "key_collisions": {"id": {"rows_in_conflicting_groups": 22}}},
         "semantic_payload": [{"column_name": "imposta", "placeholders_found": ["TBD", "n.d."]}],
         "completeness": {
             "overall": {"completeness": 0.868, "null_cells": 17927, "cells": 135774},
@@ -161,3 +163,15 @@ def test_an_empty_payload_still_produces_a_document() -> None:
 
     assert markdown.startswith("# Data Quality Report")
     assert "## What was changed" not in markdown
+
+
+def test_duplicate_detection_gets_its_own_row_in_the_coverage_table() -> None:
+    """Exact duplicate rows were counted nowhere in the coverage table, so the one place a reader
+    checks the brief's five areas showed nothing for uniqueness while sixty-five duplicate records
+    had been found and removed."""
+    markdown = build_report_markdown(_payload(), _COMMENTARY)
+
+    row = next(line for line in markdown.splitlines() if line.startswith("| Duplicate detection"))
+
+    assert "87 rows not unique when measured" in row
+    assert "65 exact duplicates removed" in row

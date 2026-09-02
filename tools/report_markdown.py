@@ -119,6 +119,7 @@ def _fault_table(payload: dict) -> str:
     naming = payload.get("naming_violations") or []
     anomalies = payload.get("anomalies") or []
     duplicates = payload.get("duplicate_resolutions") or []
+    duplicate_rows = payload.get("duplicate_rows") or {}
     rows = [
         [
             "Schema validation",
@@ -138,6 +139,12 @@ def _fault_table(payload: dict) -> str:
             ", ".join(f"`{group['canonical_name']}`" for group in duplicates[:3]) or "-",
         ],
         [
+            "Duplicate detection",
+            f"{_number(detected.get('uniqueness'))} rows not unique when measured, "
+            f"{_number(duplicate_rows.get('rows_removed'))} exact duplicates removed",
+            _collision_example(duplicate_rows),
+        ],
+        [
             "Anomaly detection",
             f"{sum(int(a.get('detected') or 0) for a in anomalies)} across "
             f"{len(anomalies)} columns",
@@ -153,6 +160,16 @@ def _fault_table(payload: dict) -> str:
         ],
     ]
     return _table(["area", "detected", "for example"], rows)
+
+
+def _collision_example(duplicate_rows: dict) -> str:
+    """The key columns records collided on, which is what a reader needs to judge the count beside
+    it: rows sharing a key while differing elsewhere are carried to review, not removed."""
+    keys = [
+        key for key, stats in (duplicate_rows.get("key_collisions") or {}).items()
+        if stats.get("rows_in_conflicting_groups")
+    ]
+    return ", ".join(f"`{key}`" for key in keys[:3]) or "-"
 
 
 def _findings(payload: dict, commentary: dict) -> str:

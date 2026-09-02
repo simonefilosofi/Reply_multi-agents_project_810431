@@ -87,7 +87,7 @@ Reply_multi-agents_project_810431/
 |   `-- ...                            # profiling, matching, validation, execution
 |-- prompts/                           # one markdown prompt per LLM-calling agent
 |-- utils/llm.py                       # the single construction point for the chat model
-|-- tests/                             # 304 tests; no network and no API key required
+|-- tests/                             # 347 tests; no network and no API key required
 |-- datasets_extra/                    # four further NoiPA CSVs, beyond the two required
 |-- Datasets-Reply-20260313/           # the two datasets required by the brief
 |-- images/                            # figures used by this README
@@ -97,13 +97,19 @@ Reply_multi-agents_project_810431/
 |   |-- column_descriptions.embeddings.pkl  # its cached embedding matrix
 |   `-- baseline.json                  # the resolved registry, rewritten on every run
 |-- docs/                              # the brief, the course guidelines, the presentation
-|-- out/                               # run artefacts (gitignored; see Section 4)
+|-- runs/                              # the recorded runs the notebook and the figures replay
+|-- checks/                            # regression net over those runs; no API key needed
+|   |-- verify.py                      # pins value-level invariants against invariants.json
+|   |-- acceptance.py                  # the delivered artefacts are complete and consistent
+|   `-- census.py                      # raw defects enumerated independently of the pipeline
+|-- out/                               # scratch run artefacts (gitignored)
 |-- models.py                          # the typed artifact contracts
 |-- state.py                           # PipelineState, shared by every node
 |-- graph.py                           # LangGraph wiring and the compiled default graph
 |-- app.py                             # Streamlit GUI and human approval gate
 |-- main.ipynb                         # explanatory notebook
-|-- make_readme_figures.py             # regenerates images/ from a run's own artefacts
+|-- record_run.py                      # records one full run into runs/<dataset>/
+|-- figures.py                         # the six figures, shared by this README and the notebook
 |-- conftest.py
 |-- requirements.txt
 `-- .env                               # DEEPSEEK_API_KEY, OPENAI_API_KEY, E2B_API_KEY (local only)
@@ -155,12 +161,22 @@ pytest tests/
 
 Input CSVs live in `Datasets-Reply-20260313/project_data_quality/`; the GUI accepts an upload of any CSV.
 
-The figures in Section 4 are regenerated from a run's own artefacts — the report JSON and the per-stage timings — by `make_readme_figures.py`, which requires `matplotlib` and computes nothing of its own, so a figure cannot disagree with the report beside it:
+A run is recorded with `record_run.py`, which runs the twelve nodes in order, approves every proposal at the gate and writes the report, the cleaned dataset, the cell-level change log and `timings.json` into `runs/<dataset>/`. The figures in Section 4 are then drawn from those artefacts by `figures.py`, which computes nothing of its own, so a figure cannot disagree with the report beside it — and `main.ipynb` renders the same six figures from the same module:
 
 ```bash
-pip install matplotlib
-python make_readme_figures.py
+python record_run.py Datasets-Reply-20260313/project_data_quality/spesa.csv runs/spesa
+python figures.py
 ```
+
+A recorded run is then graded by `checks/`, which reads only what is under `runs/` and needs no API key. `acceptance.py` asks whether what reaches the client is complete and says the same thing twice — every artefact written, every section present, every row of the coverage table reporting something rather than a zero, and the per-column appendix matching the delivered file to within 0.15%. `verify.py` pins **value-level invariants** rather than output bytes, because the model-calling nodes are not reproducible run to run and a byte diff would report model noise as a regression; it compares against `checks/invariants.json` and reports which invariant moved. `census.py` enumerates the raw defects using rules written independently of the pipeline's own detectors, so a run can be graded against an outside reading of the file rather than against itself.
+
+```bash
+python checks/acceptance.py     # the delivered artefacts are complete and consistent
+python checks/verify.py         # 89 pinned invariants across the two client datasets
+python checks/census.py         # refresh the independent defect census
+```
+
+On the recorded runs both pass: every messy numeric value was recovered correctly (224 of 224 in `spesa`; 600 of 600 and 599 of 599 in `attivazioniCessazioni`), every malformed date was recovered (598 and 1,600 checked), and the period-authority path overwrote **no** well-formed month or year while filling 572 malformed months and 382 malformed years.
 
 ---
 
@@ -364,7 +380,9 @@ The mechanics are deliberately narrow. `tools/generated_function.py` builds a sm
 
 Two lifecycle details matter in practice. One sandbox is **held open for a whole run** and reused across trials, because the repair loop re-checks a proposal at the top of every iteration and again when it settles — a fresh VM per check would cross the network dozens of times for the same source. That handle survives the call that created it, so `close_sandbox()` is called explicitly at the end of `agents/unified.py`: in a long-lived process such as the Streamlit gate an unclosed sandbox stays connected and billed for the whole session. Results are additionally **cached by `(source, values)`**, which is sound precisely because a cleaner is a pure scalar function.
 
-**The fallback is a real degradation, and is recorded as one.** `E2B_API_KEY` is optional: with no key, or when the sandbox call fails, execution falls back to a **local cage** — `load_callable` behind a whitelist of builtins and a restricted import hook, in this process. That keeps the pipeline running offline, in CI and in the 304 tests, but it is a weaker guarantee, and the system does not pretend otherwise. Every execution is appended to an **execution log** (`{executor, ok, detail}`) which is carried in the state as `generated_function_runs` and printed in the delivered report as *"generated functions validated in a sandbox: N of M"* — so a reader can see whether the isolation the architecture claims actually applied to *their* run. On the `attivazioniCessazioni` run, for instance, 20 trials ran, **10 of them in E2B**; 5 sandbox attempts failed and fell back locally, each failure logged with its reason. Those five have a single cause, and it is the flip side of holding one sandbox open for the whole run: `{"message":"The sandbox was not found","code":502} … likely due to sandbox timeout`. The VM's own lifetime expired part-way through a 7-minute run, and every later trial in that run went local. Reusing one sandbox saves the network round-trips; it also means its TTL, not the pipeline, decides how long the isolation lasts. Passing an explicit `timeout` to `Sandbox.create()`, or reopening the handle when a call reports the VM gone, is the fix — the log is what made the problem visible at all.
+**The fallback is a real degradation, and is recorded as one.** `E2B_API_KEY` is optional: with no key, or when the sandbox call fails, execution falls back to a **local cage** — `load_callable` behind a whitelist of builtins and a restricted import hook, in this process. That keeps the pipeline running offline, in CI and in the 347 tests, but it is a weaker guarantee, and the system does not pretend otherwise. Every execution is appended to an **execution log** (`{executor, ok, detail}`) which is carried in the state as `generated_function_runs` and printed in the delivered report as *"generated functions validated in a sandbox: N of M"* — so a reader can see whether the isolation the architecture claims actually applied to *their* run. Across the three recorded runs, **eight of eight** first executions happened in E2B and none in the local cage.
+
+That log is also what caught the one bug in this layer. An earlier recording of `attivazioniCessazioni` logged 20 trials with only **10 in E2B**; the other 10 fell back, each failure carrying the same reason: `{"message":"The sandbox was not found","code":502} … likely due to sandbox timeout`. Reusing one sandbox for a whole run saves the network round-trips, but it also meant the VM's TTL, not the pipeline, decided how long the isolation lasted — and `Sandbox.create()` was being called with no explicit lifetime, so the provider's default expired part-way through a ten-minute run and every later trial went local without anything failing. `_open_sandbox` now passes a lifetime sized for a run, and `_run_in_sandbox` reopens the handle when a call reports the VM gone. Nothing about the fallback changed; what changed is that it is no longer reached by default.
 
 It is worth stating plainly, because it is the kind of thing a project of this sort usually glosses over: **the sandbox isolates the host but does not restrain the code.** Inside the VM, refused source would run happily. It is the *static gate* that makes local execution on the full column safe, and the sandbox that makes the *first* execution safe to attempt at all. The two layers do different jobs and neither substitutes for the other.
 
@@ -475,7 +493,13 @@ Results come from **three end-to-end runs**, each executed on the pipeline as co
 
 Approving everything is the *upper bound* on what the system will do, not its default. The point of the gate is that a reviewer can decline any of it; approving all of it is what makes the delta measurable.
 
-One caveat on reproducibility, stated here because it bears on every number that follows. The **deterministic stages are stable**: two runs of `spesa.csv` reproduced all four quality snapshots, the 4,324 auto-remediated cells, the duplicate resolution and the completeness analysis exactly. The **proposal stage is not**: an earlier run of the same file produced six proposals instead of the four reported here, the Unified agent having since declared unaddressable what it had previously repaired. The figures below describe specific runs, whose artefacts are kept under `out/`, rather than an average.
+One caveat on reproducibility, stated here because it bears on every number that follows. The **measurements are stable**: every recording of `spesa.csv` reproduced all three quality snapshots exactly — the same 7,543 x 18 arrival, the same 16,939 nulls, the same 988 disguised ones, the same delivered 0.9801 completeness — along with the duplicate resolution and the completeness analysis.
+
+**The stages downstream of a model call are not, and the shape of the variance is worth being precise about.** Two independent recordings, one on an earlier revision of the code and one on the current one, agree cell for cell: 4,215 auto-remediated cells, 2,878 of them rounding `spesa` to its recorded precision, 5,659 cells changed in total, the same six proposals. An earlier third recording differed on both counts — 4,324 auto-remediated cells, 2,987 rounded, and four proposals rather than six. Its artefacts were not kept, so that difference cannot be traced to a cause after the fact.
+
+What makes such a difference possible is structural rather than random. `round_decimals` is deterministic, but it runs on `spesa` *after* `duplicate_column` has collapsed `{spesa, SPESA TOTALE}` into one column and backfilled it — and the two source columns disagree about how much rounding they need, 2,830 cells against 2,817. Which name survives that collapse is a model call. A deterministic stage is only as reproducible as the frame handed to it, which is the argument for measuring at both ends of a run rather than trusting a single number.
+
+The figures below describe the specific runs recorded under `runs/`, not an average.
 
 ### 4.1 The reliability score, and why there are two of them
 
@@ -485,11 +509,11 @@ The headline result is that the pipeline raised the aggregate reliability score 
 
 ![Reliability by dimension before and after remediation, like-for-like](images/reliability_dimensions.png)
 
-The two scores answer different questions. **As delivered** (0.7562 → 0.9933) compares only the three dimensions measurable on the raw file — completeness, uniqueness and schema conformity — because *validity* and *consistency* cannot be scored before the pipeline has inferred a format spec and mined the cross-column rules to score them against. **Like-for-like** (0.9380 → 0.9959) is the stricter comparison: it scores both ends over all five dimensions, using the pre-remediation snapshot taken once those specs exist.
+The two scores answer different questions. **As delivered** (0.7562 → 0.9933) compares only the three dimensions measurable on the raw file — completeness, uniqueness and schema conformity — because *validity* and *consistency* cannot be scored before the pipeline has inferred a format spec and mined the cross-column rules to score them against. **Like-for-like** (0.9380 → 0.9960) is the stricter comparison: it scores both ends over all five dimensions, using the pre-remediation snapshot taken once those specs exist.
 
 The like-for-like figure is the smaller improvement and the more honest one, which is why `compare()` computes it and the report prints both. A system that quoted only the first would be taking credit for the arrival of its own measuring instruments.
 
-Per dimension, the movements are **schema conformity 0.8182 → 1.0000** (the largest, and the one the human gate authorised), **consistency 0.9319 → 0.9995**, **validity 0.9930 → 1.0000**, **uniqueness 0.9885 → 1.0000**, and **completeness 0.9702 → 0.9801** — the smallest, and the one that needs explaining.
+Per dimension, the movements are **schema conformity 0.8182 → 1.0000** (the largest, and the one the human gate authorised), **consistency 0.9319 → 1.0000**, **validity 0.9930 → 1.0000**, **uniqueness 0.9885 → 1.0000**, and **completeness 0.9702 → 0.9801** — the smallest, and the one that needs explaining.
 
 ### 4.2 The completeness dip is the system working
 
@@ -503,11 +527,13 @@ This is precisely why quality is captured at three snapshots rather than two. Ag
 
 ### 4.3 Detection and what remains
 
-Across the four active coverage areas the run detected **18,372 violations** and left **1,643** standing.
+Across the five coverage areas the run detected **18,459 violations** and left **1,633** standing.
 
 ![Violations by coverage area, detected versus residual, log scale](images/violations_by_area.png)
 
-**Schema violations went 5 → 0** and **format violations 513 → 3**, a 99.4% reduction. **Consistency went 517 → 7.** **Completeness went 17,337 → 1,633**, a 90.6% reduction.
+**Schema violations went 5 → 0**, **format violations 513 → 0**, **consistency 517 → 0** and **uniqueness 87 → 0**. **Completeness went 17,337 → 1,633**, a 90.6% reduction — and it is the only area with anything left standing.
+
+The uniqueness figure counts rows rather than reports, and it is measured at the pre-remediation snapshot rather than on the raw file: 43 exact duplicate rows and 44 locked in a key collision at that point. The raw file carries 40 and 50 respectively — collapsing redundant columns turns some key collisions into outright duplicates, which is why the two snapshots disagree. Counting the validation reports alone reported zero here, which made a mandatory coverage area of the brief read as though it had never been checked.
 
 The 1,633 residual nulls are the interesting number, because they are **not a failure to detect**. They break down as `area_geografica` (1,567), `spesa` (58) and `descrizione` (8), and every one of them is carried into the report as an `UnaddressedViolations` entry with a stated reason. The model's own justification, quoted from the run:
 
@@ -517,15 +543,15 @@ A system optimising for the headline number would have imputed all 1,633 and rep
 
 ### 4.4 What actually changed, and on whose authority
 
-**5,764 cells** changed across the run. The split by origin is the clearest single picture of the authority argument in Section 1.3.
+**5,659 cells** changed across the run. The split by origin is the clearest single picture of the authority argument in Section 1.3.
 
 ![Cells changed by the stage that changed them](images/cells_changed_by_source.png)
 
-**Auto-remediation accounts for 4,324 cells (75%)** — the corrections the data determines on its own: 2,987 cells of floating-point noise rounded off `spesa` to its recorded two-decimal precision, 414 `rata` period labels rewritten to canonical form, 448 `descrizione` values filled from a mined `ente → descrizione` dependency at purity 0.9928, 379 `imposta` values filled likewise, and 96 partial periods completed. None of these required a human, because none of them required a *choice*.
+**Auto-remediation accounts for 4,215 cells (74.5%)** — the corrections the data determines on its own: 2,878 cells of floating-point noise rounded off `spesa` to its recorded two-decimal precision, 414 `rata` period labels rewritten to canonical form, 448 `descrizione` values filled from a mined `ente → descrizione` dependency at purity 0.9928, 379 `imposta` values filled likewise, and 96 partial periods completed. None of these required a human, because none of them required a *choice*.
 
 **Null unmasking accounts for 988**, duplicate-column resolution for **424**, and casing collapse for **22**.
 
-**The four human-approved proposals changed no cells at all** — and were nonetheless the highest-impact decisions in the run, because they were the only ones that changed the *shape* of the dataset: dropping `note` (98.0% null) and `fonte_dato` (99.0% null), renaming `_id` → `id` and `aggregation-time` → `aggregation_time` to satisfy the registry's naming regex. This is the division of authority visible in a single chart: the deterministic stages moved every value, and the human decided which columns should exist.
+**The six human-approved proposals changed four cells between them** — and were nonetheless the highest-impact decisions in the run, because four of them were the only changes to the *shape* of the dataset: dropping `note` (98.0% null) and `fonte_dato` (99.0% null), renaming `_id` → `id` and `aggregation-time` → `aggregation_time` to satisfy the registry's naming regex. The other two were value-level and barely moved the file: a `replace_values` corrected four stray `imposta` entries, and an `impute_from_lookup` on `descrizione` found nothing left to fill because auto-remediation had already closed 448 of its 456 gaps. This is the division of authority visible in a single chart: the deterministic stages moved every value, and the human decided which columns should exist.
 
 Combined with four duplicate-column groups collapsed automatically — `{ente, ente%code}`, `{tipo_imposta, Tipo Imposta}`, `{cod_imposta, 2cod_imposta, cod imposta ext}`, `{spesa, SPESA TOTALE}` — the dataset went from **18 columns to 11**, and from **7,543 rows to 7,478** after 65 exact duplicates were removed.
 
@@ -537,21 +563,21 @@ The anomaly stage flagged two columns and corrected neither, which is the intend
 
 On `imposta` it found two rare categories, `'imposta x'` (3 occurrences, 0.04%) and `'Altro'` (1 occurrence, 0.01%), against a dominant vocabulary in which `'Previdenziali a carico del datore di lavoro'` alone holds 11.61%. On `spesa` it found **1,352 IQR outliers** above an upper bound of ≈1.58M, ranging up to ≈43.4M. The second is the instructive case: in a public expenditure dataset a 43M figure is not an error, it is a large administration, and a system that "corrected" it would be destroying the most important rows in the file. The report states the finding and leaves the judgement to a reader.
 
-The four rare `imposta` values were left in place too, and they survive in the residual count — the run proposed no value-level fix for that column. That is the honest outcome of a policy that acts on evidence rather than on rarity: a mined `cod_imposta → imposta` dependency would have justified a correction, but rarity alone never does.
+The `spesa` outliers were left in place. The four rare `imposta` values were not, but the reason is worth being precise about: they were corrected by a `replace_values` proposal grounded in the mined `cod_imposta → imposta` dependency, which the reviewer approved — not because they were rare. That is the policy working as intended. Rarity alone never justifies a change; a mined dependency does, and the anomaly stage is not what acted on it.
 
 ### 4.6 Where the run spends its time
 
 ![Per-stage timings for the full run](images/stage_timings.png)
 
-The full run took **437.8 seconds**. `unified` alone accounts for **316.2s — 72% of the total** — because it is the stage that calls a model per column group, validates what comes back, and retries on failure. `semantic` (53.9s) is second, calling the model once per column. `format_consistency` (36.7s) and `report_generator` (17.4s) follow.
+The full run took **659.1 seconds**. `unified` alone accounts for **361.2s — 55% of the total** — because it is the stage that calls a model per column group, validates what comes back, and retries on failure. `format_consistency` (84.2s) is second, reaching the model through two tools, and `semantic` (72.5s) third, calling it once per column. `apply_fixes` (42.5s), `auto_remediation` (36.8s) and `report_generator` (35.8s) follow.
 
-The architectural point is at the other end of the chart. Every purely deterministic stage is effectively free: `nan_handler` **0.15s**, `baseline_builder` **0.08s**, `duplicate_row` **0.05s**, `auto_remediation` **2.5s** — and between them, in **2.8 seconds of the 438**, they changed **5,338 of the 5,764 cells (92.6%)**. The expensive stages are the ones that reason; the cheap stages are the ones that measure and act. That is the intended cost profile, and it is what makes the design affordable: pushing work down into deterministic tools is not only safer, it is where the throughput is.
+The architectural point is at the other end of the chart. The stages that only measure are effectively free: `duplicate_row` **0.62s**, `nan_handler` **0.79s**, `baseline_builder` **1.01s** — and together with `auto_remediation` (36.8s, the one deterministic stage that also writes), in **39 seconds of the 659**, they changed **5,207 of the 5,659 cells (92.0%)**. The expensive stages are the ones that reason; the cheap stages are the ones that measure and act. That is the intended cost profile, and it is what makes the design affordable: pushing work down into deterministic tools is not only safer, it is where the throughput is.
 
 ### 4.7 A caveat on this particular run
 
-**On this run the Unified agent proposed nothing at the value level.** All four proposals were the deterministic schema ones from `tools/schema_proposals.py`; the model examined the remaining column group and declared its violations unaddressable rather than writing a repair. The code-generation path of Sections 2.4.4 and 2.6 was therefore **not exercised on `spesa.csv`**, which is why the residual counts in §4.3 are not zero.
+**On this run the Unified agent wrote no code.** Six proposals reached the reviewer: four deterministic schema ones from `tools/schema_proposals.py`, and two value-level repairs — an `impute_from_lookup` on `descrizione` and a four-cell `replace_values` on `imposta` — both expressed as **typed catalogue operations** rather than a generated `clean_value`. The code-generation path of Sections 2.4.4 and 2.6 was therefore **not exercised on `spesa.csv`**.
 
-A previous run of the same file *did* produce two value-level proposals for that group — an `impute_from_lookup` on `descrizione` and a four-cell `replace_values` on `imposta` — which is the run-to-run variance noted at the head of this section. Neither run produced a generated function: given a choice between writing code and selecting a bounded operation, the agent chose the bounded operation both times.
+A previous run of the same file proposed nothing at the value level at all, declaring the same column group unaddressable — the run-to-run variance noted at the head of this section. Neither run produced a generated function: given a choice between writing code and selecting a bounded operation, the agent chose the bounded operation both times.
 
 The other two datasets did exercise the code-generation path, and Sections 4.9 and 4.10 report what it produced.
 
@@ -574,24 +600,24 @@ The other two datasets did exercise the code-generation path, and Sections 4.9 a
 
 | Run metric | Value |
 |---|---|
-| Violations detected | 18,372 |
-| Violations residual | 1,643 |
-| Cells changed | 5,764 |
+| Violations detected | 18,459 |
+| Violations residual | 1,633 |
+| Cells changed | 5,659 |
 | Disguised nulls unmasked | 988 |
-| Auto-remediations applied | 5 operations, 4,324 cells |
-| Proposals put to the reviewer | 4 |
-| Proposals approved and applied | 4 (0 errors, 0 refused) |
+| Auto-remediations applied | 5 operations, 4,215 cells |
+| Proposals put to the reviewer | 6 |
+| Proposals approved and applied | 6 (0 errors, 0 refused) |
 | Duplicate-column groups collapsed | 4 |
 | Generated cleaning functions | 0 |
 | **Reliability, as delivered** | **0.7562 → 0.9933** |
-| **Reliability, like-for-like** | **0.9380 → 0.9959** |
-| Total runtime | 437.8s |
+| **Reliability, like-for-like** | **0.9380 → 0.9960** |
+| Total runtime | 659.1s |
 
 ### 4.9 The second required dataset: `attivazioniCessazioni.csv`
 
 `attivazioniCessazioni.csv` is the harder of the two files the brief requires: **20,102 rows × 19 columns**, 2.7× the size of `spesa`, with **eight** badly named columns and **five** duplicate-column groups against `spesa`'s four. Its header row alone carries `Provincia Sede`, `CODICE ENTE`, `3descrizione`, `regione%sede` and — a space inside a word — `att ivazioni`.
 
-The pipeline detected **50,225 violations** and left **7,343**, carrying reliability from **0.8652 to 0.9798** like-for-like (0.7448 → 0.9919 as delivered). It unmasked **2,888 disguised nulls**, collapsed 19 columns to **12**, removed **90** duplicate rows, and changed **8,246 cells**.
+The pipeline detected **50,315 violations** and left **7,343**, carrying reliability from **0.8652 to 0.9798** like-for-like (0.7448 → 0.9919 as delivered). It unmasked **2,888 disguised nulls**, collapsed 19 columns to **12**, removed **90** duplicate rows, and changed **8,246 cells**.
 
 Three things distinguish this run from `spesa`.
 
@@ -599,7 +625,9 @@ Three things distinguish this run from `spesa`.
 
 **Auto-remediation did the cross-column work.** Two mined rules dominate the file — `RATA determines mese` (1,702 rows breaking) and `RATA determines anno` (1,160 rows breaking) — and `auto_remediation` repaired 958 of those rows by deriving month and year directly from the period key, plus 802 period labels normalised.
 
-**The gate saw two generated cleaning functions.** `clean_cessazioni` normalised the `cessazioni` measure, coercing its values to whole non-negative counts. Both were written against the column's own conforming and violating values, cleared the static gate, and were executed off-host before the reviewer saw them. The execution log makes the isolation auditable rather than assumed: across the run there were **20** generated-function trials, **10 of which ran in the E2B sandbox**; 5 sandbox attempts failed and fell back to the local cage, and the remaining 5 ran locally after that. This is the honest picture of the fallback described in Section 2.6 — the run completed either way, but only half of these first executions were genuinely off this machine, and the report says so.
+**The gate saw two generated cleaning functions.** `clean_mese` corrected `mese` values inconsistent with the month encoded in `RATA`, and `clean_cessazioni` coerced negative `cessazioni` counts to zero. Both were written against the column's own conforming and violating values, cleared the static gate, and were executed off-host before the reviewer saw them. The execution log makes the isolation auditable rather than assumed: across the run there were **6** generated-function trials and **all six ran in the E2B sandbox**, with no fallback to the local cage.
+
+An earlier recording of this same file read very differently — 20 trials, 10 in the sandbox and 10 on the host — and finding out why is what the log is for. `Sandbox.create()` was called without an explicit lifetime, the provider's default expired part-way through a ten-minute run, and every later trial fell back silently. `tools/generated_function.py` now opens the VM with a lifetime sized for a run and reopens it if a call reports it gone. The guarantee that can degrade quietly is the one that has to be logged per trial.
 
 ### 4.10 Generalisation: a held-out dataset
 
@@ -607,14 +635,14 @@ The canonical registry and the retrieval index in this repository were built by 
 
 `ritenuteSindacali.csv` — trade-union dues, **11,745 rows × 14 columns** — is the sharpest test of the four. The registry does carry an `EntryRitenuteSindacali` definition, but it describes a different aggregation of the same subject: eight columns cut by province, age band and sex, where this file is cut by union and month. Only **two** of the file's fourteen column names, `amministrazione` and `comparto`, appear anywhere in the registry. It also uses a different identifier convention (`id_record`, a UUID, rather than `_id`) and carries an arithmetic identity between three of its columns.
 
-The pipeline handled it without a single error, and it is the cleanest of the three runs: **15,129 violations detected, 1,039 left standing**, a 93.1% reduction, with reliability moving **0.9268 → 0.9632** like-for-like.
+The pipeline handled it without a single error: **15,300 violations detected, 1,276 left standing**, a 91.7% reduction, with reliability moving **0.9268 → 0.9451** like-for-like. It is the weakest of the three improvements, and that is the point of running it.
 
-- **Completeness, validity, format and schema all closed to zero.** Completeness went 0.9258 → **1.0000** — every one of the 12,245 completeness violations resolved, after 441 disguised nulls were unmasked and three mined dependencies filled 852 cells.
+- **Completeness closed entirely.** It went 0.9258 → **1.0000** — every one of the 12,245 completeness violations resolved, not one null cell in the delivered file, after 441 disguised nulls were unmasked and three mined dependencies filled 852 cells.
 - It mined **four cross-column rules with no registry help at all**, including the arithmetic identity `differenza = importo_ritenuto - importo_versato` and `descrizione_sindacale determines sigla_sindacale` (779 rows breaking, all repaired).
-- It wrote **two generated cleaning functions that worked**: `clean_sigla_sindacale` normalised 807 union acronyms, and `clean_importo_versato` stripped a trailing-minus notation from 177 monetary values before casting the column to `float64`.
+- It normalised 807 union acronyms in `sigla_sindacale` and filled the `comparto` placeholders from the `amministrazione` lookup — both through **typed catalogue operations**, not generated code. Two cleaners were tried and executed in the sandbox; neither ended up in a proposal.
 - It removed **88** duplicate rows and collapsed the one duplicate-column group present.
 
-**Almost the entire residue is a single rule.** Of the 1,039 violations left, **1,038** are rows breaking `differenza = importo_ritenuto - importo_versato` — and they are left standing deliberately, for the reason given below.
+**And this is where the limits show.** Of the 1,276 violations left, **1,020** are rows breaking `differenza = importo_ritenuto - importo_versato`, left standing deliberately for the reason given below. The other 256 are the honest cost of thin grounding: **174 format violations** the run could not express a repair for, and **82 rows** still locked in key collisions, reported rather than resolved. Schema conformity did not move at all across the run. On the file the registry was built around, four of five dimensions closed to 1.0000; here, one did.
 
 **Two things it did not do, both correctly.** The arithmetic identity was declared unaddressable, with the model naming the real reason: *"recomputing a value based on two other columns, but the available operations only work on a single column at a time."* That is a real bound on the typed catalogue, and the agent reported it rather than proposing something it could not deliver. And the missing `codice_amministrazione` values were left alone, because no column determines them.
 
@@ -627,19 +655,20 @@ The pipeline handled it without a single error, and it is the cleanest of the th
 | Columns delivered | 11 | 12 | 12 |
 | Column names known to the registry | 1 of 18 | 1 of 19 | 2 of 14 |
 | Disguised nulls unmasked | 988 | 2,888 | 441 |
-| Violations detected → residual | 18,372 → 1,643 | 50,225 → 7,343 | 15,129 → **1,039** |
-| Cells changed | 5,764 | 8,246 | 14,117 |
+| Violations detected → residual | 18,459 → 1,633 | 50,315 → 7,343 | 15,300 → 1,276 |
+| Cells changed | 5,659 | 8,246 | 13,940 |
 | Duplicate rows removed | 65 | 90 | 88 |
 | Duplicate-column groups | 4 | 5 | 1 |
-| Proposals, all approved | 4 | 7 | 4 |
-| Generated cleaning functions | 0 | 2 | 2 |
+| Proposals, all approved | 6 | 7 | 3 |
+| Generated cleaning functions | 0 | 2 | 0 |
+| Generated-function trials, in the sandbox | 0 of 0 | **6 of 6** | **2 of 2** |
 | Cross-column rules mined | 5 | 2 | 4 |
 | Completeness | 0.8752 → **0.9801** | 0.8773 → **0.9758** | 0.9258 → **1.0000** |
-| **Reliability, like-for-like** | 0.9380 → **0.9959** | 0.8652 → **0.9798** | 0.9268 → **0.9632** |
-| Runtime | 437.8s | 645.9s | 180.6s |
+| **Reliability, like-for-like** | 0.9380 → **0.9960** | 0.8652 → **0.9798** | 0.9268 → **0.9451** |
+| Runtime | 659.1s | 628.2s | 523.0s |
 | Errors | 0 | 0 | 0 |
 
-Read together, the three runs support a narrower claim than any one of them would alone. The system is **not fitted to the two files it was developed against**: on a held-out dataset from a domain its registry does not cover, it mined four cross-column rules unaided, closed completeness entirely, and wrote two working cleaning functions. The residual column is equally part of the result — across all three files the pipeline left standing every defect for which it had no evidence-backed repair, and named the reason in the report rather than closing the gap by inventing a value.
+Read together, the three runs support a narrower claim than any one of them would alone. The system is **not fitted to the two files it was developed against**: on a held-out dataset from a domain its registry does not cover, it mined four cross-column rules unaided and closed completeness entirely. But the improvement there is visibly the smallest of the three, and schema conformity did not move at all — the further a file sits from the registry, the more of its defects the pipeline can only name. The residual column is equally part of the result: across all three files it left standing every defect for which it had no evidence-backed repair, and named the reason in the report rather than closing the gap by inventing a value.
 
 ---
 
@@ -649,7 +678,7 @@ Read together, the three runs support a narrower claim than any one of them woul
 
 The three runs support a narrower claim than "the pipeline improves data quality", and the narrower claim is the one worth making: **the system improved every dataset it was given while remaining able to account for each change it made, and it declined the changes it could not account for.**
 
-Concretely, on `spesa.csv` it raised like-for-like reliability from **0.9380 to 0.9959**, eliminated **100%** of schema violations and **99.4%** of format violations, reduced completeness violations by **90.6%**, removed **7 redundant or empty columns** and **65 duplicate rows**, and changed **5,764 cells** — each one recorded in a cell-level change log naming the stage that changed it. On the larger `attivazioniCessazioni.csv` it went **0.8652 → 0.9798** with only one of nineteen column names known to the registry, and on `ritenuteSindacali.csv` — a file it was never developed against — **0.9268 → 0.9632**, closing completeness, validity, format and schema entirely and mining four cross-column rules unaided.
+Concretely, on `spesa.csv` it raised like-for-like reliability from **0.9380 to 0.9960**, eliminated **100%** of schema, format, consistency and uniqueness violations, reduced completeness violations by **90.6%**, removed **7 redundant or empty columns** and **65 duplicate rows**, and changed **5,659 cells** — each one recorded in a cell-level change log naming the stage that changed it. On the larger `attivazioniCessazioni.csv` it went **0.8652 → 0.9798** with only one of nineteen column names known to the registry, and on `ritenuteSindacali.csv` — a file it was never developed against — **0.9268 → 0.9451**, closing completeness entirely and mining four cross-column rules unaided.
 
 That the held-out file worked is the result we would defend hardest: the system is not fitted to the two datasets it was developed against.
 
@@ -687,7 +716,7 @@ The **canonical registry is hand-curated for NoiPA**. The system is grounded in 
 
 **The report's narrative is model-written.** It is structurally prevented from introducing figures, and `tests/test_report_truthfulness.py` enforces that, but its *interpretation* is not proved correct beyond that constraint.
 
-**The strongest isolation guarantee is the one that can silently degrade.** The sandbox is the only safety layer in the system that depends on a third party being reachable: without `E2B_API_KEY`, or when the call fails, the first execution of generated code happens in the local cage instead. The fallback is intentional — a pipeline that stops because a VM could not be started is worse than one that continues behind the static gate — and it is logged per trial rather than hidden, but it means the claim *"model-written code never runs on the host first"* holds for a configured run and not for every run. Section 4.9 reports a run where it held for half the trials.
+**The strongest isolation guarantee is the one that can silently degrade.** The sandbox is the only safety layer in the system that depends on a third party being reachable: without `E2B_API_KEY`, or when the call fails, the first execution of generated code happens in the local cage instead. The fallback is intentional — a pipeline that stops because a VM could not be started is worse than one that continues behind the static gate — and it is logged per trial rather than hidden, but it means the claim *"model-written code never runs on the host first"* holds for a configured run and not for every run. It took the log to notice that an unbounded sandbox lifetime had been quietly voiding it for half the trials of one run; Section 4.9 tells that story.
 
 **Single-provider dependency.** Every chat call goes through one model pinned in `utils/llm.py`. This buys reproducibility and a single place to change; it also means provider availability is a hard dependency of any live run.
 
@@ -695,7 +724,7 @@ The **canonical registry is hand-curated for NoiPA**. The system is grounded in 
 
 **Generated code cannot express a cross-column repair.** The scalar-transform interface that makes `clean_value` safe — it never sees the dataframe — also makes it structurally unable to derive a value from another column. Such repairs must go through the typed catalogue, and where the catalogue has no matching operation the violation is carried to the report unaddressed rather than repaired.
 
-**Run-to-run reproducibility holds for measurement, not for proposals.** Two runs of `spesa.csv` produced identical snapshots, auto-remediations and completeness analyses, but six proposals in one and four in the other. `temperature=0` bounds the variance; it does not remove it.
+**Run-to-run reproducibility holds for the measurements, not for everything downstream of a model.** Every recording of `spesa.csv` produced identical quality snapshots and completeness analyses. The proposal stage did not: three recordings produced six, four and six proposals. Nor did the auto-remediated cell counts, and the reason is that a deterministic stage inherits the variance of the frame handed to it — `round_decimals` runs on a column `duplicate_column` has just collapsed, and which name survives that collapse is a model call. `temperature=0` bounds the variance; it does not remove it.
 
 **The gate assumes an informed reviewer.** The system shows the generated source verbatim, which is the right thing to show, but it presumes someone able to read it. A reviewer who approves everything gets a system with much weaker guarantees than the architecture nominally provides.
 

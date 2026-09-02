@@ -152,6 +152,12 @@ def compute_metrics(
     declared_dtypes: dict[str, str] | None = None,
     duplicate_analysis: dict | None = None,
 ) -> dict:
+    """Every deterministic quality measurement taken at one point in a run. The uniqueness tally is
+    the one figure not read off the validation reports: no stage reports an exact duplicate row as
+    a violation, so counting reports alone described a file that arrived with forty of them as
+    having had none, while the uniqueness dimension was marked down for exactly those rows. It is
+    therefore taken from the duplicate analysis and replaces whatever the reports carry, rather
+    than adding to it - a residual report states the same collision the rows already count."""
     rows = int(len(df))
     cells = int(df.size)
     null_cells = int(df.isna().sum().sum())
@@ -180,6 +186,7 @@ def compute_metrics(
     }
     if validation_reports is not None:
         counts = violation_counts(validation_reports)
+        counts["uniqueness"] = duplicate_rows + rows_in_key_conflict
         inconsistent = inconsistent_rows(validation_reports)
         checked = metrics["checked_cells"]
         metrics["violations_by_kind"] = counts

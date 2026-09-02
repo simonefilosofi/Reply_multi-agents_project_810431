@@ -1,0 +1,14 @@
+{
+  "baseline_builder": 0.39,
+  "profiler": 3.86,
+  "semantic": 52.71,
+  "nan_handler": 0.98,
+  "duplicate_column": 8.54,
+  "format_consistency": 174.7,
+  "auto_remediation": 26.85,
+  "anomaly_detector": 5.87,
+  "unified": 76.82,
+  "apply_fixes": 117.4,
+  "duplicate_row": 2.58,
+  "report_generator": 52.31
+}

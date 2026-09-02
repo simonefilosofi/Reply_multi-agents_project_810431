@@ -1,5 +1,6 @@
 pandas>=2.2,<3.0
 numpy>=1.26,<3.0
+matplotlib>=3.8,<4.0
 pydantic>=2.7,<3.0
 langgraph>=0.2,<1.0
 langchain-core>=1.4,<2.0

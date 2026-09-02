@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 _INK = "#0b3d0b"
+_PAPER = "#ffffff"
 _BEFORE = "#9ae399"
 _AFTER = "#02b900"
 _GRID = "#ccf1cc"
@@ -72,9 +73,13 @@ def fill_rate_chart(
 
 
 def _open(width: int, height: int) -> str:
+    """Opens the canvas and paints its own paper. The chart travels inside the Markdown as bare
+    SVG and is rendered wherever the report is read; on a transparent canvas the ink took the
+    colour of whatever sat behind it and disappeared against a dark page."""
     return (
         f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' "
         f"viewBox='0 0 {width} {height}' font-family='Helvetica,Arial,sans-serif'>"
+        f"<rect x='0' y='0' width='{width}' height='{height}' fill='{_PAPER}'/>"
     )
 
 

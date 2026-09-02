@@ -29,6 +29,7 @@ _SAFE_BUILTIN_NAMES = (
 )
 _SANDBOX_MARKER = "<<CLEANER_RESULTS>>"
 _SANDBOX_TIMEOUT_SECONDS = 20
+_SANDBOX_LIFETIME_SECONDS = 1800
 
 
 def check_source(source: str) -> list[CleanerIssue]:
@@ -152,12 +153,20 @@ def close_sandbox() -> None:
     """Releases the sandbox held open across a run. A caller that opens one owns closing it: the
     handle survives the call that created it, so in a long-lived process such as the Streamlit
     gate an unclosed sandbox stays billed and connected for the whole session."""
+    _discard_sandbox()
+
+
+def _discard_sandbox() -> None:
+    """Forgets the handle whether or not the micro-VM is still reachable, so a caller can open a
+    fresh one. Killing an expired VM raises, and that must not be what stops the next attempt."""
     global _sandbox
-    if _sandbox is not None:
-        try:
-            _sandbox.kill()
-        finally:
-            _sandbox = None
+    if _sandbox is None:
+        return
+    try:
+        _sandbox.kill()
+    except Exception:
+        pass
+    _sandbox = None
 
 
 def start_execution_log() -> None:
@@ -283,9 +292,16 @@ _results: dict[tuple, tuple[list[dict], str]] = {}
 
 
 def _run_in_sandbox(source: str, values: list[str | None]) -> list[dict]:
-    execution = _sandbox_handle().run_code(
-        _driver_script(source, values), timeout=_SANDBOX_TIMEOUT_SECONDS
-    )
+    """Runs the driver in the micro-VM held open for this run, reopening it once if the VM has gone.
+    One sandbox is reused across every trial, so its expiry used to send each later trial to the
+    local cage - the isolation lapsed silently part way through a run. A vanished VM is a reason to
+    start another; a failure the second time is left to the caller, which falls back."""
+    script = _driver_script(source, values)
+    try:
+        execution = _sandbox_handle().run_code(script, timeout=_SANDBOX_TIMEOUT_SECONDS)
+    except Exception:
+        _discard_sandbox()
+        execution = _sandbox_handle().run_code(script, timeout=_SANDBOX_TIMEOUT_SECONDS)
     if execution.error is not None:
         raise RuntimeError(f"{execution.error.name}: {execution.error.value}")
     for line in reversed(execution.logs.stdout):
@@ -297,10 +313,16 @@ def _run_in_sandbox(source: str, values: list[str | None]) -> list[dict]:
 def _sandbox_handle():
     global _sandbox
     if _sandbox is None:
-        from e2b_code_interpreter import Sandbox
-
-        _sandbox = Sandbox.create()
+        _sandbox = _open_sandbox()
     return _sandbox
+
+
+def _open_sandbox():
+    """Starts a micro-VM with an explicit lifetime. The provider's default expires well inside the
+    length of a run, which is what let a seven-minute run finish on the host."""
+    from e2b_code_interpreter import Sandbox
+
+    return Sandbox.create(timeout=_SANDBOX_LIFETIME_SECONDS)
 
 
 def _driver_script(source: str, values: list[str | None]) -> str:

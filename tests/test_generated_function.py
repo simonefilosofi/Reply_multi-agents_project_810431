@@ -4,6 +4,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+import tools.generated_function as gf
 from tools.generated_function import (
     apply_to_series,
     check_source,
@@ -189,3 +190,60 @@ def test_source_the_gate_refuses_never_reaches_an_executor() -> None:
     )
 
     assert execution_log() == []
+
+
+class _Logs:
+    def __init__(self, stdout: list[str]) -> None:
+        self.stdout = stdout
+
+
+class _Execution:
+    def __init__(self, stdout: list[str]) -> None:
+        self.error = None
+        self.logs = _Logs(stdout)
+
+
+class _ExpiredSandbox:
+    """What E2B returns once the micro-VM's lifetime has run out."""
+
+    def run_code(self, script, timeout=None):
+        raise RuntimeError('{"sandboxId":"x","message":"The sandbox was not found","code":502}')
+
+
+class _WorkingSandbox:
+    def __init__(self) -> None:
+        self.scripts: list[str] = []
+
+    def run_code(self, script, timeout=None):
+        self.scripts.append(script)
+        return _Execution(['<<CLEANER_RESULTS>>[{"ok": true, "value": "202403"}]'])
+
+
+def test_an_expired_sandbox_is_reopened_rather_than_conceding_to_the_local_cage(monkeypatch) -> None:
+    """One sandbox is held open for a whole run, and its lifetime expired part way through a seven
+    minute run: every later trial fell back to running model-written code on this host. An expired
+    handle is a reason to open another, not a reason to stop isolating."""
+    reopened = _WorkingSandbox()
+    monkeypatch.setattr(gf, "_sandbox", _ExpiredSandbox())
+    monkeypatch.setattr(gf, "_open_sandbox", lambda: reopened)
+
+    results = gf._run_in_sandbox(_PERIOD_CLEANER, ["MAR-2024"])
+
+    assert results == [{"ok": True, "value": "202403"}]
+    assert gf._sandbox is reopened
+    assert len(reopened.scripts) == 1
+
+
+def test_a_sandbox_that_cannot_be_reopened_still_raises_for_the_caller_to_fall_back(monkeypatch) -> None:
+    monkeypatch.setattr(gf, "_sandbox", _ExpiredSandbox())
+    monkeypatch.setattr(gf, "_open_sandbox", _ExpiredSandbox)
+
+    with pytest.raises(RuntimeError):
+        gf._run_in_sandbox(_PERIOD_CLEANER, ["MAR-2024"])
+
+
+def test_the_sandbox_is_opened_with_a_lifetime_long_enough_for_a_whole_run() -> None:
+    """E2B's default lifetime is shorter than a run of this pipeline, and the handle is reused
+    across every trial, so the default is what let the isolation lapse mid-run."""
+    assert gf._SANDBOX_LIFETIME_SECONDS >= 900
+    assert gf._SANDBOX_LIFETIME_SECONDS > gf._SANDBOX_TIMEOUT_SECONDS

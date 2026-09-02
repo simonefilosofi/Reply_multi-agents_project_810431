@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from agents.report_generator import _detected_counts
+from agents.report_generator import _detected_counts, _residual_counts
 from state import PipelineState
 from tools.report_markdown import _remediation_body, _unaddressed
 
@@ -183,3 +183,21 @@ def test_a_column_that_kept_its_name_is_left_alone():
     assert _rule_under_original_names(
         "cod_imposta determines imposta", {"imposta": "imposta"}
     ) == "cod_imposta determines imposta"
+
+
+def test_the_residual_tally_is_read_from_the_snapshot_taken_at_the_end():
+    """Detection reads its counts from the pre-remediation snapshot and the residual tally read the
+    reports instead, so the two ends of the same table were counted by different rules and the
+    uniqueness row compared rows against reports."""
+    final = {"format": 3, "completeness": 1633, "schema": 0, "consistency": 7, "uniqueness": 50}
+
+    counts = _residual_counts({"snapshots": {"final": {"violations_by_kind": final}}}, [])
+
+    assert counts == final
+
+
+def test_the_residual_tally_falls_back_to_the_reports_when_nothing_was_measured():
+    counts = _residual_counts({"snapshots": {}}, [])
+
+    assert set(counts) == {"format", "completeness", "schema", "consistency", "uniqueness"}
+    assert all(value == 0 for value in counts.values())

@@ -1,0 +1,1286 @@
+{
+  "attivazioniCessazioni": {
+    "dataset": "attivazioniCessazioni",
+    "path": "C:\\Users\\Utente\\Desktop\\DSaM\\First Year\\Machine Learning\\Reply_multi-agents_project_810431\\Datasets-Reply-20260313\\project_data_quality\\attivazioniCessazioni.csv",
+    "shape": {
+      "rows": 20102,
+      "columns": 19
+    },
+    "columns": [
+      "_id",
+      "mese",
+      "anno",
+      "codice_ente",
+      "descrizione_ente",
+      "provincia_sede",
+      "regione_sede",
+      "attivazioni",
+      "cessazioni",
+      "RATA",
+      "aggregation-time",
+      "qualifica",
+      "note",
+      "fonte_dato",
+      "Provincia Sede",
+      "CODICE ENTE",
+      "3descrizione",
+      "regione%sede",
+      "att ivazioni"
+    ],
+    "pandas_dtypes": {
+      "_id": "object",
+      "mese": "object",
+      "anno": "object",
+      "codice_ente": "object",
+      "descrizione_ente": "object",
+      "provincia_sede": "object",
+      "regione_sede": "object",
+      "attivazioni": "object",
+      "cessazioni": "object",
+      "RATA": "object",
+      "aggregation-time": "object",
+      "qualifica": "object",
+      "note": "object",
+      "fonte_dato": "object",
+      "Provincia Sede": "object",
+      "CODICE ENTE": "int64",
+      "3descrizione": "object",
+      "regione%sede": "int64",
+      "att ivazioni": "object"
+    },
+    "naming_violations": {
+      "RATA": [
+        "not_snake_lower"
+      ],
+      "aggregation-time": [
+        "special_char"
+      ],
+      "Provincia Sede": [
+        "embedded_space",
+        "not_snake_lower"
+      ],
+      "CODICE ENTE": [
+        "embedded_space",
+        "not_snake_lower"
+      ],
+      "3descrizione": [
+        "leading_digit"
+      ],
+      "regione%sede": [
+        "special_char"
+      ],
+      "att ivazioni": [
+        "embedded_space"
+      ]
+    },
+    "duplicate_column_pairs": [
+      {
+        "left": "codice_ente",
+        "right": "CODICE ENTE",
+        "string_agreement": 0.97,
+        "numeric_agreement": 1.0,
+        "exact": true
+      },
+      {
+        "left": "descrizione_ente",
+        "right": "3descrizione",
+        "string_agreement": 0.9402,
+        "numeric_agreement": null,
+        "exact": false
+      },
+      {
+        "left": "provincia_sede",
+        "right": "Provincia Sede",
+        "string_agreement": 0.9492,
+        "numeric_agreement": null,
+        "exact": false
+      },
+      {
+        "left": "regione_sede",
+        "right": "regione%sede",
+        "string_agreement": 0.481,
+        "numeric_agreement": 0.9997,
+        "exact": false
+      },
+      {
+        "left": "attivazioni",
+        "right": "att ivazioni",
+        "string_agreement": 0.9981,
+        "numeric_agreement": 0.9981,
+        "exact": false
+      },
+      {
+        "left": "note",
+        "right": "fonte_dato",
+        "string_agreement": 0.9773,
+        "numeric_agreement": null,
+        "exact": false
+      }
+    ],
+    "completeness": {
+      "_id": {
+        "nulls": 0,
+        "null_rate": 0.0,
+        "disguised": {},
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 20012
+      },
+      "mese": {
+        "nulls": 0,
+        "null_rate": 0.0,
+        "disguised": {},
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 61
+      },
+      "anno": {
+        "nulls": 0,
+        "null_rate": 0.0,
+        "disguised": {},
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 10
+      },
+      "codice_ente": {
+        "nulls": 210,
+        "null_rate": 0.0104,
+        "disguised": {
+          "": 52,
+          "-": 65,
+          "?": 53,
+          "n.d.": 59,
+          "nd": 57,
+          "unknown": 52
+        },
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 81
+      },
+      "descrizione_ente": {
+        "nulls": 445,
+        "null_rate": 0.0221,
+        "disguised": {
+          "": 119,
+          "-": 111,
+          "?": 120,
+          "n.d.": 103,
+          "nd": 109,
+          "null": 1,
+          "unknown": 92
+        },
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 98
+      },
+      "provincia_sede": {
+        "nulls": 687,
+        "null_rate": 0.0342,
+        "disguised": {
+          "": 95,
+          "-": 108,
+          "?": 105,
+          "n.d.": 84,
+          "na": 15,
+          "nd": 97,
+          "unknown": 87
+        },
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 421
+      },
+      "regione_sede": {
+        "nulls": 308,
+        "null_rate": 0.0153,
+        "disguised": {
+          "": 68,
+          "-": 68,
+          "?": 75,
+          "n.d.": 63,
+          "nd": 78,
+          "unknown": 73
+        },
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 31
+      },
+      "attivazioni": {
+        "nulls": 0,
+        "null_rate": 0.0,
+        "disguised": {
+          "n.d.": 195
+        },
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 996
+      },
+      "cessazioni": {
+        "nulls": 0,
+        "null_rate": 0.0,
+        "disguised": {
+          "n.d.": 195
+        },
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 1102
+      },
+      "RATA": {
+        "nulls": 0,
+        "null_rate": 0.0,
+        "disguised": {},
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 96
+      },
+      "aggregation-time": {
+        "nulls": 0,
+        "null_rate": 0.0,
+        "disguised": {},
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 6
+      },
+      "qualifica": {
+        "nulls": 5086,
+        "null_rate": 0.253,
+        "disguised": {},
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 4
+      },
+      "note": {
+        "nulls": 19802,
+        "null_rate": 0.9851,
+        "disguised": {},
+        "fully_empty": false,
+        "sparse": true,
+        "n_unique": 4
+      },
+      "fonte_dato": {
+        "nulls": 19942,
+        "null_rate": 0.992,
+        "disguised": {},
+        "fully_empty": false,
+        "sparse": true,
+        "n_unique": 1
+      },
+      "Provincia Sede": {
+        "nulls": 367,
+        "null_rate": 0.0183,
+        "disguised": {},
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 107
+      },
+      "CODICE ENTE": {
+        "nulls": 0,
+        "null_rate": 0.0,
+        "disguised": {},
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 74
+      },
+      "3descrizione": {
+        "nulls": 0,
+        "null_rate": 0.0,
+        "disguised": {},
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 74
+      },
+      "regione%sede": {
+        "nulls": 0,
+        "null_rate": 0.0,
+        "disguised": {},
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 21
+      },
+      "att ivazioni": {
+        "nulls": 0,
+        "null_rate": 0.0,
+        "disguised": {
+          "n.d.": 195
+        },
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 989
+      }
+    },
+    "dtype_mismatch": {
+      "mese": {
+        "stored": "object",
+        "numeric_parse_rate": 0.9718,
+        "verdict": "numeric column with malformed values",
+        "n_malformed": 567,
+        "malformed_examples": [
+          "Settembre",
+          "mese 2",
+          "Dicembre",
+          "Gennaio",
+          "mese 9",
+          "Aprile",
+          "mese 8",
+          "Giugno",
+          "Maggio",
+          "MAG",
+          "Agosto",
+          "LUG",
+          "Marzo",
+          "mese 5",
+          "GEN"
+        ]
+      },
+      "anno": {
+        "stored": "object",
+        "numeric_parse_rate": 0.9908,
+        "verdict": "numeric column with malformed values",
+        "n_malformed": 184,
+        "malformed_examples": [
+          "anno 2024",
+          "anno 2023"
+        ]
+      },
+      "codice_ente": {
+        "stored": "object",
+        "numeric_parse_rate": 0.9802,
+        "verdict": "numeric column with malformed values",
+        "n_malformed": 393,
+        "malformed_examples": [
+          "//",
+          "-",
+          "ND",
+          "?",
+          "n.d.",
+          "unknown",
+          " "
+        ]
+      },
+      "regione_sede": {
+        "stored": "object",
+        "numeric_parse_rate": 0.9747,
+        "verdict": "numeric column with malformed values",
+        "n_malformed": 500,
+        "malformed_examples": [
+          " ",
+          "ND",
+          "?",
+          "n.d.",
+          "-",
+          "//",
+          "unknown",
+          "IT",
+          "RR"
+        ]
+      },
+      "attivazioni": {
+        "stored": "object",
+        "numeric_parse_rate": 0.9701,
+        "verdict": "numeric column with malformed values",
+        "n_malformed": 602,
+        "malformed_examples": [
+          "6,0",
+          "0 unità",
+          "N.D.",
+          "2 unità",
+          "0,0",
+          "4 unità",
+          "7 unità",
+          "1 unità",
+          "117 unità",
+          "4,0",
+          "3 unità",
+          "24,0",
+          "12 unità",
+          "3,0",
+          "48,0"
+        ]
+      },
+      "cessazioni": {
+        "stored": "object",
+        "numeric_parse_rate": 0.9701,
+        "verdict": "numeric column with malformed values",
+        "n_malformed": 601,
+        "malformed_examples": [
+          "N.D.",
+          "1 unità",
+          "2,0",
+          "1,0",
+          "18 unità",
+          "3,0",
+          "0,0",
+          "540 unità",
+          "4 unità",
+          "4,0",
+          "2 unità",
+          "8,0",
+          "24,0",
+          "3 unità",
+          "12 unità"
+        ]
+      },
+      "RATA": {
+        "stored": "object",
+        "numeric_parse_rate": 0.9601,
+        "verdict": "numeric column with malformed values",
+        "n_malformed": 802,
+        "malformed_examples": [
+          "LUG-2024",
+          "2024-01",
+          "DIC-2023",
+          "GEN-2024",
+          "OTT-2023",
+          "GIU-2023",
+          "APR-2024",
+          "12/2023",
+          "2023-07",
+          "SET-2023",
+          "05/2023",
+          "06/2023",
+          "APR-2023",
+          "2023-12",
+          "02/2024"
+        ]
+      },
+      "att ivazioni": {
+        "stored": "object",
+        "numeric_parse_rate": 0.97,
+        "verdict": "numeric column with malformed values",
+        "n_malformed": 603,
+        "malformed_examples": [
+          "6,0",
+          "0 unità",
+          "N.D.",
+          "2 unità",
+          "0,0",
+          "4 unità",
+          "7 unità",
+          "1 unità",
+          "117 unità",
+          "4,0",
+          "3 unità",
+          "24,0",
+          "12 unità",
+          "3,0",
+          "48,0"
+        ]
+      }
+    },
+    "format_consistency": {
+      "anno": {
+        "dominant_shape": "9999",
+        "dominant_share": 0.9709,
+        "n_offending": 585,
+        "offending_shapes": {
+          "9999.": [
+            "2024.",
+            "2023."
+          ],
+          "99": [
+            "23",
+            "24"
+          ],
+          "aaaa 9999": [
+            "anno 2024",
+            "anno 2023"
+          ]
+        }
+      },
+      "provincia_sede": {
+        "dominant_shape": "aa",
+        "dominant_share": 0.955,
+        "n_offending": 874,
+        "offending_shapes": {
+          "aa ": [
+            "ME ",
+            "AV ",
+            "CT "
+          ],
+          "-": [
+            "-"
+          ],
+          "?": [
+            "?"
+          ],
+          " ": [
+            " "
+          ],
+          "aaaaaaa": [
+            "unknown"
+          ]
+        }
+      },
+      "regione_sede": {
+        "dominant_shape": "99",
+        "dominant_share": 0.9747,
+        "n_offending": 500,
+        "offending_shapes": {
+          "aa": [
+            "ND",
+            "IT",
+            "RR"
+          ],
+          "?": [
+            "?"
+          ],
+          "aaaaaaa": [
+            "unknown"
+          ],
+          "//": [
+            "//"
+          ],
+          " ": [
+            " "
+          ]
+        }
+      },
+      "RATA": {
+        "dominant_shape": "999999",
+        "dominant_share": 0.9601,
+        "n_offending": 802,
+        "offending_shapes": {
+          "9999-99": [
+            "2024-01",
+            "2023-07",
+            "2023-12"
+          ],
+          "aaa-9999": [
+            "LUG-2024",
+            "DIC-2023",
+            "GEN-2024"
+          ],
+          "99/9999": [
+            "12/2023",
+            "05/2023",
+            "06/2023"
+          ]
+        }
+      },
+      "aggregation-time": {
+        "dominant_shape": "9999-99-99a99:99:99.999999",
+        "dominant_share": 0.9201,
+        "n_offending": 1607,
+        "offending_shapes": {
+          "99/99/9999": [
+            "18/06/2025"
+          ],
+          "99.99.9999": [
+            "18.06.2025"
+          ],
+          "aaa 99 9999": [
+            "GIU 18 2025"
+          ],
+          "9999/99/99": [
+            "2025/06/18"
+          ],
+          "99-99-99": [
+            "18-06-25"
+          ]
+        }
+      }
+    },
+    "numeric": {
+      "codice_ente": {
+        "outliers_iqr": 3772,
+        "outlier_rate": 0.1934,
+        "min": 1.0,
+        "max": 8017.0,
+        "negatives": 0,
+        "float_noise_values": 0
+      },
+      "regione_sede": {
+        "outliers_iqr": 14,
+        "outlier_rate": 0.0007,
+        "min": 0.0,
+        "max": 99.0,
+        "negatives": 0,
+        "float_noise_values": 0
+      },
+      "attivazioni": {
+        "outliers_iqr": 3307,
+        "outlier_rate": 0.1696,
+        "min": -50.0,
+        "max": 36423.0,
+        "negatives": 7,
+        "float_noise_values": 0
+      },
+      "cessazioni": {
+        "outliers_iqr": 3059,
+        "outlier_rate": 0.1569,
+        "min": -10.0,
+        "max": 28566.0,
+        "negatives": 7,
+        "float_noise_values": 0
+      },
+      "RATA": {
+        "outliers_iqr": 0,
+        "outlier_rate": 0.0,
+        "min": 202301.0,
+        "max": 202412.0,
+        "negatives": 0,
+        "float_noise_values": 0
+      },
+      "CODICE ENTE": {
+        "outliers_iqr": 3879,
+        "outlier_rate": 0.193,
+        "min": 1.0,
+        "max": 8017.0,
+        "negatives": 0,
+        "float_noise_values": 0
+      },
+      "regione%sede": {
+        "outliers_iqr": 10,
+        "outlier_rate": 0.0005,
+        "min": 1.0,
+        "max": 99.0,
+        "negatives": 0,
+        "float_noise_values": 0
+      },
+      "att ivazioni": {
+        "outliers_iqr": 3304,
+        "outlier_rate": 0.1694,
+        "min": 0.0,
+        "max": 36423.0,
+        "negatives": 0,
+        "float_noise_values": 0
+      }
+    },
+    "rare_categoricals": {
+      "anno": {
+        "n_categories": 10,
+        "n_rare": 7,
+        "rare": {
+          "2021": 141,
+          "2024.": 102,
+          "2023.": 100,
+          "24": 100,
+          "23": 99,
+          "anno 2023": 99,
+          "anno 2024": 85
+        }
+      },
+      "regione_sede": {
+        "n_categories": 31,
+        "n_rare": 12,
+        "rare": {
+          "ND": 78,
+          "?": 75,
+          "unknown": 73,
+          "//": 70,
+          "-": 68,
+          " ": 68,
+          "02": 67,
+          "n.d.": 63,
+          "99": 14,
+          "IT": 3,
+          "RR": 2,
+          "00": 1
+        }
+      },
+      "regione%sede": {
+        "n_categories": 21,
+        "n_rare": 2,
+        "rare": {
+          "2": 74,
+          "99": 10
+        }
+      }
+    },
+    "duplicate_rows": {
+      "exact_full_row": 60,
+      "exact_ignoring_id": 60,
+      "duplicate_id_values": 90
+    },
+    "cross_column": {
+      "RATA_vs_anno_mese": {
+        "checked": 18586,
+        "mismatches": 1669,
+        "unparseable_anno": 184,
+        "unparseable_mese": 567,
+        "unparseable_RATA": 802
+      },
+      "attivazioni_negative": 7,
+      "cessazioni_negative": 7
+    }
+  },
+  "spesa": {
+    "dataset": "spesa",
+    "path": "C:\\Users\\Utente\\Desktop\\DSaM\\First Year\\Machine Learning\\Reply_multi-agents_project_810431\\Datasets-Reply-20260313\\project_data_quality\\spesa.csv",
+    "shape": {
+      "rows": 7543,
+      "columns": 18
+    },
+    "columns": [
+      "_id",
+      "rata",
+      "ente",
+      "descrizione",
+      "cod_tipoimposta",
+      "tipo_imposta",
+      "cod_imposta",
+      "imposta",
+      "spesa",
+      "aggregation-time",
+      "area_geografica",
+      "note",
+      "fonte_dato",
+      "Tipo Imposta",
+      "SPESA TOTALE",
+      "2cod_imposta",
+      "cod imposta ext",
+      "ente%code"
+    ],
+    "pandas_dtypes": {
+      "_id": "object",
+      "rata": "object",
+      "ente": "object",
+      "descrizione": "object",
+      "cod_tipoimposta": "int64",
+      "tipo_imposta": "object",
+      "cod_imposta": "object",
+      "imposta": "object",
+      "spesa": "object",
+      "aggregation-time": "object",
+      "area_geografica": "object",
+      "note": "object",
+      "fonte_dato": "object",
+      "Tipo Imposta": "object",
+      "SPESA TOTALE": "object",
+      "2cod_imposta": "int64",
+      "cod imposta ext": "int64",
+      "ente%code": "int64"
+    },
+    "naming_violations": {
+      "aggregation-time": [
+        "special_char"
+      ],
+      "Tipo Imposta": [
+        "embedded_space",
+        "not_snake_lower"
+      ],
+      "SPESA TOTALE": [
+        "embedded_space",
+        "not_snake_lower"
+      ],
+      "2cod_imposta": [
+        "leading_digit"
+      ],
+      "cod imposta ext": [
+        "embedded_space"
+      ],
+      "ente%code": [
+        "special_char"
+      ]
+    },
+    "duplicate_column_pairs": [
+      {
+        "left": "ente",
+        "right": "ente%code",
+        "string_agreement": 0.96,
+        "numeric_agreement": 1.0,
+        "exact": true
+      },
+      {
+        "left": "tipo_imposta",
+        "right": "Tipo Imposta",
+        "string_agreement": 0.949,
+        "numeric_agreement": null,
+        "exact": false
+      },
+      {
+        "left": "cod_imposta",
+        "right": "2cod_imposta",
+        "string_agreement": 0.9702,
+        "numeric_agreement": 1.0,
+        "exact": true
+      },
+      {
+        "left": "cod_imposta",
+        "right": "cod imposta ext",
+        "string_agreement": 0.9702,
+        "numeric_agreement": 1.0,
+        "exact": true
+      },
+      {
+        "left": "spesa",
+        "right": "SPESA TOTALE",
+        "string_agreement": 0.9948,
+        "numeric_agreement": 0.9947,
+        "exact": false
+      },
+      {
+        "left": "note",
+        "right": "fonte_dato",
+        "string_agreement": 0.9703,
+        "numeric_agreement": null,
+        "exact": false
+      },
+      {
+        "left": "2cod_imposta",
+        "right": "cod imposta ext",
+        "string_agreement": 1.0,
+        "numeric_agreement": 1.0,
+        "exact": true
+      }
+    ],
+    "completeness": {
+      "_id": {
+        "nulls": 0,
+        "null_rate": 0.0,
+        "disguised": {},
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 7478
+      },
+      "rata": {
+        "nulls": 0,
+        "null_rate": 0.0,
+        "disguised": {},
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 46
+      },
+      "ente": {
+        "nulls": 118,
+        "null_rate": 0.0156,
+        "disguised": {
+          "": 29,
+          "-": 24,
+          "?": 29,
+          "n.d.": 24,
+          "nd": 20,
+          "unknown": 36
+        },
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 89
+      },
+      "descrizione": {
+        "nulls": 169,
+        "null_rate": 0.0224,
+        "disguised": {
+          "": 42,
+          "-": 35,
+          "?": 50,
+          "n.d.": 47,
+          "n/a": 1,
+          "nd": 34,
+          "unknown": 32
+        },
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 113
+      },
+      "cod_tipoimposta": {
+        "nulls": 0,
+        "null_rate": 0.0,
+        "disguised": {},
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 4
+      },
+      "tipo_imposta": {
+        "nulls": 0,
+        "null_rate": 0.0,
+        "disguised": {},
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 10
+      },
+      "cod_imposta": {
+        "nulls": 72,
+        "null_rate": 0.0095,
+        "disguised": {
+          "": 26,
+          "-": 20,
+          "?": 23,
+          "n.d.": 25,
+          "nd": 19,
+          "unknown": 17
+        },
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 18
+      },
+      "imposta": {
+        "nulls": 137,
+        "null_rate": 0.0182,
+        "disguised": {
+          "": 28,
+          "-": 39,
+          "?": 31,
+          "n.d.": 44,
+          "nd": 33,
+          "unknown": 21
+        },
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 22
+      },
+      "spesa": {
+        "nulls": 0,
+        "null_rate": 0.0,
+        "disguised": {
+          "n.d.": 59
+        },
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 6493
+      },
+      "aggregation-time": {
+        "nulls": 0,
+        "null_rate": 0.0,
+        "disguised": {},
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 66
+      },
+      "area_geografica": {
+        "nulls": 1582,
+        "null_rate": 0.2097,
+        "disguised": {},
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 4
+      },
+      "note": {
+        "nulls": 7393,
+        "null_rate": 0.9801,
+        "disguised": {},
+        "fully_empty": false,
+        "sparse": true,
+        "n_unique": 4
+      },
+      "fonte_dato": {
+        "nulls": 7468,
+        "null_rate": 0.9901,
+        "disguised": {},
+        "fully_empty": false,
+        "sparse": true,
+        "n_unique": 1
+      },
+      "Tipo Imposta": {
+        "nulls": 0,
+        "null_rate": 0.0,
+        "disguised": {},
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 4
+      },
+      "SPESA TOTALE": {
+        "nulls": 0,
+        "null_rate": 0.0,
+        "disguised": {
+          "n.d.": 59
+        },
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 6476
+      },
+      "2cod_imposta": {
+        "nulls": 0,
+        "null_rate": 0.0,
+        "disguised": {},
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 11
+      },
+      "cod imposta ext": {
+        "nulls": 0,
+        "null_rate": 0.0,
+        "disguised": {},
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 11
+      },
+      "ente%code": {
+        "nulls": 0,
+        "null_rate": 0.0,
+        "disguised": {},
+        "fully_empty": false,
+        "sparse": false,
+        "n_unique": 82
+      }
+    },
+    "dtype_mismatch": {
+      "rata": {
+        "stored": "object",
+        "numeric_parse_rate": 0.9324,
+        "verdict": "numeric column with malformed values",
+        "n_malformed": 510,
+        "malformed_examples": [
+          "Rata 2024",
+          "2024-06",
+          "2024-04",
+          "2023-12",
+          "FEB-2024",
+          "04/2024",
+          "MAR-2024",
+          "03/2024",
+          "2024-10",
+          "2024-07",
+          "DIC-2023",
+          "10/2024",
+          "2024-05",
+          "2024-09",
+          "08/2024"
+        ]
+      },
+      "ente": {
+        "stored": "object",
+        "numeric_parse_rate": 0.9752,
+        "verdict": "numeric column with malformed values",
+        "n_malformed": 184,
+        "malformed_examples": [
+          "unknown",
+          " ",
+          "//",
+          "ND",
+          "?",
+          "n.d.",
+          "-"
+        ]
+      },
+      "cod_imposta": {
+        "stored": "object",
+        "numeric_parse_rate": 0.9795,
+        "verdict": "numeric column with malformed values",
+        "n_malformed": 153,
+        "malformed_examples": [
+          "n.d.",
+          "-",
+          " ",
+          "ND",
+          "//",
+          "?",
+          "unknown"
+        ]
+      },
+      "spesa": {
+        "stored": "object",
+        "numeric_parse_rate": 0.9699,
+        "verdict": "numeric column with malformed values",
+        "n_malformed": 227,
+        "malformed_examples": [
+          "N.D.",
+          "€25667.3",
+          "€1002.1700000000001",
+          "€3676.04",
+          "€6583887536.34",
+          "7614712.34000025 EUR",
+          "3157355.42 EUR",
+          "€1095410.38",
+          "€39446.83",
+          "€316431617.98",
+          "€1909246.51",
+          "8659,000000000062",
+          "€1008.51",
+          "386,69999999999993",
+          "€216639.87000000005"
+        ]
+      },
+      "SPESA TOTALE": {
+        "stored": "object",
+        "numeric_parse_rate": 0.9699,
+        "verdict": "numeric column with malformed values",
+        "n_malformed": 227,
+        "malformed_examples": [
+          "N.D.",
+          "€25667.3",
+          "€1002.1700000000001",
+          "€3676.04",
+          "€6583887536.34",
+          "7614712.34000025 EUR",
+          "3157355.42 EUR",
+          "€1095410.38",
+          "€39446.83",
+          "€316431617.98",
+          "€1909246.51",
+          "8659,000000000062",
+          "€1008.51",
+          "386,69999999999993",
+          "€216639.87000000005"
+        ]
+      }
+    },
+    "format_consistency": {
+      "rata": {
+        "dominant_shape": "999999",
+        "dominant_share": 0.9324,
+        "n_offending": 510,
+        "offending_shapes": {
+          "9999-99": [
+            "2024-06",
+            "2024-04",
+            "2023-12"
+          ],
+          "99/9999": [
+            "04/2024",
+            "03/2024",
+            "10/2024"
+          ],
+          "aaaa 9999": [
+            "Rata 2024",
+            "Rata 2023"
+          ],
+          "aaa-9999": [
+            "FEB-2024",
+            "MAR-2024",
+            "DIC-2023"
+          ]
+        }
+      },
+      "aggregation-time": {
+        "dominant_shape": "9999-99-99a99:99:99.999",
+        "dominant_share": 0.9202,
+        "n_offending": 602,
+        "offending_shapes": {
+          "99/99/9999": [
+            "11/07/2024",
+            "24/10/2024",
+            "11/09/2024"
+          ],
+          "99-99-99": [
+            "11-05-24",
+            "11-03-24",
+            "11-06-24"
+          ],
+          "9999/99/99": [
+            "2024/04/11",
+            "2024/02/11",
+            "2024/07/11"
+          ],
+          "99.99.9999": [
+            "24.10.2024",
+            "11.06.2024",
+            "11.01.2024"
+          ],
+          "aaa 99 9999": [
+            "OTT 24 2024",
+            "GEN 11 2024",
+            "FEB 11 2024"
+          ]
+        }
+      }
+    },
+    "numeric": {
+      "ente": {
+        "outliers_iqr": 207,
+        "outlier_rate": 0.0286,
+        "min": 1.0,
+        "max": 8017.0,
+        "negatives": 0,
+        "float_noise_values": 0
+      },
+      "spesa": {
+        "outliers_iqr": 1326,
+        "outlier_rate": 0.1812,
+        "min": -999999.5,
+        "max": 12300103933.74,
+        "negatives": 11,
+        "float_noise_values": 2804
+      },
+      "SPESA TOTALE": {
+        "outliers_iqr": 1322,
+        "outlier_rate": 0.1807,
+        "min": -12405.499999999993,
+        "max": 12300103933.74,
+        "negatives": 5,
+        "float_noise_values": 2817
+      },
+      "ente%code": {
+        "outliers_iqr": 216,
+        "outlier_rate": 0.0286,
+        "min": 1.0,
+        "max": 8017.0,
+        "negatives": 0,
+        "float_noise_values": 0
+      }
+    },
+    "rare_categoricals": {
+      "rata": {
+        "n_categories": 46,
+        "n_rare": 34,
+        "rare": {
+          "2024-02": 23,
+          "2024-04": 22,
+          "2024-09": 22,
+          "2024-08": 21,
+          "2024-10": 21,
+          "2024-01": 20,
+          "2024-05": 19,
+          "2023-12": 18,
+          "2024-03": 15,
+          "2024-07": 14,
+          "2024-06": 13,
+          "12/2023": 13,
+          "08/2024": 13,
+          "GIU-2024": 12,
+          "07/2024": 11,
+          "MAR-2024": 11,
+          "03/2024": 11,
+          "09/2024": 11,
+          "10/2024": 10,
+          "02/2024": 10
+        }
+      },
+      "tipo_imposta": {
+        "n_categories": 10,
+        "n_rare": 5,
+        "rare": {
+          "Da definire": 2,
+          "Erariali ": 2,
+          "Mista": 2,
+          "erariali": 1,
+          "ERARIALI": 1
+        }
+      },
+      "cod_imposta": {
+        "n_categories": 18,
+        "n_rare": 7,
+        "rare": {
+          " ": 26,
+          "n.d.": 25,
+          "//": 23,
+          "?": 23,
+          "-": 20,
+          "ND": 19,
+          "unknown": 17
+        }
+      },
+      "imposta": {
+        "n_categories": 22,
+        "n_rare": 11,
+        "rare": {
+          "n.d.": 44,
+          "//": 40,
+          "-": 39,
+          "ND": 33,
+          "?": 31,
+          " ": 28,
+          "unknown": 21,
+          "DA VERIFICARE": 4,
+          "imposta x": 3,
+          "TBD": 2,
+          "Altro": 1
+        }
+      }
+    },
+    "duplicate_rows": {
+      "exact_full_row": 40,
+      "exact_ignoring_id": 40,
+      "duplicate_id_values": 65
+    },
+    "cross_column": {
+      "cod_tipoimposta_to_tipo_imposta": {
+        "codes": 4,
+        "codes_with_multiple_labels": 4
+      },
+      "cod_imposta_to_imposta": {
+        "codes": 18,
+        "codes_with_multiple_labels": 18
+      },
+      "spesa_negative": 11
+    }
+  }
+}

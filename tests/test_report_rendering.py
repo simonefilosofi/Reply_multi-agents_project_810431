@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from tools.md_to_pdf import markdown_to_html
-from tools.report_charts import _LOW, dimension_comparison_chart, fill_rate_chart
+from tools.report_charts import _LOW, _PAPER, dimension_comparison_chart, fill_rate_chart
 
 _BEFORE = {"completeness": 0.8752, "uniqueness": 0.9881, "schema_conformity": 0.5}
 _AFTER = {"completeness": 0.9801, "uniqueness": 1.0, "schema_conformity": 1.0}
@@ -11,7 +11,7 @@ _AFTER = {"completeness": 0.9801, "uniqueness": 1.0, "schema_conformity": 1.0}
 def test_the_comparison_chart_draws_one_pair_per_shared_dimension() -> None:
     svg = dimension_comparison_chart(_BEFORE, _AFTER)
 
-    assert svg.count("<rect") == len(_BEFORE) * 2 + 2
+    assert svg.count("<rect") == len(_BEFORE) * 2 + 3
     assert "as delivered" in svg and "after remediation" in svg
 
 
@@ -77,3 +77,12 @@ def test_the_running_header_and_footer_are_repeatable_table_sections() -> None:
     assert "<thead>" in html and "<tfoot>" in html
     assert "display: table-header-group" in html
     assert "Report title" in html and "footer note" in html
+
+
+def test_a_chart_carries_its_own_background_so_it_reads_on_any_page() -> None:
+    """The charts are written into the Markdown as bare SVG and rendered wherever the report is
+    read - the notebook among them. Drawn on a transparent canvas the dark ink vanished against a
+    dark page, so each chart paints its own paper before anything else."""
+    for svg in (dimension_comparison_chart(_BEFORE, _AFTER), fill_rate_chart({"sparse": 0.2})):
+        assert f"fill='{_PAPER}'" in svg
+        assert svg.index(_PAPER) < svg.index("<text")

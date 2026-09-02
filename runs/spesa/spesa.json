@@ -1,0 +1,1544 @@
+{
+  "dataset_path": "runs\\spesa\\spesa.csv",
+  "detected_domain": "Trattamento_economico",
+  "detected_language": "it",
+  "shape": {
+    "rows": 7478,
+    "columns": 11
+  },
+  "null_summary": [
+    {
+      "column": "descrizione",
+      "null_pct": 0.1
+    },
+    {
+      "column": "area_geografica",
+      "null_pct": 21.0
+    },
+    {
+      "column": "spesa",
+      "null_pct": 0.8
+    }
+  ],
+  "semantic_payload": [
+    {
+      "column_name": "id",
+      "meaning": "MongoDB ObjectId unique record identifier",
+      "dtype": "object",
+      "placeholders_found": []
+    },
+    {
+      "column_name": "rata",
+      "meaning": "installment reference period (month/year) of the payment",
+      "dtype": "object",
+      "placeholders_found": []
+    },
+    {
+      "column_name": "descrizione",
+      "meaning": "name of the public administration entity",
+      "dtype": "string",
+      "placeholders_found": [
+        "n.d.",
+        "?",
+        "//",
+        "ND",
+        " ",
+        "-",
+        "unknown",
+        "N/A "
+      ]
+    },
+    {
+      "column_name": "cod_tipoimposta",
+      "meaning": "tax type code",
+      "dtype": "int64",
+      "placeholders_found": []
+    },
+    {
+      "column_name": "imposta",
+      "meaning": "type of tax or deduction applied to payslip",
+      "dtype": "object",
+      "placeholders_found": [
+        "-",
+        "//",
+        "TBD",
+        " ",
+        "unknown",
+        "DA VERIFICARE",
+        "?",
+        "ND",
+        "n.d."
+      ]
+    },
+    {
+      "column_name": "aggregation_time",
+      "meaning": "timestamp of data aggregation",
+      "dtype": "datetime64[ns]",
+      "placeholders_found": []
+    },
+    {
+      "column_name": "area_geografica",
+      "meaning": "Italian macro-geographic area (Nord, Centro, Sud, Isole)",
+      "dtype": "object",
+      "placeholders_found": []
+    },
+    {
+      "column_name": "tipo_imposta",
+      "meaning": "tax/deduction category label (Previdenziali, Erariali, Varie, Netto)",
+      "dtype": "object",
+      "placeholders_found": []
+    },
+    {
+      "column_name": "spesa",
+      "meaning": "total expenditure amount in euros",
+      "dtype": "float64",
+      "placeholders_found": [
+        "N.D."
+      ]
+    },
+    {
+      "column_name": "cod_imposta",
+      "meaning": "tax code identifier (codice imposta)",
+      "dtype": "int64",
+      "placeholders_found": []
+    },
+    {
+      "column_name": "ente",
+      "meaning": "entity code identifier",
+      "dtype": "int64",
+      "placeholders_found": []
+    }
+  ],
+  "duplicate_resolutions": [
+    {
+      "group": [
+        "ente",
+        "ente%code"
+      ],
+      "survivor": "ente%code",
+      "canonical_name": "ente",
+      "dropped": [
+        "ente"
+      ],
+      "rationale": "Only group member conforming to the baseline naming convention. Kept ente%code: the group members agree with the rest of the table equally well, so the column with the fewest missing values was taken (0).",
+      "cells_backfilled": 0,
+      "cells_overwritten": {},
+      "values_lost": {}
+    },
+    {
+      "group": [
+        "tipo_imposta",
+        "Tipo Imposta"
+      ],
+      "survivor": "Tipo Imposta",
+      "canonical_name": "tipo_imposta",
+      "dropped": [
+        "tipo_imposta"
+      ],
+      "rationale": "Only group member conforming to the baseline naming convention. Kept Tipo Imposta: it matches the value implied by cod_tipoimposta on 100.00% of rows, against tipo_imposta 94.95%.",
+      "cells_backfilled": 0,
+      "cells_overwritten": {
+        "tipo_imposta": 383
+      },
+      "values_lost": {
+        "tipo_imposta": [
+          "Assistenziali",
+          "ERARIALI",
+          "Erariali ",
+          "Mista",
+          "erariali"
+        ]
+      }
+    },
+    {
+      "group": [
+        "cod_imposta",
+        "2cod_imposta",
+        "cod imposta ext"
+      ],
+      "survivor": "2cod_imposta",
+      "canonical_name": "cod_imposta",
+      "dropped": [
+        "cod_imposta",
+        "cod imposta ext"
+      ],
+      "rationale": "Only group member conforming to the baseline naming convention. Kept 2cod_imposta: the group members agree with the rest of the table equally well, so the column with the fewest missing values was taken (0).",
+      "cells_backfilled": 0,
+      "cells_overwritten": {},
+      "values_lost": {}
+    },
+    {
+      "group": [
+        "spesa",
+        "SPESA TOTALE"
+      ],
+      "survivor": "SPESA TOTALE",
+      "canonical_name": "spesa",
+      "dropped": [
+        "spesa"
+      ],
+      "rationale": "Only group member conforming to the baseline naming convention. Kept SPESA TOTALE: no other column explains this one well enough to compare them, so the column with the fewest missing values was taken (59).",
+      "cells_backfilled": 0,
+      "cells_overwritten": {
+        "spesa": 37
+      },
+      "values_lost": {
+        "spesa": [
+          "-1.0",
+          "-45000.0",
+          "0.0",
+          "1.0",
+          "1086.8786",
+          "115167.4858",
+          "1234567890.0",
+          "125207.2269",
+          "12778.0",
+          "146.8869"
+        ]
+      }
+    }
+  ],
+  "duplicate_rows": {
+    "exact_duplicate_rows": 65,
+    "key_columns": [
+      "id"
+    ],
+    "key_collisions": {
+      "id": {
+        "duplicated_keys": 65,
+        "affected_rows": 130,
+        "keys_with_conflicting_data": 0,
+        "rows_in_conflicting_groups": 0,
+        "examples": []
+      }
+    },
+    "rows_before": 7543,
+    "rows_after": 7478,
+    "rows_removed": 65
+  },
+  "duplicate_column_groups": 4,
+  "columns_dropped_as_duplicates": 5,
+  "unaddressed_violations": [
+    {
+      "group_id": "g2",
+      "columns": [
+        "cod_tipoimposta",
+        "area_geografica",
+        "tipo_imposta",
+        "spesa",
+        "cod_imposta"
+      ],
+      "violation_ids": [
+        "c5_v1",
+        "c6_v1",
+        "c7_v1",
+        "c9_v1"
+      ],
+      "reason": "The missing values in area_geografica (1582), note (7393), fonte_dato (7468), and spesa (59) cannot be safely filled: none of these columns has an imputation hint, and filling them would require inventing data or applying a statistic without a deterministic rule. area_geografica, note, and fonte_dato have no predictor columns in the group, and spesa is a monetary amount that must not be imputed without an explicit user-provided rule. These require human judgement.",
+      "affected_rows": 2027,
+      "affected_by_column": {
+        "cod_tipoimposta": 1,
+        "area_geografica": 1582,
+        "tipo_imposta": 384,
+        "spesa": 59,
+        "cod_imposta": 1
+      },
+      "actioned_elsewhere": [
+        "aggregation-time",
+        "note",
+        "fonte_dato"
+      ],
+      "source": "model"
+    }
+  ],
+  "cross_column_rules": [
+    {
+      "rule": "aggregation-time determines rata",
+      "rows_breaking": 510,
+      "rows_remaining": 0
+    },
+    {
+      "rule": "cod_imposta determines imposta",
+      "rows_breaking": 4,
+      "rows_remaining": 0
+    },
+    {
+      "rule": "imposta determines tipo_imposta",
+      "rows_breaking": 1,
+      "rows_remaining": 0
+    },
+    {
+      "rule": "imposta determines cod_tipoimposta",
+      "rows_breaking": 1,
+      "rows_remaining": 0
+    },
+    {
+      "rule": "imposta determines cod_imposta",
+      "rows_breaking": 1,
+      "rows_remaining": 0
+    }
+  ],
+  "per_column": [
+    {
+      "column": "id",
+      "from": "_id",
+      "dtype": "object",
+      "fill_rate": 1.0,
+      "detected": 0,
+      "outstanding": 0,
+      "cells_changed": 0
+    },
+    {
+      "column": "rata",
+      "from": "",
+      "dtype": "object",
+      "fill_rate": 1.0,
+      "detected": 1020,
+      "outstanding": 0,
+      "cells_changed": 510
+    },
+    {
+      "column": "descrizione",
+      "from": "",
+      "dtype": "string",
+      "fill_rate": 0.9989,
+      "detected": 456,
+      "outstanding": 8,
+      "cells_changed": 758
+    },
+    {
+      "column": "cod_tipoimposta",
+      "from": "",
+      "dtype": "int64",
+      "fill_rate": 1.0,
+      "detected": 1,
+      "outstanding": 0,
+      "cells_changed": 0
+    },
+    {
+      "column": "imposta",
+      "from": "",
+      "dtype": "object",
+      "fill_rate": 1.0,
+      "detected": 386,
+      "outstanding": 0,
+      "cells_changed": 625
+    },
+    {
+      "column": "aggregation_time",
+      "from": "aggregation-time",
+      "dtype": "datetime64[ns]",
+      "fill_rate": 1.0,
+      "detected": 0,
+      "outstanding": 0,
+      "cells_changed": 0
+    },
+    {
+      "column": "area_geografica",
+      "from": "",
+      "dtype": "object",
+      "fill_rate": 0.7905,
+      "detected": 1582,
+      "outstanding": 1567,
+      "cells_changed": 0
+    },
+    {
+      "column": "tipo_imposta",
+      "from": "",
+      "dtype": "object",
+      "fill_rate": 1.0,
+      "detected": 384,
+      "outstanding": 0,
+      "cells_changed": 387
+    },
+    {
+      "column": "spesa",
+      "from": "",
+      "dtype": "float64",
+      "fill_rate": 0.9922,
+      "detected": 59,
+      "outstanding": 58,
+      "cells_changed": 2979
+    },
+    {
+      "column": "cod_imposta",
+      "from": "",
+      "dtype": "int64",
+      "fill_rate": 1.0,
+      "detected": 1,
+      "outstanding": 0,
+      "cells_changed": 154
+    },
+    {
+      "column": "ente",
+      "from": "",
+      "dtype": "int64",
+      "fill_rate": 1.0,
+      "detected": 0,
+      "outstanding": 0,
+      "cells_changed": 185
+    }
+  ],
+  "auto_remediations": [
+    {
+      "column": "rata",
+      "operation": "normalize_period",
+      "cells_changed": 414,
+      "rationale": "alternative period layouts rewritten to the canonical YYYYMM form"
+    },
+    {
+      "column": "spesa",
+      "operation": "round_decimals",
+      "cells_changed": 2878,
+      "rationale": "the column is recorded at 2 decimals; the extra digits are floating-point noise and rounding leaves the totals unchanged"
+    },
+    {
+      "column": "rata",
+      "operation": "complete_period_from_dependency",
+      "cells_changed": 96,
+      "rationale": "values naming only a year were completed from a column that determines rata exactly"
+    },
+    {
+      "column": "descrizione",
+      "operation": "impute_from_lookup",
+      "cells_changed": 448,
+      "predictor_columns": [
+        "ente"
+      ],
+      "purity": 0.9928,
+      "cells_still_missing": 8,
+      "rationale": "ente -> descrizione: purity=0.99, coverage=0.98 on path 'raw'"
+    },
+    {
+      "column": "imposta",
+      "operation": "impute_from_lookup",
+      "cells_changed": 379,
+      "predictor_columns": [
+        "cod_imposta"
+      ],
+      "purity": 0.9994,
+      "cells_still_missing": 0,
+      "rationale": "cod_imposta -> imposta: purity=1.00, coverage=1.00 on path 'raw'"
+    }
+  ],
+  "generated_function_runs": [],
+  "changes_summary": {
+    "total_cells_changed": 5659,
+    "by_column": {
+      "spesa": 2979,
+      "descrizione": 758,
+      "imposta": 625,
+      "rata": 510,
+      "tipo_imposta": 387,
+      "ente": 185,
+      "cod_imposta": 154,
+      "SPESA TOTALE": 60,
+      "aggregation-time": 1
+    },
+    "by_source": {
+      "auto_remediation": 4215,
+      "nan_handler:placeholders": 988,
+      "duplicate_column": 424,
+      "collapse_casing": 22,
+      "nan_handler:dtype": 4,
+      "replace_values_imposta": 4,
+      "duplicate_column:dtype": 2
+    }
+  },
+  "format_violations_detected": [
+    {
+      "column_name": "descrizione",
+      "violation_count": 456
+    },
+    {
+      "column_name": "note",
+      "violation_count": 7393
+    },
+    {
+      "column_name": "fonte_dato",
+      "violation_count": 7468
+    },
+    {
+      "column_name": "tipo_imposta",
+      "violation_count": 1
+    },
+    {
+      "column_name": "_id",
+      "violation_count": 0
+    },
+    {
+      "column_name": "aggregation-time",
+      "violation_count": 0
+    },
+    {
+      "column_name": "imposta",
+      "violation_count": 7
+    },
+    {
+      "column_name": "area_geografica",
+      "violation_count": 1582
+    },
+    {
+      "column_name": "spesa",
+      "violation_count": 59
+    },
+    {
+      "column_name": "cod_tipoimposta",
+      "violation_count": 1
+    },
+    {
+      "column_name": "cod_imposta",
+      "violation_count": 1
+    }
+  ],
+  "format_violations_residual": [
+    {
+      "column_name": "descrizione",
+      "violation_count": 8
+    },
+    {
+      "column_name": "area_geografica",
+      "violation_count": 1567
+    },
+    {
+      "column_name": "spesa",
+      "violation_count": 58
+    }
+  ],
+  "completeness": {
+    "by_column": {
+      "_id": {
+        "nulls": 0,
+        "total": 7543,
+        "completeness": 1.0
+      },
+      "rata": {
+        "nulls": 0,
+        "total": 7543,
+        "completeness": 1.0
+      },
+      "ente": {
+        "nulls": 302,
+        "total": 7543,
+        "completeness": 0.96
+      },
+      "descrizione": {
+        "nulls": 456,
+        "total": 7543,
+        "completeness": 0.9395
+      },
+      "cod_tipoimposta": {
+        "nulls": 0,
+        "total": 7543,
+        "completeness": 1.0
+      },
+      "tipo_imposta": {
+        "nulls": 2,
+        "total": 7543,
+        "completeness": 0.9997
+      },
+      "cod_imposta": {
+        "nulls": 225,
+        "total": 7543,
+        "completeness": 0.9702
+      },
+      "imposta": {
+        "nulls": 379,
+        "total": 7543,
+        "completeness": 0.9498
+      },
+      "spesa": {
+        "nulls": 61,
+        "total": 7543,
+        "completeness": 0.9919
+      },
+      "aggregation-time": {
+        "nulls": 0,
+        "total": 7543,
+        "completeness": 1.0
+      },
+      "area_geografica": {
+        "nulls": 1582,
+        "total": 7543,
+        "completeness": 0.7903
+      },
+      "note": {
+        "nulls": 7393,
+        "total": 7543,
+        "completeness": 0.0199
+      },
+      "fonte_dato": {
+        "nulls": 7468,
+        "total": 7543,
+        "completeness": 0.0099
+      },
+      "Tipo Imposta": {
+        "nulls": 0,
+        "total": 7543,
+        "completeness": 1.0
+      },
+      "SPESA TOTALE": {
+        "nulls": 59,
+        "total": 7543,
+        "completeness": 0.9922
+      },
+      "2cod_imposta": {
+        "nulls": 0,
+        "total": 7543,
+        "completeness": 1.0
+      },
+      "cod imposta ext": {
+        "nulls": 0,
+        "total": 7543,
+        "completeness": 1.0
+      },
+      "ente%code": {
+        "nulls": 0,
+        "total": 7543,
+        "completeness": 1.0
+      }
+    },
+    "overall": {
+      "rows": 7543,
+      "columns": 18,
+      "cells": 135774,
+      "null_cells": 17927,
+      "completeness": 0.868
+    },
+    "rows": {
+      "complete_rows": 1,
+      "rows_with_nulls": 7542,
+      "max_nulls_in_a_row": 6,
+      "worst_rows": [
+        {
+          "row_index": 7359,
+          "nulls": 6
+        },
+        {
+          "row_index": 49,
+          "nulls": 5
+        },
+        {
+          "row_index": 466,
+          "nulls": 5
+        },
+        {
+          "row_index": 696,
+          "nulls": 5
+        },
+        {
+          "row_index": 860,
+          "nulls": 5
+        },
+        {
+          "row_index": 978,
+          "nulls": 5
+        },
+        {
+          "row_index": 1375,
+          "nulls": 5
+        },
+        {
+          "row_index": 1444,
+          "nulls": 5
+        },
+        {
+          "row_index": 1593,
+          "nulls": 5
+        },
+        {
+          "row_index": 1679,
+          "nulls": 5
+        }
+      ]
+    },
+    "sparse_columns": [
+      {
+        "column": "note",
+        "nulls": 7393,
+        "null_rate": 0.9801
+      },
+      {
+        "column": "fonte_dato",
+        "nulls": 7468,
+        "null_rate": 0.9901
+      }
+    ]
+  },
+  "violations_by_kind_detected": {
+    "format": 513,
+    "completeness": 17337,
+    "schema": 5,
+    "consistency": 517,
+    "uniqueness": 87
+  },
+  "violations_by_kind_residual": {
+    "format": 0,
+    "completeness": 1633,
+    "schema": 0,
+    "consistency": 0,
+    "uniqueness": 0
+  },
+  "naming_violations": [
+    {
+      "column_name": "_id",
+      "suggested_name": "id"
+    },
+    {
+      "column_name": "aggregation-time",
+      "suggested_name": "aggregation_time"
+    }
+  ],
+  "anomalies": [
+    {
+      "column_name": "imposta",
+      "method": "rare_category",
+      "detected": 2,
+      "sampled": 2,
+      "comment": "Two rare categories were detected: 'imposta x' (3 occurrences) and 'Altro' (1 occurrence), while the dominant values are 'Previdenziali a carico del datore di lavoro' and 'IRAP' at ~11.6% each, suggesting these are placeholder or free-text entries that should be mapped to a standardized tax code.",
+      "examples": [
+        "imposta x",
+        "Altro"
+      ]
+    },
+    {
+      "column_name": "spesa",
+      "method": "iqr",
+      "detected": 1352,
+      "sampled": 50,
+      "comment": "1352 numeric outliers exceed the IQR upper bound of ~1.58M, with sampled values ranging from ~1.7M up to ~43.4M, indicating either legitimate high-value payroll/expense transactions or potential data entry errors with inflated amounts.",
+      "examples": [
+        2110811.34,
+        43365008.73,
+        2192935.66,
+        7639226.66,
+        1717613.32
+      ]
+    }
+  ],
+  "proposed_remediations": [
+    {
+      "id": "schema_drop_note",
+      "description": "Drop 'note': it is 98.0% null and carries almost no information.",
+      "rationale": "7393 of its cells are empty. Removing the column is a schema decision, so it is proposed rather than applied.",
+      "affected_columns": [
+        "note"
+      ],
+      "estimated_rows_affected": 7393,
+      "operations": [
+        "drop_column on note"
+      ],
+      "equivalent_python": "df = df.drop(columns=[\"note\"])",
+      "generated_sources": [],
+      "applied": true
+    },
+    {
+      "id": "schema_drop_fonte_dato",
+      "description": "Drop 'fonte_dato': it is 99.0% null and carries almost no information.",
+      "rationale": "7468 of its cells are empty. Removing the column is a schema decision, so it is proposed rather than applied.",
+      "affected_columns": [
+        "fonte_dato"
+      ],
+      "estimated_rows_affected": 7468,
+      "operations": [
+        "drop_column on fonte_dato"
+      ],
+      "equivalent_python": "df = df.drop(columns=[\"fonte_dato\"])",
+      "generated_sources": [],
+      "applied": true
+    },
+    {
+      "id": "schema_rename__id",
+      "description": "Rename '_id' to 'id' to match the naming convention.",
+      "rationale": "The column name breaks the convention declared in the baseline. Renaming changes the schema, so it is proposed rather than applied.",
+      "affected_columns": [
+        "_id"
+      ],
+      "estimated_rows_affected": 0,
+      "operations": [
+        "rename_column _id to id"
+      ],
+      "equivalent_python": "df = df.rename(columns={\"_id\": \"id\"})",
+      "generated_sources": [],
+      "applied": true
+    },
+    {
+      "id": "schema_rename_aggregation-time",
+      "description": "Rename 'aggregation-time' to 'aggregation_time' to match the naming convention.",
+      "rationale": "The column name breaks the convention declared in the baseline. Renaming changes the schema, so it is proposed rather than applied.",
+      "affected_columns": [
+        "aggregation-time"
+      ],
+      "estimated_rows_affected": 0,
+      "operations": [
+        "rename_column aggregation-time to aggregation_time"
+      ],
+      "equivalent_python": "df = df.rename(columns={\"aggregation-time\": \"aggregation_time\"})",
+      "generated_sources": [],
+      "applied": true
+    },
+    {
+      "id": "impute_from_lookup_descrizione",
+      "description": "Fill missing descrizione values from the ente-to-descrizione mapping derived from non-missing rows of the dataframe.",
+      "rationale": "descrizione is not nullable (c1_v1, 456 missing) but the imputation hint ente -> descrizione has purity 0.99 and coverage 0.98, so the entity name is derivable from the ente code. The reviewer noted the precomputed mapping was empty, so the mapping must be re-derived from the dataframe's own non-missing rows (group by ente, take the mode/first non-null descrizione).",
+      "affected_columns": [
+        "descrizione"
+      ],
+      "estimated_rows_affected": 456,
+      "operations": [
+        "impute_from_lookup on descrizione"
+      ],
+      "equivalent_python": "lookup = imputation_hints[\"descrizione\"][\"mapping\"]\npredictor = imputation_hints[\"descrizione\"][\"predictor_columns\"][0]\ndf[\"descrizione\"] = df[\"descrizione\"].fillna(df[predictor].astype(\"string\").map(lookup))",
+      "generated_sources": [],
+      "applied": true
+    },
+    {
+      "id": "replace_values_imposta",
+      "description": "Correct the placeholder 'imposta x' and the stray 'Altro' value in imposta using the cod_imposta lookup.",
+      "rationale": "The value 'imposta x' is a placeholder that violates the enum and three cross-column constraints (cod_imposta=5/13/14). The imputation hint cod_imposta -> imposta has purity 1.00 and coverage 1.00, so the correct tax label is fully determined by cod_imposta. The single 'Altro' value with cod_imposta=13 should map to 'Previdenziali a carico del datore di lavoro'.",
+      "affected_columns": [
+        "imposta"
+      ],
+      "estimated_rows_affected": 4,
+      "operations": [
+        "replace_values on imposta: 'imposta x' -> None, 'Altro' -> None",
+        "impute_from_lookup on imposta"
+      ],
+      "equivalent_python": "df[\"imposta\"] = df[\"imposta\"].replace({'imposta x': None, 'Altro': None})\nlookup = imputation_hints[\"imposta\"][\"mapping\"]\npredictor = imputation_hints[\"imposta\"][\"predictor_columns\"][0]\ndf[\"imposta\"] = df[\"imposta\"].fillna(df[predictor].astype(\"string\").map(lookup))",
+      "generated_sources": [],
+      "applied": true
+    }
+  ],
+  "applied_fix_ids": [
+    "schema_drop_note",
+    "schema_drop_fonte_dato",
+    "schema_rename__id",
+    "schema_rename_aggregation-time",
+    "replace_values_imposta",
+    "impute_from_lookup_descrizione"
+  ],
+  "value_corrections": {
+    "imposta": {
+      "imposta x": null
+    }
+  },
+  "quality": {
+    "snapshots": {
+      "raw": {
+        "null_by_column": {
+          "_id": 0,
+          "rata": 0,
+          "ente": 118,
+          "descrizione": 169,
+          "cod_tipoimposta": 0,
+          "tipo_imposta": 0,
+          "cod_imposta": 72,
+          "imposta": 137,
+          "spesa": 0,
+          "aggregation-time": 0,
+          "area_geografica": 1582,
+          "note": 7393,
+          "fonte_dato": 7468,
+          "Tipo Imposta": 0,
+          "SPESA TOTALE": 0,
+          "2cod_imposta": 0,
+          "cod imposta ext": 0,
+          "ente%code": 0
+        },
+        "rows": 7543,
+        "columns": 18,
+        "cells": 135774,
+        "null_cells": 16939,
+        "duplicate_rows": 40,
+        "rows_in_key_conflict": 50,
+        "checked_cells": null,
+        "checked_cells_by_column": {},
+        "completeness": 0.8752,
+        "uniqueness": 0.9881,
+        "schema_conformity": 0.5,
+        "structural_defects": {
+          "_id": [
+            "naming"
+          ],
+          "aggregation-time": [
+            "naming"
+          ],
+          "note": [
+            "sparse"
+          ],
+          "fonte_dato": [
+            "sparse"
+          ],
+          "Tipo Imposta": [
+            "naming"
+          ],
+          "SPESA TOTALE": [
+            "naming"
+          ],
+          "2cod_imposta": [
+            "naming"
+          ],
+          "cod imposta ext": [
+            "naming",
+            "redundant"
+          ],
+          "ente%code": [
+            "naming"
+          ]
+        },
+        "columns_with_structural_defects": 9,
+        "columns_badly_named": 7,
+        "columns_sparse": 2,
+        "columns_redundant": 1,
+        "columns_untyped": 0
+      },
+      "detected": {
+        "null_by_column": {
+          "_id": 0,
+          "rata": 0,
+          "ente": 302,
+          "descrizione": 456,
+          "cod_tipoimposta": 0,
+          "tipo_imposta": 2,
+          "cod_imposta": 225,
+          "imposta": 379,
+          "spesa": 61,
+          "aggregation-time": 0,
+          "area_geografica": 1582,
+          "note": 7393,
+          "fonte_dato": 7468,
+          "Tipo Imposta": 0,
+          "SPESA TOTALE": 59,
+          "2cod_imposta": 0,
+          "cod imposta ext": 0,
+          "ente%code": 0
+        },
+        "rows": 7543,
+        "columns": 18,
+        "cells": 135774,
+        "null_cells": 17927,
+        "duplicate_rows": 40,
+        "rows_in_key_conflict": 0,
+        "checked_cells": null,
+        "checked_cells_by_column": {},
+        "completeness": 0.868,
+        "uniqueness": 0.9947,
+        "schema_conformity": 0.5,
+        "structural_defects": {
+          "_id": [
+            "naming"
+          ],
+          "aggregation-time": [
+            "naming"
+          ],
+          "note": [
+            "sparse"
+          ],
+          "fonte_dato": [
+            "sparse"
+          ],
+          "Tipo Imposta": [
+            "naming"
+          ],
+          "SPESA TOTALE": [
+            "naming"
+          ],
+          "2cod_imposta": [
+            "naming"
+          ],
+          "cod imposta ext": [
+            "naming",
+            "redundant"
+          ],
+          "ente%code": [
+            "naming"
+          ]
+        },
+        "columns_with_structural_defects": 9,
+        "columns_badly_named": 7,
+        "columns_sparse": 2,
+        "columns_redundant": 1,
+        "columns_untyped": 0
+      },
+      "pre_remediation": {
+        "null_by_column": {
+          "_id": 0,
+          "rata": 0,
+          "descrizione": 456,
+          "cod_tipoimposta": 0,
+          "imposta": 379,
+          "aggregation-time": 0,
+          "area_geografica": 1582,
+          "note": 7393,
+          "fonte_dato": 7468,
+          "tipo_imposta": 0,
+          "spesa": 59,
+          "cod_imposta": 0,
+          "ente": 0
+        },
+        "rows": 7543,
+        "columns": 13,
+        "cells": 98059,
+        "null_cells": 17337,
+        "duplicate_rows": 43,
+        "rows_in_key_conflict": 44,
+        "checked_cells": 73635,
+        "checked_cells_by_column": {
+          "_id": 7543,
+          "rata": 7543,
+          "cod_tipoimposta": 7543,
+          "imposta": 7164,
+          "aggregation-time": 7543,
+          "area_geografica": 5961,
+          "note": 150,
+          "fonte_dato": 75,
+          "tipo_imposta": 7543,
+          "spesa": 7484,
+          "cod_imposta": 7543,
+          "ente": 7543
+        },
+        "completeness": 0.8232,
+        "uniqueness": 0.9885,
+        "schema_conformity": 0.6923,
+        "structural_defects": {
+          "_id": [
+            "naming"
+          ],
+          "aggregation-time": [
+            "naming"
+          ],
+          "note": [
+            "sparse"
+          ],
+          "fonte_dato": [
+            "sparse"
+          ]
+        },
+        "columns_with_structural_defects": 4,
+        "columns_badly_named": 2,
+        "columns_sparse": 2,
+        "columns_redundant": 0,
+        "columns_untyped": 0,
+        "violations_by_kind": {
+          "format": 513,
+          "completeness": 17337,
+          "schema": 5,
+          "consistency": 517,
+          "uniqueness": 87
+        },
+        "format_violations": 513,
+        "format_violations_by_column": {
+          "rata": 510,
+          "imposta": 3
+        },
+        "inconsistent_rows": 514,
+        "inconsistent_rows_by_column": {
+          "tipo_imposta": 1,
+          "rata": 510,
+          "imposta": 4,
+          "cod_tipoimposta": 1,
+          "cod_imposta": 1
+        },
+        "validity": 0.993,
+        "consistency": 0.9319,
+        "consistency_rules": {
+          "imposta determines tipo_imposta": 1,
+          "aggregation-time determines rata": 510,
+          "cod_imposta determines imposta": 4,
+          "imposta determines cod_tipoimposta": 1,
+          "imposta determines cod_imposta": 1
+        },
+        "violations_by_column": {
+          "descrizione": 456,
+          "note": 14786,
+          "fonte_dato": 14936,
+          "tipo_imposta": 384,
+          "_id": 1,
+          "aggregation-time": 1,
+          "rata": 1020,
+          "imposta": 386,
+          "area_geografica": 1582,
+          "spesa": 59,
+          "cod_tipoimposta": 1,
+          "cod_imposta": 1
+        }
+      },
+      "final": {
+        "null_by_column": {
+          "id": 0,
+          "rata": 0,
+          "descrizione": 8,
+          "cod_tipoimposta": 0,
+          "imposta": 0,
+          "aggregation_time": 0,
+          "area_geografica": 1567,
+          "tipo_imposta": 0,
+          "spesa": 58,
+          "cod_imposta": 0,
+          "ente": 0
+        },
+        "rows": 7478,
+        "columns": 11,
+        "cells": 82258,
+        "null_cells": 1633,
+        "duplicate_rows": 0,
+        "rows_in_key_conflict": 0,
+        "checked_cells": 73155,
+        "checked_cells_by_column": {
+          "id": 7478,
+          "rata": 7478,
+          "cod_tipoimposta": 7478,
+          "imposta": 7478,
+          "aggregation_time": 7478,
+          "area_geografica": 5911,
+          "tipo_imposta": 7478,
+          "spesa": 7420,
+          "cod_imposta": 7478,
+          "ente": 7478
+        },
+        "completeness": 0.9801,
+        "uniqueness": 1.0,
+        "schema_conformity": 1.0,
+        "structural_defects": {},
+        "columns_with_structural_defects": 0,
+        "columns_badly_named": 0,
+        "columns_sparse": 0,
+        "columns_redundant": 0,
+        "columns_untyped": 0,
+        "violations_by_kind": {
+          "format": 0,
+          "completeness": 1633,
+          "schema": 0,
+          "consistency": 0,
+          "uniqueness": 0
+        },
+        "format_violations": 0,
+        "format_violations_by_column": {},
+        "inconsistent_rows": 0,
+        "inconsistent_rows_by_column": {},
+        "validity": 1.0,
+        "consistency": 1.0
+      },
+      "pre_remediation_scoped": {
+        "null_by_column": {
+          "_id": 0,
+          "rata": 0,
+          "descrizione": 456,
+          "cod_tipoimposta": 0,
+          "imposta": 379,
+          "aggregation-time": 0,
+          "area_geografica": 1582,
+          "note": 7393,
+          "fonte_dato": 7468,
+          "tipo_imposta": 0,
+          "spesa": 59,
+          "cod_imposta": 0,
+          "ente": 0
+        },
+        "rows": 7543,
+        "columns": 11,
+        "cells": 98059,
+        "null_cells": 2476,
+        "duplicate_rows": 43,
+        "rows_in_key_conflict": 44,
+        "checked_cells": 73410,
+        "checked_cells_by_column": {
+          "_id": 7543,
+          "rata": 7543,
+          "cod_tipoimposta": 7543,
+          "imposta": 7164,
+          "aggregation-time": 7543,
+          "area_geografica": 5961,
+          "tipo_imposta": 7543,
+          "spesa": 7484,
+          "cod_imposta": 7543,
+          "ente": 7543
+        },
+        "completeness": 0.9702,
+        "uniqueness": 0.9885,
+        "schema_conformity": 0.8182,
+        "structural_defects": {
+          "_id": [
+            "naming"
+          ],
+          "aggregation-time": [
+            "naming"
+          ]
+        },
+        "columns_with_structural_defects": 2,
+        "columns_badly_named": 2,
+        "columns_sparse": 0,
+        "columns_redundant": 0,
+        "columns_untyped": 0,
+        "violations_by_kind": {
+          "format": 513,
+          "completeness": 17337,
+          "schema": 5,
+          "consistency": 517,
+          "uniqueness": 87
+        },
+        "format_violations": 513,
+        "format_violations_by_column": {
+          "rata": 510,
+          "imposta": 3
+        },
+        "inconsistent_rows": 514,
+        "inconsistent_rows_by_column": {
+          "tipo_imposta": 1,
+          "rata": 510,
+          "imposta": 4,
+          "cod_tipoimposta": 1,
+          "cod_imposta": 1
+        },
+        "validity": 0.993,
+        "consistency": 0.9319,
+        "consistency_rules": {
+          "imposta determines tipo_imposta": 1,
+          "aggregation-time determines rata": 510,
+          "cod_imposta determines imposta": 4,
+          "imposta determines cod_tipoimposta": 1,
+          "imposta determines cod_imposta": 1
+        },
+        "violations_by_column": {
+          "descrizione": 456,
+          "note": 14786,
+          "fonte_dato": 14936,
+          "tipo_imposta": 384,
+          "_id": 1,
+          "aggregation-time": 1,
+          "rata": 1020,
+          "imposta": 386,
+          "area_geografica": 1582,
+          "spesa": 59,
+          "cod_tipoimposta": 1,
+          "cod_imposta": 1
+        },
+        "columns_compared": 11
+      },
+      "final_scoped": {
+        "null_by_column": {
+          "id": 0,
+          "rata": 0,
+          "descrizione": 8,
+          "cod_tipoimposta": 0,
+          "imposta": 0,
+          "aggregation_time": 0,
+          "area_geografica": 1567,
+          "tipo_imposta": 0,
+          "spesa": 58,
+          "cod_imposta": 0,
+          "ente": 0
+        },
+        "rows": 7478,
+        "columns": 11,
+        "cells": 82258,
+        "null_cells": 1633,
+        "duplicate_rows": 0,
+        "rows_in_key_conflict": 0,
+        "checked_cells": 73155,
+        "checked_cells_by_column": {
+          "id": 7478,
+          "rata": 7478,
+          "cod_tipoimposta": 7478,
+          "imposta": 7478,
+          "aggregation_time": 7478,
+          "area_geografica": 5911,
+          "tipo_imposta": 7478,
+          "spesa": 7420,
+          "cod_imposta": 7478,
+          "ente": 7478
+        },
+        "completeness": 0.9801,
+        "uniqueness": 1.0,
+        "schema_conformity": 1.0,
+        "structural_defects": {},
+        "columns_with_structural_defects": 0,
+        "columns_badly_named": 0,
+        "columns_sparse": 0,
+        "columns_redundant": 0,
+        "columns_untyped": 0,
+        "violations_by_kind": {
+          "format": 0,
+          "completeness": 1633,
+          "schema": 0,
+          "consistency": 0,
+          "uniqueness": 0
+        },
+        "format_violations": 0,
+        "format_violations_by_column": {},
+        "inconsistent_rows": 0,
+        "inconsistent_rows_by_column": {},
+        "validity": 1.0,
+        "consistency": 1.0
+      }
+    },
+    "headline_before": {
+      "null_by_column": {
+        "_id": 0,
+        "rata": 0,
+        "ente": 118,
+        "descrizione": 169,
+        "cod_tipoimposta": 0,
+        "tipo_imposta": 0,
+        "cod_imposta": 72,
+        "imposta": 137,
+        "spesa": 0,
+        "aggregation-time": 0,
+        "area_geografica": 1582,
+        "note": 7393,
+        "fonte_dato": 7468,
+        "Tipo Imposta": 0,
+        "SPESA TOTALE": 0,
+        "2cod_imposta": 0,
+        "cod imposta ext": 0,
+        "ente%code": 0
+      },
+      "rows": 7543,
+      "columns": 18,
+      "cells": 135774,
+      "null_cells": 16939,
+      "duplicate_rows": 40,
+      "rows_in_key_conflict": 50,
+      "checked_cells": null,
+      "checked_cells_by_column": {},
+      "completeness": 0.8752,
+      "uniqueness": 0.9881,
+      "schema_conformity": 0.5,
+      "structural_defects": {
+        "_id": [
+          "naming"
+        ],
+        "aggregation-time": [
+          "naming"
+        ],
+        "note": [
+          "sparse"
+        ],
+        "fonte_dato": [
+          "sparse"
+        ],
+        "Tipo Imposta": [
+          "naming"
+        ],
+        "SPESA TOTALE": [
+          "naming"
+        ],
+        "2cod_imposta": [
+          "naming"
+        ],
+        "cod imposta ext": [
+          "naming",
+          "redundant"
+        ],
+        "ente%code": [
+          "naming"
+        ]
+      },
+      "columns_with_structural_defects": 9,
+      "columns_badly_named": 7,
+      "columns_sparse": 2,
+      "columns_redundant": 1,
+      "columns_untyped": 0
+    },
+    "headline_after": {
+      "null_by_column": {
+        "id": 0,
+        "rata": 0,
+        "descrizione": 8,
+        "cod_tipoimposta": 0,
+        "imposta": 0,
+        "aggregation_time": 0,
+        "area_geografica": 1567,
+        "tipo_imposta": 0,
+        "spesa": 58,
+        "cod_imposta": 0,
+        "ente": 0
+      },
+      "rows": 7478,
+      "columns": 11,
+      "cells": 82258,
+      "null_cells": 1633,
+      "duplicate_rows": 0,
+      "rows_in_key_conflict": 0,
+      "checked_cells": 73155,
+      "checked_cells_by_column": {
+        "id": 7478,
+        "rata": 7478,
+        "cod_tipoimposta": 7478,
+        "imposta": 7478,
+        "aggregation_time": 7478,
+        "area_geografica": 5911,
+        "tipo_imposta": 7478,
+        "spesa": 7420,
+        "cod_imposta": 7478,
+        "ente": 7478
+      },
+      "completeness": 0.9801,
+      "uniqueness": 1.0,
+      "schema_conformity": 1.0,
+      "structural_defects": {},
+      "columns_with_structural_defects": 0,
+      "columns_badly_named": 0,
+      "columns_sparse": 0,
+      "columns_redundant": 0,
+      "columns_untyped": 0,
+      "violations_by_kind": {
+        "format": 0,
+        "completeness": 1633,
+        "schema": 0,
+        "consistency": 0,
+        "uniqueness": 0
+      },
+      "format_violations": 0,
+      "format_violations_by_column": {},
+      "inconsistent_rows": 0,
+      "inconsistent_rows_by_column": {},
+      "validity": 1.0,
+      "consistency": 1.0
+    },
+    "as_delivered": {
+      "dimensions": [
+        "completeness",
+        "uniqueness",
+        "schema_conformity"
+      ],
+      "before": {
+        "components": {
+          "completeness": 0.8752,
+          "uniqueness": 0.9881,
+          "schema_conformity": 0.5
+        },
+        "weights": {
+          "completeness": 1.0,
+          "uniqueness": 1.0,
+          "schema_conformity": 1.0
+        },
+        "score": 0.7562
+      },
+      "after": {
+        "components": {
+          "completeness": 0.9801,
+          "uniqueness": 1.0,
+          "schema_conformity": 1.0
+        },
+        "weights": {
+          "completeness": 1.0,
+          "uniqueness": 1.0,
+          "schema_conformity": 1.0
+        },
+        "score": 0.9933
+      }
+    },
+    "like_for_like": {
+      "dimensions": [
+        "completeness",
+        "validity",
+        "consistency",
+        "uniqueness",
+        "schema_conformity"
+      ],
+      "before": {
+        "components": {
+          "completeness": 0.9702,
+          "validity": 0.993,
+          "consistency": 0.9319,
+          "uniqueness": 0.9885,
+          "schema_conformity": 0.8182
+        },
+        "weights": {
+          "completeness": 1.0,
+          "validity": 1.0,
+          "consistency": 1.0,
+          "uniqueness": 1.0,
+          "schema_conformity": 1.0
+        },
+        "score": 0.938
+      },
+      "after": {
+        "components": {
+          "completeness": 0.9801,
+          "validity": 1.0,
+          "consistency": 1.0,
+          "uniqueness": 1.0,
+          "schema_conformity": 1.0
+        },
+        "weights": {
+          "completeness": 1.0,
+          "validity": 1.0,
+          "consistency": 1.0,
+          "uniqueness": 1.0,
+          "schema_conformity": 1.0
+        },
+        "score": 0.996
+      }
+    },
+    "dimensions_compared": [
+      "completeness",
+      "uniqueness",
+      "schema_conformity"
+    ],
+    "dimensions_excluded": [
+      "validity",
+      "consistency"
+    ],
+    "reliability_before": {
+      "components": {
+        "completeness": 0.8752,
+        "uniqueness": 0.9881,
+        "schema_conformity": 0.5
+      },
+      "weights": {
+        "completeness": 1.0,
+        "uniqueness": 1.0,
+        "schema_conformity": 1.0
+      },
+      "score": 0.7562
+    },
+    "reliability_after": {
+      "components": {
+        "completeness": 0.9801,
+        "uniqueness": 1.0,
+        "schema_conformity": 1.0
+      },
+      "weights": {
+        "completeness": 1.0,
+        "uniqueness": 1.0,
+        "schema_conformity": 1.0
+      },
+      "score": 0.9933
+    },
+    "hidden_defects_unmasked": {
+      "disguised_nulls_unmasked": 988,
+      "apparent_completeness": 0.8752,
+      "true_completeness": 0.868
+    }
+  },
+  "surviving_columns": [
+    "id",
+    "rata",
+    "descrizione",
+    "cod_tipoimposta",
+    "imposta",
+    "aggregation_time",
+    "area_geografica",
+    "tipo_imposta",
+    "spesa",
+    "cod_imposta",
+    "ente"
+  ],
+  "errors": [],
+  "narrative": {
+    "verdict": "This is a NoiPA payroll expenditure dataset covering tax and deduction amounts across Italian public administrations. After remediation it is in good, usable shape: structural defects are gone, consistency and uniqueness are fully resolved, and the only remaining weakness is a genuine gap in the area_geografica field. The dataset is clean enough for analysis, with the geographic coverage gap being the one issue that still needs attention at the source.",
+    "schema_comment": "The raw file carried seven badly named columns, two near-empty columns (note and fonte_dato, at roughly 98% and 99% null), and a redundant tax-code column, all of which have now been renamed, dropped, or consolidated. The duplicate-column groups were the most consequential: tipo_imposta and spesa each existed twice under different names, and the surviving versions disagreed with the dropped ones on hundreds of cells. These naming and duplication problems are worth fixing at the source so each field is exported once, under one canonical name.",
+    "completeness_comment": "The apparent completeness of the raw file was flattered by placeholder text such as n.d., TBD, and DA VERIFICARE that counted as values until unmasked; the lower figure is the accurate one, and the drop is a gain in accuracy rather than a regression. After remediation the only meaningful gap is area_geografica, which is missing for about one row in five and cannot be filled without inventing data. The descrizione and imposta gaps were closed deterministically from ente and cod_imposta lookups, leaving only a handful of unresolved entity names.",
+    "consistency_comment": "Cross-column rules were almost entirely violated by the rata field, where 510 rows had an installment period inconsistent with the aggregation timestamp; these were corrected from the dependency. Duplicate-column resolution did overwrite cells and lose values: the surviving tipo_imposta column disagreed with the dropped one on 383 cells, and the surviving spesa column overwrote 37 cells while discarding values that existed only in the dropped column, including a clearly erroneous -45000.0 and a suspicious 1234567890.0. Sixty-five exact duplicate rows were removed with no conflicting data among them.",
+    "anomaly_comment": "The spesa outliers flagged by the IQR method are mostly plausible high-value payroll transactions rather than errors, since expenditure aggregates legitimately span a wide range; however the extreme values near 43 million and the placeholder-like 1234567890.0 deserve a manual look as possible data-entry inflation. In imposta, the rare categories \"imposta x\" and \"Altro\" are free-text or placeholder entries that were correctly mapped back to their standard tax labels via the cod_imposta lookup.",
+    "remediation_comment": "The pipeline repaired installment-period formatting, rounded floating-point noise in spesa, and imputed descrizione and imposta from high-purity lookups, while leaving area_geografica and the residual spesa gaps untouched because no deterministic rule exists to fill them. No cleaning function was generated for future use, so the repairs are one-off corrections rather than reusable rules. The two near-empty columns were dropped as a schema decision, which is appropriate given they carried almost no information.",
+    "recommendations": [
+      "Populate area_geografica at the source: require the macro-area (Nord, Centro, Sud, Isole) to be derived from the entity's registered address at data-entry time, since it is currently missing for roughly one in five rows and cannot be safely imputed downstream.",
+      "Enforce a single canonical export for each field: tipo_imposta and spesa are each emitted twice under different names with conflicting values, so the source system should write one column per concept using the agreed naming convention.",
+      "Validate spesa against a plausible range at entry, rejecting negative amounts and flagging values above a domain-specific ceiling, since the data contained a -45000.0 and a 1234567890.0 placeholder.",
+      "Replace free-text tax labels in imposta with the cod_imposta-driven enum so values like 'imposta x' and 'Altro' cannot be entered, keeping the label fully determined by the code."
+    ]
+  }
+}

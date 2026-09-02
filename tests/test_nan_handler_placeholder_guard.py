@@ -1,7 +1,7 @@
 """Pins the refusal to empty a column through its placeholder list. A column matching a canonical
 definition whose enum uses a different vocabulary - the registry says COMPARTO FUNZIONI CENTRALI,
 the file says FUNZIONI CENTRALI - makes every value a spec violation, and the Semantic agent
-forwards spec violations as placeholder candidates. Runs over two synthetic datasets erased
+forwards spec violations as placeholder candidates. Runs over two datasets erased
 `comparto` entirely that way, 15,102 and 11,578 values, before the approval gate saw anything.
 Legitimate unmasking across every dataset measured peaked at 3.9% of a column, so a list matching
 far more of one is the unreliable party and is refused and reported rather than applied."""

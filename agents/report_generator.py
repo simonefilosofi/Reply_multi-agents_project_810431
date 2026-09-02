@@ -372,6 +372,15 @@ def _detected_counts(state: PipelineState) -> dict:
     return recorded if recorded else violation_counts(state.validation_reports)
 
 
+def _residual_counts(quality: dict, residual: list[ValidationReport]) -> dict:
+    """What the file still holds, counted by the same rule as the detected side. Reading the
+    residual reports directly counted uniqueness in reports where detection counted it in rows, so
+    the two columns of the coverage table were not comparable."""
+    snapshot = (quality.get("snapshots") or {}).get("final") or {}
+    recorded = snapshot.get("violations_by_kind")
+    return recorded if recorded else violation_counts(residual)
+
+
 def _violation_count(report: ValidationReport) -> int:
     counts = violation_counts([report])
     return counts["format"] + counts["completeness"] + counts["consistency"] + counts["uniqueness"]
@@ -450,7 +459,7 @@ def _build_payload(state: PipelineState, residual: list[ValidationReport], quali
         ],
         "completeness": state.completeness,
         "violations_by_kind_detected": _detected_counts(state),
-        "violations_by_kind_residual": violation_counts(residual),
+        "violations_by_kind_residual": _residual_counts(quality, residual),
         "naming_violations": [
             {"column_name": r.column_name, "suggested_name": v.value}
             for r in state.validation_reports

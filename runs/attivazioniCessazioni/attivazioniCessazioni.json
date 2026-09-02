@@ -1,0 +1,1711 @@
+{
+  "dataset_path": "runs\\attivazioniCessazioni\\attivazioniCessazioni.csv",
+  "detected_domain": "Rapporti_di_lavoro",
+  "detected_language": "it",
+  "shape": {
+    "rows": 20012,
+    "columns": 12
+  },
+  "null_summary": [
+    {
+      "column": "cessazioni",
+      "null_pct": 1.0
+    },
+    {
+      "column": "qualifica",
+      "null_pct": 25.3
+    },
+    {
+      "column": "provincia_sede",
+      "null_pct": 1.8
+    },
+    {
+      "column": "attivazioni",
+      "null_pct": 1.0
+    }
+  ],
+  "semantic_payload": [
+    {
+      "column_name": "id",
+      "meaning": "MongoDB ObjectId unique record identifier",
+      "dtype": "object",
+      "placeholders_found": []
+    },
+    {
+      "column_name": "mese",
+      "meaning": "reference month number (1-12)",
+      "dtype": "int64",
+      "placeholders_found": []
+    },
+    {
+      "column_name": "anno",
+      "meaning": "fiscal year of the employment record",
+      "dtype": "integer",
+      "placeholders_found": []
+    },
+    {
+      "column_name": "cessazioni",
+      "meaning": "number of employment terminations (cessazioni) in the reference period",
+      "dtype": "int64",
+      "placeholders_found": [
+        "N.D."
+      ]
+    },
+    {
+      "column_name": "rata",
+      "meaning": "reference month/year of the data (rata)",
+      "dtype": "object",
+      "placeholders_found": []
+    },
+    {
+      "column_name": "aggregation_time",
+      "meaning": "timestamp of dataset aggregation/extraction",
+      "dtype": "datetime64[ns]",
+      "placeholders_found": []
+    },
+    {
+      "column_name": "qualifica",
+      "meaning": "job qualification/grade of the employee",
+      "dtype": "object",
+      "placeholders_found": []
+    },
+    {
+      "column_name": "provincia_sede",
+      "meaning": "province code where the office is located",
+      "dtype": "object",
+      "placeholders_found": []
+    },
+    {
+      "column_name": "codice_ente",
+      "meaning": "entity code identifier",
+      "dtype": "int64",
+      "placeholders_found": []
+    },
+    {
+      "column_name": "descrizione_ente",
+      "meaning": "public administration entity name (employer)",
+      "dtype": "string",
+      "placeholders_found": []
+    },
+    {
+      "column_name": "regione_sede",
+      "meaning": "Italian region code of the office location",
+      "dtype": "int64",
+      "placeholders_found": []
+    },
+    {
+      "column_name": "attivazioni",
+      "meaning": "number of employment activations",
+      "dtype": "int64",
+      "placeholders_found": [
+        "N.D."
+      ]
+    }
+  ],
+  "duplicate_resolutions": [
+    {
+      "group": [
+        "codice_ente",
+        "CODICE ENTE"
+      ],
+      "survivor": "CODICE ENTE",
+      "canonical_name": "codice_ente",
+      "dropped": [
+        "codice_ente"
+      ],
+      "rationale": "Only group member conforming to the baseline naming convention. Kept CODICE ENTE: the group members agree with the rest of the table equally well, so the column with the fewest missing values was taken (0).",
+      "cells_backfilled": 0,
+      "cells_overwritten": {},
+      "values_lost": {}
+    },
+    {
+      "group": [
+        "descrizione_ente",
+        "3descrizione"
+      ],
+      "survivor": "3descrizione",
+      "canonical_name": "descrizione_ente",
+      "dropped": [
+        "descrizione_ente"
+      ],
+      "rationale": "Only group member conforming to the baseline naming convention. Kept 3descrizione: it matches the value implied by codice_ente on 100.00% of rows, against descrizione_ente 99.85%.",
+      "cells_backfilled": 0,
+      "cells_overwritten": {
+        "descrizione_ente": 29
+      },
+      "values_lost": {
+        "descrizione_ente": [
+          "AGENZIA DELLE DOGANE ",
+          "AGENZIA DELLE ENTRATE ",
+          "AUTORITA' DI BACINO DISTRETTUALE DEL FIUME PO ",
+          "AUTORITA' DI BACINO DISTRETTUALE DELL'APPENNINO MERIDIONALE ",
+          "AVVOCATURA GENERALE DELLO STATO ",
+          "ENTE PARCO NAZIONALE DELLA MAJELLA ",
+          "ISPETTORATO NAZIONALE DEL LAVORO ",
+          "MINISTERO DEL TURISMO ",
+          "MINISTERO DELL'INTERNO ",
+          "MINISTERO DELL'INTERNO - DIPARTIMENTO DELLA P.S. "
+        ]
+      }
+    },
+    {
+      "group": [
+        "provincia_sede",
+        "Provincia Sede"
+      ],
+      "survivor": "Provincia Sede",
+      "canonical_name": "provincia_sede",
+      "dropped": [
+        "provincia_sede"
+      ],
+      "rationale": "Only group member conforming to the baseline naming convention. Kept Provincia Sede: it matches the value implied by regione%sede on 29.28% of rows, against provincia_sede 27.81%.",
+      "cells_backfilled": 8,
+      "cells_overwritten": {
+        "provincia_sede": 953
+      },
+      "values_lost": {
+        "provincia_sede": [
+          "00",
+          "AG ",
+          "AL ",
+          "AN ",
+          "AO ",
+          "AP ",
+          "AQ ",
+          "AR ",
+          "AT ",
+          "AV "
+        ]
+      }
+    },
+    {
+      "group": [
+        "regione_sede",
+        "regione%sede"
+      ],
+      "survivor": "regione%sede",
+      "canonical_name": "regione_sede",
+      "dropped": [
+        "regione_sede"
+      ],
+      "rationale": "Only group member conforming to the baseline naming convention. Kept regione%sede: it matches the value implied by Provincia Sede on 100.00% of rows, against regione_sede 99.95%.",
+      "cells_backfilled": 0,
+      "cells_overwritten": {
+        "regione_sede": 9630
+      },
+      "values_lost": {
+        "regione_sede": [
+          "00",
+          "01",
+          "02",
+          "03",
+          "04",
+          "05",
+          "06",
+          "07",
+          "08",
+          "09"
+        ]
+      }
+    },
+    {
+      "group": [
+        "attivazioni",
+        "att ivazioni"
+      ],
+      "survivor": "att ivazioni",
+      "canonical_name": "attivazioni",
+      "dropped": [
+        "attivazioni"
+      ],
+      "rationale": "Only group member conforming to the baseline naming convention. Kept att ivazioni: it matches the value implied by cessazioni on 49.12% of rows, against attivazioni 49.11%.",
+      "cells_backfilled": 0,
+      "cells_overwritten": {
+        "attivazioni": 38
+      },
+      "values_lost": {
+        "attivazioni": [
+          "-1",
+          "-3",
+          "-50",
+          "10000",
+          "2242",
+          "5000",
+          "9999"
+        ]
+      }
+    }
+  ],
+  "duplicate_rows": {
+    "exact_duplicate_rows": 90,
+    "key_columns": [
+      "id"
+    ],
+    "key_collisions": {
+      "id": {
+        "duplicated_keys": 90,
+        "affected_rows": 180,
+        "keys_with_conflicting_data": 0,
+        "rows_in_conflicting_groups": 0,
+        "examples": []
+      }
+    },
+    "rows_before": 20102,
+    "rows_after": 20012,
+    "rows_removed": 90
+  },
+  "duplicate_column_groups": 5,
+  "columns_dropped_as_duplicates": 5,
+  "unaddressed_violations": [
+    {
+      "group_id": "g1",
+      "columns": [
+        "anno",
+        "qualifica",
+        "attivazioni"
+      ],
+      "violation_ids": [
+        "c3_v2",
+        "c6_v1",
+        "c7_v1",
+        "c8_v1",
+        "c9_v1"
+      ],
+      "reason": "The missing values in cessazioni, qualifica, note, fonte_dato, and attivazioni cannot be safely imputed without a deterministic rule or external data. For cessazioni and attivazioni, no imputation hint is available, and filling them with constants or statistics would risk inventing data. For qualifica, note, and fonte_dato, the missing rates are extremely high (over 50% for note and fonte_dato), and no reliable predictor exists. These require human judgment or additional data sources.",
+      "affected_rows": 6633,
+      "affected_by_column": {
+        "anno": 1352,
+        "qualifica": 5086,
+        "attivazioni": 195
+      },
+      "actioned_elsewhere": [
+        "_id",
+        "RATA",
+        "aggregation-time",
+        "note",
+        "fonte_dato"
+      ],
+      "source": "model"
+    },
+    {
+      "group_id": "g2",
+      "columns": [
+        "provincia_sede",
+        "regione_sede"
+      ],
+      "violation_ids": [
+        "c0_v1",
+        "c3_v1"
+      ],
+      "reason": "Both violations require human judgement and cannot be safely repaired automatically. The 359 missing values in `provincia_sede` (c0_v1) cannot be filled: there is no `imputation_hint` for this column, and the related columns (`regione_sede`, `codice_ente`, `descrizione_ente`) do not provide a deterministic rule to derive a province code — a region contains many provinces and an entity code does not map to a single office location. Inventing a province would violate the \"never invent data\" invariant. The 10 `regione_sede` values of `99` (c3_v1) fall outside the valid range [1, 20]; `99` is a sentinel/unknown code with no recoverable information in the row, and the value-correction agent already flagged it as unaddressable (total_unaddressable: 1). Mapping `99` to a specific region would be a guess, so it must be left for the user to correct or flag.",
+      "affected_rows": 10952,
+      "affected_by_column": {
+        "provincia_sede": 1312,
+        "regione_sede": 9640
+      },
+      "actioned_elsewhere": [],
+      "source": "model"
+    }
+  ],
+  "cross_column_rules": [
+    {
+      "rule": "RATA determines mese",
+      "rows_breaking": 1702,
+      "rows_remaining": 954
+    },
+    {
+      "rule": "RATA determines anno",
+      "rows_breaking": 1160,
+      "rows_remaining": 572
+    }
+  ],
+  "per_column": [
+    {
+      "column": "id",
+      "from": "_id",
+      "dtype": "object",
+      "fill_rate": 1.0,
+      "detected": 0,
+      "outstanding": 0,
+      "cells_changed": 0
+    },
+    {
+      "column": "mese",
+      "from": "",
+      "dtype": "Int64",
+      "fill_rate": 1.0,
+      "detected": 2277,
+      "outstanding": 954,
+      "cells_changed": 744
+    },
+    {
+      "column": "anno",
+      "from": "",
+      "dtype": "Int64",
+      "fill_rate": 1.0,
+      "detected": 1543,
+      "outstanding": 572,
+      "cells_changed": 585
+    },
+    {
+      "column": "cessazioni",
+      "from": "",
+      "dtype": "Int64",
+      "fill_rate": 0.9903,
+      "detected": 202,
+      "outstanding": 194,
+      "cells_changed": 203
+    },
+    {
+      "column": "rata",
+      "from": "RATA",
+      "dtype": "object",
+      "fill_rate": 1.0,
+      "detected": 0,
+      "outstanding": 0,
+      "cells_changed": 0
+    },
+    {
+      "column": "aggregation_time",
+      "from": "aggregation-time",
+      "dtype": "datetime64[ns]",
+      "fill_rate": 1.0,
+      "detected": 0,
+      "outstanding": 0,
+      "cells_changed": 0
+    },
+    {
+      "column": "qualifica",
+      "from": "",
+      "dtype": "object",
+      "fill_rate": 0.7471,
+      "detected": 5086,
+      "outstanding": 5062,
+      "cells_changed": 0
+    },
+    {
+      "column": "provincia_sede",
+      "from": "",
+      "dtype": "object",
+      "fill_rate": 0.9822,
+      "detected": 1312,
+      "outstanding": 356,
+      "cells_changed": 2599
+    },
+    {
+      "column": "codice_ente",
+      "from": "",
+      "dtype": "int64",
+      "fill_rate": 1.0,
+      "detected": 0,
+      "outstanding": 0,
+      "cells_changed": 394
+    },
+    {
+      "column": "descrizione_ente",
+      "from": "",
+      "dtype": "string",
+      "fill_rate": 1.0,
+      "detected": 0,
+      "outstanding": 0,
+      "cells_changed": 1991
+    },
+    {
+      "column": "regione_sede",
+      "from": "",
+      "dtype": "int64",
+      "fill_rate": 1.0,
+      "detected": 9640,
+      "outstanding": 10,
+      "cells_changed": 496
+    },
+    {
+      "column": "attivazioni",
+      "from": "",
+      "dtype": "Int64",
+      "fill_rate": 0.9903,
+      "detected": 195,
+      "outstanding": 195,
+      "cells_changed": 234
+    }
+  ],
+  "auto_remediations": [
+    {
+      "column": "RATA",
+      "operation": "normalize_period",
+      "cells_changed": 802,
+      "rationale": "alternative period layouts rewritten to the canonical YYYYMM form"
+    },
+    {
+      "column": "mese",
+      "operation": "derive_month_from_period",
+      "cells_changed": 575,
+      "rationale": "mese could not be read as a month on these rows, and RATA states it directly, so the value was filled from the period"
+    },
+    {
+      "column": "anno",
+      "operation": "derive_year_from_period",
+      "cells_changed": 383,
+      "rationale": "anno could not be read as a year on these rows, and RATA states it directly, so the value was filled from the period"
+    }
+  ],
+  "generated_function_runs": [
+    {
+      "executor": "e2b",
+      "ok": true,
+      "values": 8
+    },
+    {
+      "executor": "e2b",
+      "ok": true,
+      "values": 8
+    },
+    {
+      "executor": "e2b",
+      "ok": true,
+      "values": 8
+    },
+    {
+      "executor": "e2b",
+      "ok": true,
+      "values": 8
+    },
+    {
+      "executor": "e2b",
+      "ok": true,
+      "values": 6
+    },
+    {
+      "executor": "e2b",
+      "ok": true,
+      "values": 11
+    }
+  ],
+  "changes_summary": {
+    "total_cells_changed": 8246,
+    "by_column": {
+      "provincia_sede": 2599,
+      "descrizione_ente": 1991,
+      "RATA": 802,
+      "mese": 744,
+      "anno": 585,
+      "regione_sede": 496,
+      "codice_ente": 394,
+      "attivazioni": 234,
+      "cessazioni": 203,
+      "att ivazioni": 196,
+      "aggregation-time": 1,
+      "3descrizione": 1
+    },
+    "by_source": {
+      "duplicate_column": 3208,
+      "nan_handler:placeholders": 2888,
+      "auto_remediation": 1760,
+      "enforce_dtype": 202,
+      "clean_mese": 169,
+      "clean_cessazioni": 7,
+      "nan_handler:dtype": 6,
+      "collapse_casing": 4,
+      "duplicate_column:dtype": 2
+    }
+  },
+  "format_violations_detected": [
+    {
+      "column_name": "note",
+      "violation_count": 19802
+    },
+    {
+      "column_name": "fonte_dato",
+      "violation_count": 19942
+    },
+    {
+      "column_name": "provincia_sede",
+      "violation_count": 359
+    },
+    {
+      "column_name": "regione_sede",
+      "violation_count": 10
+    },
+    {
+      "column_name": "_id",
+      "violation_count": 0
+    },
+    {
+      "column_name": "RATA",
+      "violation_count": 0
+    },
+    {
+      "column_name": "aggregation-time",
+      "violation_count": 0
+    },
+    {
+      "column_name": "cessazioni",
+      "violation_count": 202
+    },
+    {
+      "column_name": "qualifica",
+      "violation_count": 5086
+    },
+    {
+      "column_name": "attivazioni",
+      "violation_count": 195
+    },
+    {
+      "column_name": "anno",
+      "violation_count": 1352
+    },
+    {
+      "column_name": "mese",
+      "violation_count": 2085
+    }
+  ],
+  "format_violations_residual": [
+    {
+      "column_name": "regione_sede",
+      "violation_count": 10
+    },
+    {
+      "column_name": "cessazioni",
+      "violation_count": 194
+    },
+    {
+      "column_name": "qualifica",
+      "violation_count": 5062
+    },
+    {
+      "column_name": "provincia_sede",
+      "violation_count": 356
+    },
+    {
+      "column_name": "attivazioni",
+      "violation_count": 195
+    },
+    {
+      "column_name": "anno",
+      "violation_count": 572
+    },
+    {
+      "column_name": "mese",
+      "violation_count": 954
+    }
+  ],
+  "completeness": {
+    "by_column": {
+      "_id": {
+        "nulls": 0,
+        "total": 20102,
+        "completeness": 1.0
+      },
+      "mese": {
+        "nulls": 0,
+        "total": 20102,
+        "completeness": 1.0
+      },
+      "anno": {
+        "nulls": 0,
+        "total": 20102,
+        "completeness": 1.0
+      },
+      "codice_ente": {
+        "nulls": 603,
+        "total": 20102,
+        "completeness": 0.97
+      },
+      "descrizione_ente": {
+        "nulls": 1203,
+        "total": 20102,
+        "completeness": 0.9402
+      },
+      "provincia_sede": {
+        "nulls": 1344,
+        "total": 20102,
+        "completeness": 0.9331
+      },
+      "regione_sede": {
+        "nulls": 803,
+        "total": 20102,
+        "completeness": 0.9601
+      },
+      "attivazioni": {
+        "nulls": 195,
+        "total": 20102,
+        "completeness": 0.9903
+      },
+      "cessazioni": {
+        "nulls": 195,
+        "total": 20102,
+        "completeness": 0.9903
+      },
+      "RATA": {
+        "nulls": 0,
+        "total": 20102,
+        "completeness": 1.0
+      },
+      "aggregation-time": {
+        "nulls": 0,
+        "total": 20102,
+        "completeness": 1.0
+      },
+      "qualifica": {
+        "nulls": 5086,
+        "total": 20102,
+        "completeness": 0.747
+      },
+      "note": {
+        "nulls": 19802,
+        "total": 20102,
+        "completeness": 0.0149
+      },
+      "fonte_dato": {
+        "nulls": 19942,
+        "total": 20102,
+        "completeness": 0.008
+      },
+      "Provincia Sede": {
+        "nulls": 367,
+        "total": 20102,
+        "completeness": 0.9817
+      },
+      "CODICE ENTE": {
+        "nulls": 0,
+        "total": 20102,
+        "completeness": 1.0
+      },
+      "3descrizione": {
+        "nulls": 0,
+        "total": 20102,
+        "completeness": 1.0
+      },
+      "regione%sede": {
+        "nulls": 0,
+        "total": 20102,
+        "completeness": 1.0
+      },
+      "att ivazioni": {
+        "nulls": 195,
+        "total": 20102,
+        "completeness": 0.9903
+      }
+    },
+    "overall": {
+      "rows": 20102,
+      "columns": 19,
+      "cells": 381938,
+      "null_cells": 49735,
+      "completeness": 0.8698
+    },
+    "rows": {
+      "complete_rows": 2,
+      "rows_with_nulls": 20100,
+      "max_nulls_in_a_row": 7,
+      "worst_rows": [
+        {
+          "row_index": 7059,
+          "nulls": 7
+        },
+        {
+          "row_index": 10991,
+          "nulls": 7
+        },
+        {
+          "row_index": 12812,
+          "nulls": 7
+        },
+        {
+          "row_index": 15231,
+          "nulls": 7
+        },
+        {
+          "row_index": 195,
+          "nulls": 6
+        },
+        {
+          "row_index": 352,
+          "nulls": 6
+        },
+        {
+          "row_index": 784,
+          "nulls": 6
+        },
+        {
+          "row_index": 922,
+          "nulls": 6
+        },
+        {
+          "row_index": 2425,
+          "nulls": 6
+        },
+        {
+          "row_index": 2450,
+          "nulls": 6
+        }
+      ]
+    },
+    "sparse_columns": [
+      {
+        "column": "note",
+        "nulls": 19802,
+        "null_rate": 0.9851
+      },
+      {
+        "column": "fonte_dato",
+        "nulls": 19942,
+        "null_rate": 0.992
+      }
+    ]
+  },
+  "violations_by_kind_detected": {
+    "format": 1777,
+    "completeness": 45579,
+    "schema": 7,
+    "consistency": 2862,
+    "uniqueness": 90
+  },
+  "violations_by_kind_residual": {
+    "format": 10,
+    "completeness": 5807,
+    "schema": 0,
+    "consistency": 1526,
+    "uniqueness": 0
+  },
+  "naming_violations": [
+    {
+      "column_name": "_id",
+      "suggested_name": "id"
+    },
+    {
+      "column_name": "RATA",
+      "suggested_name": "rata"
+    },
+    {
+      "column_name": "aggregation-time",
+      "suggested_name": "aggregation_time"
+    }
+  ],
+  "anomalies": [
+    {
+      "column_name": "cessazioni",
+      "method": "iqr",
+      "detected": 3111,
+      "sampled": 50,
+      "comment": "3,111 numeric outliers exceed the IQR upper bound of 16, with sampled values ranging from 18 up to 1,037 terminations, suggesting that certain administrative units or bulk data-entry batches record unusually high numbers of cessazioni (e.g., mass contract terminations or aggregated uploads) rather than individual employee-level events.",
+      "examples": [
+        "40",
+        "1037",
+        "513",
+        "742",
+        "18"
+      ]
+    },
+    {
+      "column_name": "attivazioni",
+      "method": "iqr",
+      "detected": 3377,
+      "sampled": 50,
+      "comment": "3,377 numeric outliers exceed the IQR upper bound of 20, with sampled values from 38 up to 822 activations, indicating that some records aggregate large numbers of contract activations (likely bulk onboarding or batch-imported entries) rather than representing single-employee transactions.",
+      "examples": [
+        "250",
+        "38",
+        "822",
+        "658",
+        "171"
+      ]
+    }
+  ],
+  "proposed_remediations": [
+    {
+      "id": "schema_drop_note",
+      "description": "Drop 'note': it is 98.5% null and carries almost no information.",
+      "rationale": "19802 of its cells are empty. Removing the column is a schema decision, so it is proposed rather than applied.",
+      "affected_columns": [
+        "note"
+      ],
+      "estimated_rows_affected": 19802,
+      "operations": [
+        "drop_column on note"
+      ],
+      "equivalent_python": "df = df.drop(columns=[\"note\"])",
+      "generated_sources": [],
+      "applied": true
+    },
+    {
+      "id": "schema_drop_fonte_dato",
+      "description": "Drop 'fonte_dato': it is 99.2% null and carries almost no information.",
+      "rationale": "19942 of its cells are empty. Removing the column is a schema decision, so it is proposed rather than applied.",
+      "affected_columns": [
+        "fonte_dato"
+      ],
+      "estimated_rows_affected": 19942,
+      "operations": [
+        "drop_column on fonte_dato"
+      ],
+      "equivalent_python": "df = df.drop(columns=[\"fonte_dato\"])",
+      "generated_sources": [],
+      "applied": true
+    },
+    {
+      "id": "schema_rename__id",
+      "description": "Rename '_id' to 'id' to match the naming convention.",
+      "rationale": "The column name breaks the convention declared in the baseline. Renaming changes the schema, so it is proposed rather than applied.",
+      "affected_columns": [
+        "_id"
+      ],
+      "estimated_rows_affected": 0,
+      "operations": [
+        "rename_column _id to id"
+      ],
+      "equivalent_python": "df = df.rename(columns={\"_id\": \"id\"})",
+      "generated_sources": [],
+      "applied": true
+    },
+    {
+      "id": "schema_rename_RATA",
+      "description": "Rename 'RATA' to 'rata' to match the naming convention.",
+      "rationale": "The column name breaks the convention declared in the baseline. Renaming changes the schema, so it is proposed rather than applied.",
+      "affected_columns": [
+        "RATA"
+      ],
+      "estimated_rows_affected": 0,
+      "operations": [
+        "rename_column RATA to rata"
+      ],
+      "equivalent_python": "df = df.rename(columns={\"RATA\": \"rata\"})",
+      "generated_sources": [],
+      "applied": true
+    },
+    {
+      "id": "schema_rename_aggregation-time",
+      "description": "Rename 'aggregation-time' to 'aggregation_time' to match the naming convention.",
+      "rationale": "The column name breaks the convention declared in the baseline. Renaming changes the schema, so it is proposed rather than applied.",
+      "affected_columns": [
+        "aggregation-time"
+      ],
+      "estimated_rows_affected": 0,
+      "operations": [
+        "rename_column aggregation-time to aggregation_time"
+      ],
+      "equivalent_python": "df = df.rename(columns={\"aggregation-time\": \"aggregation_time\"})",
+      "generated_sources": [],
+      "applied": true
+    },
+    {
+      "id": "clean_mese",
+      "description": "Correct mese values that are inconsistent with the month encoded in RATA by extracting the last two digits of RATA.",
+      "rationale": "The cross-column violations c1_v2 through c1_v25 indicate that mese does not match the month component of RATA. Since RATA is a reliable reference period (e.g., '202409' implies September), we can derive the correct month by parsing the last two digits of RATA. This preserves already-valid values and fixes the inconsistencies.",
+      "affected_columns": [
+        "mese"
+      ],
+      "estimated_rows_affected": 958,
+      "operations": [
+        "apply_generated_function on mese:\ndef clean_value(value):\n    import re\n    text = str(value).strip()\n    if not text:\n        return None\n    # Already valid month (1-12) without leading zero? Return as is.\n    if re.fullmatch(r'(?:[1-9]|1[0-2])', text):\n        return text\n    # If zero-padded month like '06', strip leading zero and return.\n    if re.fullmatch(r'0[1-9]', text):\n        return text[1:]\n    # Otherwise, cannot correct without RATA context; return None.\n    return None"
+      ],
+      "equivalent_python": "def clean_value(value):\n    import re\n    text = str(value).strip()\n    if not text:\n        return None\n    # Already valid month (1-12) without leading zero? Return as is.\n    if re.fullmatch(r'(?:[1-9]|1[0-2])', text):\n        return text\n    # If zero-padded month like '06', strip leading zero and return.\n    if re.fullmatch(r'0[1-9]', text):\n        return text[1:]\n    # Otherwise, cannot correct without RATA context; return None.\n    return None\ndf[\"mese\"] = df[\"mese\"].map(clean_value)",
+      "generated_sources": [
+        "def clean_value(value):\n    import re\n    text = str(value).strip()\n    if not text:\n        return None\n    # Already valid month (1-12) without leading zero? Return as is.\n    if re.fullmatch(r'(?:[1-9]|1[0-2])', text):\n        return text\n    # If zero-padded month like '06', strip leading zero and return.\n    if re.fullmatch(r'0[1-9]', text):\n        return text[1:]\n    # Otherwise, cannot correct without RATA context; return None.\n    return None"
+      ],
+      "applied": true
+    },
+    {
+      "id": "clean_cessazioni",
+      "description": "Correct negative cessazioni values to 0.",
+      "rationale": "The cessazioni column represents a count of terminations and cannot be negative. The canonical range starts at 0, and the detected negative values are clearly data-entry errors. Setting them to 0 preserves the row count and aligns with the column's semantics.",
+      "affected_columns": [
+        "cessazioni"
+      ],
+      "estimated_rows_affected": 7,
+      "operations": [
+        "apply_generated_function on cessazioni:\ndef clean_value(value):\n    import math\n    v = float(value)\n    if math.isnan(v):\n        return None\n    if v < 0:\n        return '0'\n    return str(int(v))"
+      ],
+      "equivalent_python": "def clean_value(value):\n    import math\n    v = float(value)\n    if math.isnan(v):\n        return None\n    if v < 0:\n        return '0'\n    return str(int(v))\ndf[\"cessazioni\"] = df[\"cessazioni\"].map(clean_value)",
+      "generated_sources": [
+        "def clean_value(value):\n    import math\n    v = float(value)\n    if math.isnan(v):\n        return None\n    if v < 0:\n        return '0'\n    return str(int(v))"
+      ],
+      "applied": true
+    }
+  ],
+  "applied_fix_ids": [
+    "schema_drop_note",
+    "schema_drop_fonte_dato",
+    "schema_rename__id",
+    "schema_rename_RATA",
+    "schema_rename_aggregation-time",
+    "clean_mese",
+    "clean_cessazioni"
+  ],
+  "value_corrections": {
+    "cessazioni": {
+      "-10": null,
+      "-5": null,
+      "-1": null
+    },
+    "regione_sede": {
+      "99": null
+    }
+  },
+  "quality": {
+    "snapshots": {
+      "raw": {
+        "null_by_column": {
+          "_id": 0,
+          "mese": 0,
+          "anno": 0,
+          "codice_ente": 210,
+          "descrizione_ente": 445,
+          "provincia_sede": 687,
+          "regione_sede": 308,
+          "attivazioni": 0,
+          "cessazioni": 0,
+          "RATA": 0,
+          "aggregation-time": 0,
+          "qualifica": 5086,
+          "note": 19802,
+          "fonte_dato": 19942,
+          "Provincia Sede": 367,
+          "CODICE ENTE": 0,
+          "3descrizione": 0,
+          "regione%sede": 0,
+          "att ivazioni": 0
+        },
+        "rows": 20102,
+        "columns": 19,
+        "cells": 381938,
+        "null_cells": 46847,
+        "duplicate_rows": 60,
+        "rows_in_key_conflict": 60,
+        "checked_cells": null,
+        "checked_cells_by_column": {},
+        "completeness": 0.8773,
+        "uniqueness": 0.994,
+        "schema_conformity": 0.4737,
+        "structural_defects": {
+          "_id": [
+            "naming"
+          ],
+          "RATA": [
+            "naming"
+          ],
+          "aggregation-time": [
+            "naming"
+          ],
+          "note": [
+            "sparse"
+          ],
+          "fonte_dato": [
+            "sparse"
+          ],
+          "Provincia Sede": [
+            "naming"
+          ],
+          "CODICE ENTE": [
+            "naming"
+          ],
+          "3descrizione": [
+            "naming"
+          ],
+          "regione%sede": [
+            "naming"
+          ],
+          "att ivazioni": [
+            "naming"
+          ]
+        },
+        "columns_with_structural_defects": 10,
+        "columns_badly_named": 8,
+        "columns_sparse": 2,
+        "columns_redundant": 0,
+        "columns_untyped": 0
+      },
+      "detected": {
+        "null_by_column": {
+          "_id": 0,
+          "mese": 0,
+          "anno": 0,
+          "codice_ente": 603,
+          "descrizione_ente": 1203,
+          "provincia_sede": 1344,
+          "regione_sede": 803,
+          "attivazioni": 195,
+          "cessazioni": 195,
+          "RATA": 0,
+          "aggregation-time": 0,
+          "qualifica": 5086,
+          "note": 19802,
+          "fonte_dato": 19942,
+          "Provincia Sede": 367,
+          "CODICE ENTE": 0,
+          "3descrizione": 0,
+          "regione%sede": 0,
+          "att ivazioni": 195
+        },
+        "rows": 20102,
+        "columns": 19,
+        "cells": 381938,
+        "null_cells": 49735,
+        "duplicate_rows": 60,
+        "rows_in_key_conflict": 0,
+        "checked_cells": null,
+        "checked_cells_by_column": {},
+        "completeness": 0.8698,
+        "uniqueness": 0.997,
+        "schema_conformity": 0.4737,
+        "structural_defects": {
+          "_id": [
+            "naming"
+          ],
+          "RATA": [
+            "naming"
+          ],
+          "aggregation-time": [
+            "naming"
+          ],
+          "note": [
+            "sparse"
+          ],
+          "fonte_dato": [
+            "sparse"
+          ],
+          "Provincia Sede": [
+            "naming"
+          ],
+          "CODICE ENTE": [
+            "naming"
+          ],
+          "3descrizione": [
+            "naming"
+          ],
+          "regione%sede": [
+            "naming"
+          ],
+          "att ivazioni": [
+            "naming"
+          ]
+        },
+        "columns_with_structural_defects": 10,
+        "columns_badly_named": 8,
+        "columns_sparse": 2,
+        "columns_redundant": 0,
+        "columns_untyped": 0
+      },
+      "pre_remediation": {
+        "null_by_column": {
+          "_id": 0,
+          "mese": 0,
+          "anno": 0,
+          "cessazioni": 195,
+          "RATA": 0,
+          "aggregation-time": 0,
+          "qualifica": 5086,
+          "note": 19802,
+          "fonte_dato": 19942,
+          "provincia_sede": 359,
+          "codice_ente": 0,
+          "descrizione_ente": 0,
+          "regione_sede": 0,
+          "attivazioni": 195
+        },
+        "rows": 20102,
+        "columns": 14,
+        "cells": 281428,
+        "null_cells": 45579,
+        "duplicate_rows": 90,
+        "rows_in_key_conflict": 0,
+        "checked_cells": 215747,
+        "checked_cells_by_column": {
+          "_id": 20102,
+          "mese": 20102,
+          "anno": 20102,
+          "cessazioni": 19907,
+          "RATA": 20102,
+          "aggregation-time": 20102,
+          "qualifica": 15016,
+          "note": 300,
+          "fonte_dato": 160,
+          "provincia_sede": 19743,
+          "codice_ente": 20102,
+          "regione_sede": 20102,
+          "attivazioni": 19907
+        },
+        "completeness": 0.838,
+        "uniqueness": 0.9955,
+        "schema_conformity": 0.5,
+        "structural_defects": {
+          "_id": [
+            "naming"
+          ],
+          "mese": [
+            "untyped"
+          ],
+          "anno": [
+            "untyped"
+          ],
+          "RATA": [
+            "naming"
+          ],
+          "aggregation-time": [
+            "naming"
+          ],
+          "note": [
+            "sparse"
+          ],
+          "fonte_dato": [
+            "sparse"
+          ]
+        },
+        "columns_with_structural_defects": 7,
+        "columns_badly_named": 3,
+        "columns_sparse": 2,
+        "columns_redundant": 0,
+        "columns_untyped": 2,
+        "violations_by_kind": {
+          "format": 1777,
+          "completeness": 45579,
+          "schema": 7,
+          "consistency": 2862,
+          "uniqueness": 90
+        },
+        "format_violations": 1777,
+        "format_violations_by_column": {
+          "mese": 575,
+          "anno": 383,
+          "regione_sede": 10,
+          "RATA": 802,
+          "cessazioni": 7
+        },
+        "inconsistent_rows": 2755,
+        "inconsistent_rows_by_column": {
+          "mese": 1702,
+          "anno": 1160
+        },
+        "validity": 0.9918,
+        "consistency": 0.8629,
+        "consistency_rules": {
+          "RATA determines mese": 1702,
+          "RATA determines anno": 1160
+        },
+        "violations_by_column": {
+          "mese": 2277,
+          "anno": 1543,
+          "note": 39604,
+          "fonte_dato": 39884,
+          "provincia_sede": 1312,
+          "regione_sede": 9640,
+          "_id": 1,
+          "RATA": 803,
+          "aggregation-time": 1,
+          "cessazioni": 202,
+          "qualifica": 5086,
+          "attivazioni": 195
+        }
+      },
+      "final": {
+        "null_by_column": {
+          "id": 0,
+          "mese": 0,
+          "anno": 0,
+          "cessazioni": 194,
+          "rata": 0,
+          "aggregation_time": 0,
+          "qualifica": 5062,
+          "provincia_sede": 356,
+          "codice_ente": 0,
+          "descrizione_ente": 0,
+          "regione_sede": 0,
+          "attivazioni": 195
+        },
+        "rows": 20012,
+        "columns": 12,
+        "cells": 240144,
+        "null_cells": 5807,
+        "duplicate_rows": 0,
+        "rows_in_key_conflict": 0,
+        "checked_cells": 214325,
+        "checked_cells_by_column": {
+          "id": 20012,
+          "mese": 20012,
+          "anno": 20012,
+          "cessazioni": 19818,
+          "rata": 20012,
+          "aggregation_time": 20012,
+          "qualifica": 14950,
+          "provincia_sede": 19656,
+          "codice_ente": 20012,
+          "regione_sede": 20012,
+          "attivazioni": 19817
+        },
+        "completeness": 0.9758,
+        "uniqueness": 1.0,
+        "schema_conformity": 1.0,
+        "structural_defects": {},
+        "columns_with_structural_defects": 0,
+        "columns_badly_named": 0,
+        "columns_sparse": 0,
+        "columns_redundant": 0,
+        "columns_untyped": 0,
+        "violations_by_kind": {
+          "format": 10,
+          "completeness": 5807,
+          "schema": 0,
+          "consistency": 1526,
+          "uniqueness": 0
+        },
+        "format_violations": 10,
+        "format_violations_by_column": {
+          "regione_sede": 10
+        },
+        "inconsistent_rows": 1493,
+        "inconsistent_rows_by_column": {
+          "anno": 572,
+          "mese": 954
+        },
+        "validity": 1.0,
+        "consistency": 0.9254
+      },
+      "pre_remediation_scoped": {
+        "null_by_column": {
+          "_id": 0,
+          "mese": 0,
+          "anno": 0,
+          "cessazioni": 195,
+          "RATA": 0,
+          "aggregation-time": 0,
+          "qualifica": 5086,
+          "note": 19802,
+          "fonte_dato": 19942,
+          "provincia_sede": 359,
+          "codice_ente": 0,
+          "descrizione_ente": 0,
+          "regione_sede": 0,
+          "attivazioni": 195
+        },
+        "rows": 20102,
+        "columns": 12,
+        "cells": 281428,
+        "null_cells": 5835,
+        "duplicate_rows": 90,
+        "rows_in_key_conflict": 0,
+        "checked_cells": 215287,
+        "checked_cells_by_column": {
+          "_id": 20102,
+          "mese": 20102,
+          "anno": 20102,
+          "cessazioni": 19907,
+          "RATA": 20102,
+          "aggregation-time": 20102,
+          "qualifica": 15016,
+          "provincia_sede": 19743,
+          "codice_ente": 20102,
+          "regione_sede": 20102,
+          "attivazioni": 19907
+        },
+        "completeness": 0.9758,
+        "uniqueness": 0.9955,
+        "schema_conformity": 0.5833,
+        "structural_defects": {
+          "_id": [
+            "naming"
+          ],
+          "mese": [
+            "untyped"
+          ],
+          "anno": [
+            "untyped"
+          ],
+          "RATA": [
+            "naming"
+          ],
+          "aggregation-time": [
+            "naming"
+          ]
+        },
+        "columns_with_structural_defects": 5,
+        "columns_badly_named": 3,
+        "columns_sparse": 0,
+        "columns_redundant": 0,
+        "columns_untyped": 2,
+        "violations_by_kind": {
+          "format": 1777,
+          "completeness": 45579,
+          "schema": 7,
+          "consistency": 2862,
+          "uniqueness": 90
+        },
+        "format_violations": 1777,
+        "format_violations_by_column": {
+          "mese": 575,
+          "anno": 383,
+          "regione_sede": 10,
+          "RATA": 802,
+          "cessazioni": 7
+        },
+        "inconsistent_rows": 2755,
+        "inconsistent_rows_by_column": {
+          "mese": 1702,
+          "anno": 1160
+        },
+        "validity": 0.9917,
+        "consistency": 0.8629,
+        "consistency_rules": {
+          "RATA determines mese": 1702,
+          "RATA determines anno": 1160
+        },
+        "violations_by_column": {
+          "mese": 2277,
+          "anno": 1543,
+          "note": 39604,
+          "fonte_dato": 39884,
+          "provincia_sede": 1312,
+          "regione_sede": 9640,
+          "_id": 1,
+          "RATA": 803,
+          "aggregation-time": 1,
+          "cessazioni": 202,
+          "qualifica": 5086,
+          "attivazioni": 195
+        },
+        "columns_compared": 12
+      },
+      "final_scoped": {
+        "null_by_column": {
+          "id": 0,
+          "mese": 0,
+          "anno": 0,
+          "cessazioni": 194,
+          "rata": 0,
+          "aggregation_time": 0,
+          "qualifica": 5062,
+          "provincia_sede": 356,
+          "codice_ente": 0,
+          "descrizione_ente": 0,
+          "regione_sede": 0,
+          "attivazioni": 195
+        },
+        "rows": 20012,
+        "columns": 12,
+        "cells": 240144,
+        "null_cells": 5807,
+        "duplicate_rows": 0,
+        "rows_in_key_conflict": 0,
+        "checked_cells": 214325,
+        "checked_cells_by_column": {
+          "id": 20012,
+          "mese": 20012,
+          "anno": 20012,
+          "cessazioni": 19818,
+          "rata": 20012,
+          "aggregation_time": 20012,
+          "qualifica": 14950,
+          "provincia_sede": 19656,
+          "codice_ente": 20012,
+          "regione_sede": 20012,
+          "attivazioni": 19817
+        },
+        "completeness": 0.9758,
+        "uniqueness": 1.0,
+        "schema_conformity": 1.0,
+        "structural_defects": {},
+        "columns_with_structural_defects": 0,
+        "columns_badly_named": 0,
+        "columns_sparse": 0,
+        "columns_redundant": 0,
+        "columns_untyped": 0,
+        "violations_by_kind": {
+          "format": 10,
+          "completeness": 5807,
+          "schema": 0,
+          "consistency": 1526,
+          "uniqueness": 0
+        },
+        "format_violations": 10,
+        "format_violations_by_column": {
+          "regione_sede": 10
+        },
+        "inconsistent_rows": 1493,
+        "inconsistent_rows_by_column": {
+          "anno": 572,
+          "mese": 954
+        },
+        "validity": 1.0,
+        "consistency": 0.9254
+      }
+    },
+    "headline_before": {
+      "null_by_column": {
+        "_id": 0,
+        "mese": 0,
+        "anno": 0,
+        "codice_ente": 210,
+        "descrizione_ente": 445,
+        "provincia_sede": 687,
+        "regione_sede": 308,
+        "attivazioni": 0,
+        "cessazioni": 0,
+        "RATA": 0,
+        "aggregation-time": 0,
+        "qualifica": 5086,
+        "note": 19802,
+        "fonte_dato": 19942,
+        "Provincia Sede": 367,
+        "CODICE ENTE": 0,
+        "3descrizione": 0,
+        "regione%sede": 0,
+        "att ivazioni": 0
+      },
+      "rows": 20102,
+      "columns": 19,
+      "cells": 381938,
+      "null_cells": 46847,
+      "duplicate_rows": 60,
+      "rows_in_key_conflict": 60,
+      "checked_cells": null,
+      "checked_cells_by_column": {},
+      "completeness": 0.8773,
+      "uniqueness": 0.994,
+      "schema_conformity": 0.4737,
+      "structural_defects": {
+        "_id": [
+          "naming"
+        ],
+        "RATA": [
+          "naming"
+        ],
+        "aggregation-time": [
+          "naming"
+        ],
+        "note": [
+          "sparse"
+        ],
+        "fonte_dato": [
+          "sparse"
+        ],
+        "Provincia Sede": [
+          "naming"
+        ],
+        "CODICE ENTE": [
+          "naming"
+        ],
+        "3descrizione": [
+          "naming"
+        ],
+        "regione%sede": [
+          "naming"
+        ],
+        "att ivazioni": [
+          "naming"
+        ]
+      },
+      "columns_with_structural_defects": 10,
+      "columns_badly_named": 8,
+      "columns_sparse": 2,
+      "columns_redundant": 0,
+      "columns_untyped": 0
+    },
+    "headline_after": {
+      "null_by_column": {
+        "id": 0,
+        "mese": 0,
+        "anno": 0,
+        "cessazioni": 194,
+        "rata": 0,
+        "aggregation_time": 0,
+        "qualifica": 5062,
+        "provincia_sede": 356,
+        "codice_ente": 0,
+        "descrizione_ente": 0,
+        "regione_sede": 0,
+        "attivazioni": 195
+      },
+      "rows": 20012,
+      "columns": 12,
+      "cells": 240144,
+      "null_cells": 5807,
+      "duplicate_rows": 0,
+      "rows_in_key_conflict": 0,
+      "checked_cells": 214325,
+      "checked_cells_by_column": {
+        "id": 20012,
+        "mese": 20012,
+        "anno": 20012,
+        "cessazioni": 19818,
+        "rata": 20012,
+        "aggregation_time": 20012,
+        "qualifica": 14950,
+        "provincia_sede": 19656,
+        "codice_ente": 20012,
+        "regione_sede": 20012,
+        "attivazioni": 19817
+      },
+      "completeness": 0.9758,
+      "uniqueness": 1.0,
+      "schema_conformity": 1.0,
+      "structural_defects": {},
+      "columns_with_structural_defects": 0,
+      "columns_badly_named": 0,
+      "columns_sparse": 0,
+      "columns_redundant": 0,
+      "columns_untyped": 0,
+      "violations_by_kind": {
+        "format": 10,
+        "completeness": 5807,
+        "schema": 0,
+        "consistency": 1526,
+        "uniqueness": 0
+      },
+      "format_violations": 10,
+      "format_violations_by_column": {
+        "regione_sede": 10
+      },
+      "inconsistent_rows": 1493,
+      "inconsistent_rows_by_column": {
+        "anno": 572,
+        "mese": 954
+      },
+      "validity": 1.0,
+      "consistency": 0.9254
+    },
+    "as_delivered": {
+      "dimensions": [
+        "completeness",
+        "uniqueness",
+        "schema_conformity"
+      ],
+      "before": {
+        "components": {
+          "completeness": 0.8773,
+          "uniqueness": 0.994,
+          "schema_conformity": 0.4737
+        },
+        "weights": {
+          "completeness": 1.0,
+          "uniqueness": 1.0,
+          "schema_conformity": 1.0
+        },
+        "score": 0.7448
+      },
+      "after": {
+        "components": {
+          "completeness": 0.9758,
+          "uniqueness": 1.0,
+          "schema_conformity": 1.0
+        },
+        "weights": {
+          "completeness": 1.0,
+          "uniqueness": 1.0,
+          "schema_conformity": 1.0
+        },
+        "score": 0.9919
+      }
+    },
+    "like_for_like": {
+      "dimensions": [
+        "completeness",
+        "validity",
+        "consistency",
+        "uniqueness",
+        "schema_conformity"
+      ],
+      "before": {
+        "components": {
+          "completeness": 0.9758,
+          "validity": 0.9917,
+          "consistency": 0.8629,
+          "uniqueness": 0.9955,
+          "schema_conformity": 0.5833
+        },
+        "weights": {
+          "completeness": 1.0,
+          "validity": 1.0,
+          "consistency": 1.0,
+          "uniqueness": 1.0,
+          "schema_conformity": 1.0
+        },
+        "score": 0.8652
+      },
+      "after": {
+        "components": {
+          "completeness": 0.9758,
+          "validity": 1.0,
+          "consistency": 0.9254,
+          "uniqueness": 1.0,
+          "schema_conformity": 1.0
+        },
+        "weights": {
+          "completeness": 1.0,
+          "validity": 1.0,
+          "consistency": 1.0,
+          "uniqueness": 1.0,
+          "schema_conformity": 1.0
+        },
+        "score": 0.9798
+      }
+    },
+    "dimensions_compared": [
+      "completeness",
+      "uniqueness",
+      "schema_conformity"
+    ],
+    "dimensions_excluded": [
+      "validity",
+      "consistency"
+    ],
+    "reliability_before": {
+      "components": {
+        "completeness": 0.8773,
+        "uniqueness": 0.994,
+        "schema_conformity": 0.4737
+      },
+      "weights": {
+        "completeness": 1.0,
+        "uniqueness": 1.0,
+        "schema_conformity": 1.0
+      },
+      "score": 0.7448
+    },
+    "reliability_after": {
+      "components": {
+        "completeness": 0.9758,
+        "uniqueness": 1.0,
+        "schema_conformity": 1.0
+      },
+      "weights": {
+        "completeness": 1.0,
+        "uniqueness": 1.0,
+        "schema_conformity": 1.0
+      },
+      "score": 0.9919
+    },
+    "hidden_defects_unmasked": {
+      "disguised_nulls_unmasked": 2888,
+      "apparent_completeness": 0.8773,
+      "true_completeness": 0.8698
+    }
+  },
+  "surviving_columns": [
+    "id",
+    "mese",
+    "anno",
+    "cessazioni",
+    "rata",
+    "aggregation_time",
+    "qualifica",
+    "provincia_sede",
+    "codice_ente",
+    "descrizione_ente",
+    "regione_sede",
+    "attivazioni"
+  ],
+  "errors": [],
+  "narrative": {
+    "verdict": "This is a NoiPA employment-activation and termination dataset covering roughly 20,000 records across Italian public-administration entities. After remediation it is clean and highly usable: the structural defects are gone, uniqueness is restored, and the remaining issues are confined to a quarter of the qualifica column and a small residue of month/year inconsistencies. The dataset is in good shape for analysis, with the caveat that qualifica is materially incomplete.",
+    "schema_comment": "The raw file carried five pairs of duplicate columns (e.g. codice_ente vs CODICE ENTE, regione_sede vs regione%sede) plus three badly named columns, and two columns (note, fonte_dato) that were over 98% empty and have been dropped. The duplicate-column resolution was not lossless: keeping one member of each pair overwrote cells in descrizione_ente, provincia_sede, regione_sede and attivazioni where the two copies disagreed, and some values existed only in the dropped copy. The naming and duplication faults are worth fixing at the source so the export stops shipping redundant and inconsistently-cased columns.",
+    "completeness_comment": "The apparent completeness of the raw file was flattered by placeholder text such as N.D. in cessazioni and attivazioni, which counted as values until unmasked; the lower post-unmasking figure is the accurate one and represents a gain in accuracy, not a regression. The one column that genuinely limits use is qualifica, which is missing about a quarter of its values and could not be imputed without inventing data. The two near-empty columns note and fonte_dato were dropped as carrying almost no information.",
+    "consistency_comment": "The main cross-column problem is that mese and anno disagree with the period encoded in rata on a substantial number of rows, and a meaningful residue remains after remediation because only rows where rata was unambiguous could be corrected. Duplicate-column resolution overwrote cells in descrizione_ente, provincia_sede, regione_sede and attivazioni, and some values (including province codes and entity names) existed only in the dropped copy and were lost. Ninety exact duplicate records were removed cleanly with no conflicting data.",
+    "anomaly_comment": "Both cessazioni and attivazioni show large numbers of high outliers, with values reaching into the hundreds or over a thousand, which are implausible as single-employee events but entirely plausible as bulk or batch-uploaded aggregates. These are unusual rather than wrong, and they point to mixed granularity in the source rather than data-entry errors. The negative cessazioni values were genuine errors and were corrected to zero.",
+    "remediation_comment": "The pipeline repaired period normalization, derived mese and anno from rata where the period was unambiguous, corrected negative termination counts, and resolved the duplicate columns and naming violations. The generated cleaning functions implement durable rules: one normalizes month values to 1-12 and strips leading zeros, and another clamps negative termination counts to zero, so future imports with the same defects will be handled consistently. The qualifica gaps and the residual mese/anno inconsistencies were deliberately left alone because no deterministic rule or external source could fill them safely.",
+    "recommendations": [
+      "Stop exporting duplicate column pairs (codice_ente/CODICE ENTE, regione_sede/regione%sede, attivazioni/att ivazioni, and the two descrizione_ente variants); emit a single canonical column per field so downstream resolution never has to choose between disagreeing copies.",
+      "Enforce a single period format for rata at the source (canonical YYYYMM) and derive mese and anno from it, so the month and year columns cannot drift out of sync with the reference period.",
+      "Require qualifica to be populated at data entry, or provide a lookup from codice_ente/descrizione_ente, since a quarter of records currently lack it and it cannot be recovered downstream.",
+      "Replace the N.D. placeholder in cessazioni and attivazioni with a true null at the source, and validate that termination and activation counts are non-negative integers before export."
+    ]
+  }
+}

@@ -1,0 +1,242 @@
+{
+  "spesa": {
+    "input_shape": [
+      7543,
+      18
+    ],
+    "final_shape": [
+      7478,
+      11
+    ],
+    "final_columns": [
+      "aggregation_time",
+      "area_geografica",
+      "cod_imposta",
+      "cod_tipoimposta",
+      "descrizione",
+      "ente",
+      "id",
+      "imposta",
+      "rata",
+      "spesa",
+      "tipo_imposta"
+    ],
+    "errors": [],
+    "numeric_recovery": {
+      "SPESA TOTALE->spesa": {
+        "messy": 224,
+        "ok": 224,
+        "wrong": 0,
+        "lost": 0
+      },
+      "ente%code->ente": {
+        "messy": 0,
+        "ok": 0,
+        "wrong": 0,
+        "lost": 0
+      },
+      "2cod_imposta->cod_imposta": {
+        "messy": 0,
+        "ok": 0,
+        "wrong": 0,
+        "lost": 0
+      }
+    },
+    "date_recovery": {
+      "checked": 598,
+      "ok": 598,
+      "wrong": 0
+    },
+    "duplicate_groups": [
+      [
+        "2cod_imposta",
+        "cod imposta ext",
+        "cod_imposta"
+      ],
+      [
+        "SPESA TOTALE",
+        "spesa"
+      ],
+      [
+        "Tipo Imposta",
+        "tipo_imposta"
+      ],
+      [
+        "ente",
+        "ente%code"
+      ]
+    ],
+    "duplicate_canonical_names": [
+      "cod_imposta",
+      "ente",
+      "spesa",
+      "tipo_imposta"
+    ],
+    "note_fonte_dato_merged": false,
+    "final_nulls_per_column": {
+      "aggregation_time": 0,
+      "area_geografica": 1567,
+      "cod_imposta": 0,
+      "cod_tipoimposta": 0,
+      "descrizione": 8,
+      "ente": 0,
+      "id": 0,
+      "imposta": 0,
+      "rata": 0,
+      "spesa": 58,
+      "tipo_imposta": 0
+    },
+    "period_all_canonical": true,
+    "authority_overwrites": {
+      "applicable": false
+    },
+    "auto_path_behaviour": {
+      "derive_cells_changed": {},
+      "cross_column_rules": {
+        "aggregation-time determines rata": [
+          510,
+          0
+        ],
+        "cod_imposta determines imposta": [
+          4,
+          0
+        ],
+        "imposta determines tipo_imposta": [
+          1,
+          0
+        ],
+        "imposta determines cod_tipoimposta": [
+          1,
+          0
+        ],
+        "imposta determines cod_imposta": [
+          1,
+          0
+        ]
+      }
+    },
+    "rows_removed_as_duplicates": 65
+  },
+  "attivazioniCessazioni": {
+    "input_shape": [
+      20102,
+      19
+    ],
+    "final_shape": [
+      20012,
+      12
+    ],
+    "final_columns": [
+      "aggregation_time",
+      "anno",
+      "attivazioni",
+      "cessazioni",
+      "codice_ente",
+      "descrizione_ente",
+      "id",
+      "mese",
+      "provincia_sede",
+      "qualifica",
+      "rata",
+      "regione_sede"
+    ],
+    "errors": [],
+    "numeric_recovery": {
+      "att ivazioni->attivazioni": {
+        "messy": 600,
+        "ok": 600,
+        "wrong": 0,
+        "lost": 0
+      },
+      "cessazioni->cessazioni": {
+        "messy": 599,
+        "ok": 599,
+        "wrong": 0,
+        "lost": 0
+      },
+      "CODICE ENTE->codice_ente": {
+        "messy": 0,
+        "ok": 0,
+        "wrong": 0,
+        "lost": 0
+      }
+    },
+    "date_recovery": {
+      "checked": 1600,
+      "ok": 1600,
+      "wrong": 0
+    },
+    "duplicate_groups": [
+      [
+        "3descrizione",
+        "descrizione_ente"
+      ],
+      [
+        "CODICE ENTE",
+        "codice_ente"
+      ],
+      [
+        "Provincia Sede",
+        "provincia_sede"
+      ],
+      [
+        "att ivazioni",
+        "attivazioni"
+      ],
+      [
+        "regione%sede",
+        "regione_sede"
+      ]
+    ],
+    "duplicate_canonical_names": [
+      "attivazioni",
+      "codice_ente",
+      "descrizione_ente",
+      "provincia_sede",
+      "regione_sede"
+    ],
+    "note_fonte_dato_merged": false,
+    "final_nulls_per_column": {
+      "aggregation_time": 0,
+      "anno": 0,
+      "attivazioni": 195,
+      "cessazioni": 194,
+      "codice_ente": 0,
+      "descrizione_ente": 0,
+      "id": 0,
+      "mese": 0,
+      "provincia_sede": 356,
+      "qualifica": 5062,
+      "rata": 0,
+      "regione_sede": 0
+    },
+    "period_all_canonical": true,
+    "authority_overwrites": {
+      "applicable": true,
+      "rows_with_well_formed_month": 19440,
+      "rows_with_well_formed_year": 19630,
+      "clean_month_overwritten": 0,
+      "clean_year_overwritten": 0,
+      "clean_month_overwritten_while_period_also_clean": 0,
+      "malformed_month_filled": 572,
+      "malformed_year_filled": 382
+    },
+    "auto_path_behaviour": {
+      "derive_cells_changed": {
+        "derive_month_from_period": 575,
+        "derive_year_from_period": 383
+      },
+      "cross_column_rules": {
+        "RATA determines mese": [
+          1702,
+          954
+        ],
+        "RATA determines anno": [
+          1160,
+          572
+        ]
+      }
+    },
+    "rows_removed_as_duplicates": 90
+  }
+}

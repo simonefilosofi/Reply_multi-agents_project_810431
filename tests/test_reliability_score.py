@@ -154,6 +154,46 @@ def test_uniqueness_subtracts_rows_locked_in_a_key_conflict() -> None:
     assert metrics["uniqueness"] == 0.5
 
 
+def test_the_violation_tally_counts_the_rows_the_uniqueness_score_penalises() -> None:
+    """The tally was built from the validation reports alone, and nothing reports an exact duplicate
+    row as a violation, so a file that arrived with forty of them was described as having had no
+    uniqueness defects at all while the uniqueness dimension was marked down for exactly those
+    rows. Duplicate detection is a mandatory coverage area; it cannot report zero."""
+    analysis = {
+        "exact_duplicate_rows": 1,
+        "key_columns": ["codice"],
+        "key_collisions": {"codice": {"rows_in_conflicting_groups": 4}},
+    }
+
+    metrics = rs.compute_metrics(_frame(), [], duplicate_analysis=analysis)
+
+    assert metrics["violations_by_kind"]["uniqueness"] == 5
+
+
+def test_the_uniqueness_tally_does_not_count_a_duplicate_twice() -> None:
+    """The tally is a row count, and the residual reports carry their own uniqueness violation for
+    the same collision. Adding one to the other counted the key column once more than the rows it
+    locks up, so a report could claim 83 rows not unique where 82 were measured."""
+    analysis = {
+        "exact_duplicate_rows": 0,
+        "key_columns": ["codice"],
+        "key_collisions": {"codice": {"rows_in_conflicting_groups": 4}},
+    }
+    already_reported = [_report("codice", "duplicate records: 2 keys still collide", 2)]
+
+    metrics = rs.compute_metrics(
+        pd.DataFrame({"codice": ["A", "B"]}), already_reported, duplicate_analysis=analysis
+    )
+
+    assert metrics["violations_by_kind"]["uniqueness"] == 4
+
+
+def test_the_tally_stays_zero_when_every_row_is_unique() -> None:
+    metrics = rs.compute_metrics(pd.DataFrame({"codice": ["A", "B"]}), [])
+
+    assert metrics["violations_by_kind"]["uniqueness"] == 0
+
+
 def test_a_clean_frame_has_no_structural_defects() -> None:
     metrics = rs.compute_metrics(pd.DataFrame({"ok_name": [1]}), conventions=GlobalConventions())
     assert metrics["schema_conformity"] == 1.0

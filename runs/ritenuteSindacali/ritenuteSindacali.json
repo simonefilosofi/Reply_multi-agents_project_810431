@@ -1,0 +1,1380 @@
+{
+  "dataset_path": "runs\\ritenuteSindacali\\ritenuteSindacali.csv",
+  "detected_domain": "Trattamento_economico",
+  "detected_language": "it",
+  "shape": {
+    "rows": 11657,
+    "columns": 12
+  },
+  "null_summary": [],
+  "semantic_payload": [
+    {
+      "column_name": "id_record",
+      "meaning": "unique record identifier (UUID)",
+      "dtype": "object",
+      "placeholders_found": []
+    },
+    {
+      "column_name": "mese_competenza",
+      "meaning": "reference month of the payslip (YYYY-MM)",
+      "dtype": "datetime64[ns]",
+      "placeholders_found": []
+    },
+    {
+      "column_name": "amministrazione",
+      "meaning": "name of the public administration entity",
+      "dtype": "string",
+      "placeholders_found": [
+        "--",
+        "ND"
+      ]
+    },
+    {
+      "column_name": "sigla_sindacale",
+      "meaning": "trade union acronym/sigla",
+      "dtype": "object",
+      "placeholders_found": []
+    },
+    {
+      "column_name": "descrizione_sindacale",
+      "meaning": "trade union name associated with the deduction",
+      "dtype": "object",
+      "placeholders_found": [
+        "--",
+        "ND"
+      ]
+    },
+    {
+      "column_name": "numero_deleghe",
+      "meaning": "number of union delegation mandates (deleghe sindacali)",
+      "dtype": "int64",
+      "placeholders_found": []
+    },
+    {
+      "column_name": "importo_ritenuto",
+      "meaning": "withholding amount in euros deducted from payslips",
+      "dtype": "float",
+      "placeholders_found": []
+    },
+    {
+      "column_name": "importo_versato",
+      "meaning": "amount paid (in euros) for union dues",
+      "dtype": "float64",
+      "placeholders_found": []
+    },
+    {
+      "column_name": "differenza",
+      "meaning": "difference between withheld and paid union dues amount",
+      "dtype": "float64",
+      "placeholders_found": []
+    },
+    {
+      "column_name": "comparto",
+      "meaning": "collective bargaining sector of employees",
+      "dtype": "string",
+      "placeholders_found": [
+        "ND",
+        "--",
+        "SICUREZZA-DIFESA",
+        "FUNZIONI CENTRALI",
+        "ISTRUZIONE E RICERCA",
+        "SANITA'"
+      ]
+    },
+    {
+      "column_name": "stato_flusso",
+      "meaning": "stato del flusso di pagamento (consolidato)",
+      "dtype": "object",
+      "placeholders_found": []
+    },
+    {
+      "column_name": "codice_amministrazione",
+      "meaning": "numeric code identifying the public administration",
+      "dtype": "int64",
+      "placeholders_found": []
+    }
+  ],
+  "duplicate_resolutions": [
+    {
+      "group": [
+        "codice_amministrazione",
+        "Codice Amministrazione"
+      ],
+      "survivor": "Codice Amministrazione",
+      "canonical_name": "codice_amministrazione",
+      "dropped": [
+        "codice_amministrazione"
+      ],
+      "rationale": "Only group member conforming to the baseline naming convention. Kept Codice Amministrazione: the group members agree with the rest of the table equally well, so the column with the fewest missing values was taken (0).",
+      "cells_backfilled": 0,
+      "cells_overwritten": {
+        "codice_amministrazione": 11354
+      },
+      "values_lost": {
+        "codice_amministrazione": [
+          "00012",
+          "00034",
+          "00056",
+          "00078",
+          "00091",
+          "00103",
+          "00118",
+          "00127",
+          "00145",
+          "00162"
+        ]
+      }
+    }
+  ],
+  "duplicate_rows": {
+    "exact_duplicate_rows": 88,
+    "key_columns": [
+      "id_record",
+      "importo_versato"
+    ],
+    "key_collisions": {
+      "id_record": {
+        "duplicated_keys": 88,
+        "affected_rows": 176,
+        "keys_with_conflicting_data": 0,
+        "rows_in_conflicting_groups": 0,
+        "examples": []
+      },
+      "importo_versato": {
+        "duplicated_keys": 128,
+        "affected_rows": 257,
+        "keys_with_conflicting_data": 41,
+        "rows_in_conflicting_groups": 83,
+        "examples": [
+          "3727.32",
+          "2009.14",
+          "9476.74",
+          "5084.01",
+          "5369.06",
+          "1938.8",
+          "7317.31",
+          "1199.17",
+          "2164.68",
+          "1245.59",
+          "1874.27",
+          "5256.9",
+          "3349.02",
+          "921.83",
+          "2098.28",
+          "1766.72",
+          "1625.39",
+          "2016.82",
+          "1265.29",
+          "749.31",
+          "1229.58",
+          "1344.1",
+          "898.3",
+          "982.81",
+          "1556.7",
+          "3545.19",
+          "3451.86",
+          "5580.86",
+          "12166.47",
+          "1047.69",
+          "4270.06",
+          "6638.8",
+          "904.06",
+          "8044.96",
+          "2426.64",
+          "3008.19",
+          "2417.68",
+          "3407.51",
+          "3120.92",
+          "1243.52",
+          "1110.48"
+        ]
+      }
+    },
+    "rows_before": 11745,
+    "rows_after": 11657,
+    "rows_removed": 88
+  },
+  "duplicate_column_groups": 1,
+  "columns_dropped_as_duplicates": 1,
+  "unaddressed_violations": [
+    {
+      "group_id": "g1",
+      "columns": [
+        "importo_versato",
+        "differenza",
+        "codice_amministrazione"
+      ],
+      "violation_ids": [
+        "c7_v1",
+        "c10_v1"
+      ],
+      "reason": "c7_v1 flags rows where differenza does not equal importo_ritenuto - importo_versato, but the discrepancy is a genuine data-quality question rather than a formatting defect: the correct differenza cannot be derived without a deterministic rule, and recomputing it would overwrite values that may reflect legitimate manual adjustments (the note_operatore column records 'rettifica manuale' on some rows). c10_v1 is a missing-value flag on a free-text operator-notes column with 11,393 nulls; there is no imputation hint and no deterministic source for these notes, so filling them would invent data. Both require human judgement.",
+      "affected_rows": 12558,
+      "affected_by_column": {
+        "importo_versato": 177,
+        "differenza": 1027,
+        "codice_amministrazione": 11354
+      },
+      "actioned_elsewhere": [
+        "note_operatore"
+      ],
+      "source": "model"
+    }
+  ],
+  "cross_column_rules": [
+    {
+      "rule": "differenza = importo_ritenuto - importo_versato",
+      "rows_breaking": 1027,
+      "rows_remaining": 1020
+    },
+    {
+      "rule": "descrizione_sindacale determines sigla_sindacale",
+      "rows_breaking": 779,
+      "rows_remaining": 0
+    },
+    {
+      "rule": "amministrazione determines comparto",
+      "rows_breaking": 87,
+      "rows_remaining": 0
+    },
+    {
+      "rule": "codice_amministrazione determines comparto",
+      "rows_breaking": 4,
+      "rows_remaining": 0
+    }
+  ],
+  "per_column": [
+    {
+      "column": "id_record",
+      "from": "",
+      "dtype": "object",
+      "fill_rate": 1.0,
+      "detected": 0,
+      "outstanding": 0,
+      "cells_changed": 0
+    },
+    {
+      "column": "mese_competenza",
+      "from": "",
+      "dtype": "object",
+      "fill_rate": 1.0,
+      "detected": 0,
+      "outstanding": 0,
+      "cells_changed": 11745
+    },
+    {
+      "column": "amministrazione",
+      "from": "",
+      "dtype": "string",
+      "fill_rate": 1.0,
+      "detected": 322,
+      "outstanding": 0,
+      "cells_changed": 471
+    },
+    {
+      "column": "sigla_sindacale",
+      "from": "",
+      "dtype": "string",
+      "fill_rate": 1.0,
+      "detected": 1586,
+      "outstanding": 0,
+      "cells_changed": 807
+    },
+    {
+      "column": "descrizione_sindacale",
+      "from": "",
+      "dtype": "object",
+      "fill_rate": 1.0,
+      "detected": 363,
+      "outstanding": 0,
+      "cells_changed": 516
+    },
+    {
+      "column": "numero_deleghe",
+      "from": "",
+      "dtype": "Int64",
+      "fill_rate": 1.0,
+      "detected": 0,
+      "outstanding": 0,
+      "cells_changed": 1
+    },
+    {
+      "column": "importo_ritenuto",
+      "from": "",
+      "dtype": "float64",
+      "fill_rate": 1.0,
+      "detected": 0,
+      "outstanding": 0,
+      "cells_changed": 0
+    },
+    {
+      "column": "importo_versato",
+      "from": "",
+      "dtype": "object",
+      "fill_rate": 1.0,
+      "detected": 177,
+      "outstanding": 175,
+      "cells_changed": 0
+    },
+    {
+      "column": "differenza",
+      "from": "",
+      "dtype": "float64",
+      "fill_rate": 1.0,
+      "detected": 1027,
+      "outstanding": 1020,
+      "cells_changed": 0
+    },
+    {
+      "column": "comparto",
+      "from": "",
+      "dtype": "string",
+      "fill_rate": 1.0,
+      "detected": 11836,
+      "outstanding": 0,
+      "cells_changed": 259
+    },
+    {
+      "column": "stato_flusso",
+      "from": "",
+      "dtype": "object",
+      "fill_rate": 1.0,
+      "detected": 0,
+      "outstanding": 0,
+      "cells_changed": 0
+    },
+    {
+      "column": "codice_amministrazione",
+      "from": "",
+      "dtype": "int64",
+      "fill_rate": 1.0,
+      "detected": 11354,
+      "outstanding": 0,
+      "cells_changed": 141
+    }
+  ],
+  "auto_remediations": [
+    {
+      "column": "mese_competenza",
+      "operation": "normalize_period",
+      "cells_changed": 11745,
+      "rationale": "alternative period layouts rewritten to the canonical YYYYMM form"
+    },
+    {
+      "column": "amministrazione",
+      "operation": "impute_from_lookup",
+      "cells_changed": 322,
+      "predictor_columns": [
+        "codice_amministrazione"
+      ],
+      "purity": 1.0,
+      "cells_still_missing": 0,
+      "rationale": "codice_amministrazione -> amministrazione: purity=1.00, coverage=1.00 on path 'raw'"
+    },
+    {
+      "column": "descrizione_sindacale",
+      "operation": "impute_from_lookup",
+      "cells_changed": 363,
+      "predictor_columns": [
+        "sigla_sindacale"
+      ],
+      "purity": 1.0,
+      "cells_still_missing": 0,
+      "rationale": "sigla_sindacale -> descrizione_sindacale: purity=1.00, coverage=1.00 on path 'raw'"
+    },
+    {
+      "column": "comparto",
+      "operation": "impute_from_lookup",
+      "cells_changed": 167,
+      "predictor_columns": [
+        "amministrazione"
+      ],
+      "purity": 0.9923,
+      "cells_still_missing": 0,
+      "rationale": "amministrazione -> comparto: purity=0.99, coverage=0.98 on path 'raw'"
+    }
+  ],
+  "generated_function_runs": [
+    {
+      "executor": "e2b",
+      "ok": true,
+      "values": 16
+    },
+    {
+      "executor": "e2b",
+      "ok": true,
+      "values": 16
+    }
+  ],
+  "changes_summary": {
+    "total_cells_changed": 13940,
+    "by_column": {
+      "mese_competenza": 11745,
+      "sigla_sindacale": 807,
+      "descrizione_sindacale": 516,
+      "amministrazione": 471,
+      "comparto": 259,
+      "codice_amministrazione": 141,
+      "numero_deleghe": 1
+    },
+    "by_source": {
+      "auto_remediation": 12597,
+      "strip_whitespace_sigla_sindacale": 807,
+      "nan_handler:placeholders": 441,
+      "replace_values_comparto": 91,
+      "nan_handler:dtype": 3,
+      "duplicate_column:dtype": 1
+    }
+  },
+  "format_violations_detected": [
+    {
+      "column_name": "importo_versato",
+      "violation_count": 178
+    },
+    {
+      "column_name": "comparto",
+      "violation_count": 91
+    },
+    {
+      "column_name": "note_operatore",
+      "violation_count": 11393
+    },
+    {
+      "column_name": "codice_amministrazione",
+      "violation_count": 0
+    },
+    {
+      "column_name": "sigla_sindacale",
+      "violation_count": 1614
+    },
+    {
+      "column_name": "differenza",
+      "violation_count": 1027
+    }
+  ],
+  "format_violations_residual": [
+    {
+      "column_name": "importo_versato",
+      "violation_count": 174
+    },
+    {
+      "column_name": "importo_versato",
+      "violation_count": 1
+    },
+    {
+      "column_name": "differenza",
+      "violation_count": 1020
+    }
+  ],
+  "completeness": {
+    "by_column": {
+      "id_record": {
+        "nulls": 0,
+        "total": 11745,
+        "completeness": 1.0
+      },
+      "mese_competenza": {
+        "nulls": 0,
+        "total": 11745,
+        "completeness": 1.0
+      },
+      "codice_amministrazione": {
+        "nulls": 391,
+        "total": 11745,
+        "completeness": 0.9667
+      },
+      "amministrazione": {
+        "nulls": 322,
+        "total": 11745,
+        "completeness": 0.9726
+      },
+      "sigla_sindacale": {
+        "nulls": 0,
+        "total": 11745,
+        "completeness": 1.0
+      },
+      "descrizione_sindacale": {
+        "nulls": 363,
+        "total": 11745,
+        "completeness": 0.9691
+      },
+      "numero_deleghe": {
+        "nulls": 0,
+        "total": 11745,
+        "completeness": 1.0
+      },
+      "importo_ritenuto": {
+        "nulls": 0,
+        "total": 11745,
+        "completeness": 1.0
+      },
+      "importo_versato": {
+        "nulls": 0,
+        "total": 11745,
+        "completeness": 1.0
+      },
+      "differenza": {
+        "nulls": 0,
+        "total": 11745,
+        "completeness": 1.0
+      },
+      "comparto": {
+        "nulls": 167,
+        "total": 11745,
+        "completeness": 0.9858
+      },
+      "stato_flusso": {
+        "nulls": 0,
+        "total": 11745,
+        "completeness": 1.0
+      },
+      "note_operatore": {
+        "nulls": 11393,
+        "total": 11745,
+        "completeness": 0.03
+      },
+      "Codice Amministrazione": {
+        "nulls": 0,
+        "total": 11745,
+        "completeness": 1.0
+      }
+    },
+    "overall": {
+      "rows": 11745,
+      "columns": 14,
+      "cells": 164430,
+      "null_cells": 12636,
+      "completeness": 0.9232
+    },
+    "rows": {
+      "complete_rows": 312,
+      "rows_with_nulls": 11433,
+      "max_nulls_in_a_row": 4,
+      "worst_rows": [
+        {
+          "row_index": 10544,
+          "nulls": 4
+        },
+        {
+          "row_index": 1,
+          "nulls": 3
+        },
+        {
+          "row_index": 103,
+          "nulls": 3
+        },
+        {
+          "row_index": 502,
+          "nulls": 3
+        },
+        {
+          "row_index": 915,
+          "nulls": 3
+        },
+        {
+          "row_index": 1262,
+          "nulls": 3
+        },
+        {
+          "row_index": 1365,
+          "nulls": 3
+        },
+        {
+          "row_index": 1707,
+          "nulls": 3
+        },
+        {
+          "row_index": 2076,
+          "nulls": 3
+        },
+        {
+          "row_index": 2366,
+          "nulls": 3
+        }
+      ]
+    },
+    "sparse_columns": [
+      {
+        "column": "note_operatore",
+        "nulls": 11393,
+        "null_rate": 0.97
+      }
+    ]
+  },
+  "violations_by_kind_detected": {
+    "format": 984,
+    "completeness": 12245,
+    "schema": 3,
+    "consistency": 1897,
+    "uniqueness": 171
+  },
+  "violations_by_kind_residual": {
+    "format": 174,
+    "completeness": 0,
+    "schema": 0,
+    "consistency": 1020,
+    "uniqueness": 82
+  },
+  "naming_violations": [],
+  "anomalies": [
+    {
+      "column_name": "comparto",
+      "method": "rare_category",
+      "detected": 2,
+      "sampled": 2,
+      "comment": "Two rare categories ('ND' with 49 records and '--' with 42 records) appear alongside the dominant values 'FUNZIONI CENTRALI' (69.48%) and 'ISTRUZIONE E RICERCA' (19.83%), suggesting placeholder or missing-value encodings rather than legitimate sector classifications that should be standardized or mapped to null.",
+      "examples": [
+        "ND",
+        "--"
+      ]
+    }
+  ],
+  "proposed_remediations": [
+    {
+      "id": "schema_drop_note_operatore",
+      "description": "Drop 'note_operatore': it is 97.0% null and carries almost no information.",
+      "rationale": "11393 of its cells are empty. Removing the column is a schema decision, so it is proposed rather than applied.",
+      "affected_columns": [
+        "note_operatore"
+      ],
+      "estimated_rows_affected": 11393,
+      "operations": [
+        "drop_column on note_operatore"
+      ],
+      "equivalent_python": "df = df.drop(columns=[\"note_operatore\"])",
+      "generated_sources": [],
+      "applied": true
+    },
+    {
+      "id": "strip_whitespace_sigla_sindacale",
+      "description": "Normalize sigla_sindacale values to the canonical uppercase spelling (strip whitespace, collapse casing).",
+      "rationale": "The sigla_sindacale column holds a fixed enum of union acronyms, but 807+ rows carry values that differ only by casing or trailing whitespace (e.g. 'Dirstat', 'Cisl Fp', 'cgs', 'CGIL FP '). The cross-column violations c2_v2..c2_v13 are the same underlying defect: the sigla is correct but spelled with wrong casing/whitespace. A single strip-and-uppercase normalization resolves all of them without inventing data.",
+      "affected_columns": [
+        "sigla_sindacale"
+      ],
+      "estimated_rows_affected": 807,
+      "operations": [
+        "strip_whitespace on sigla_sindacale",
+        "collapse_casing on sigla_sindacale"
+      ],
+      "equivalent_python": "df[\"sigla_sindacale\"] = df[\"sigla_sindacale\"].astype(\"string\").str.strip()\ndf[\"sigla_sindacale\"] = collapse_casing_variants(df[\"sigla_sindacale\"])",
+      "generated_sources": [],
+      "applied": true
+    },
+    {
+      "id": "replace_values_comparto",
+      "description": "Fill comparto placeholders 'ND' and '--' from the amministrazione lookup mapping.",
+      "rationale": "comparto holds placeholder encodings 'ND' and '--' (91 records) where the true sector is derivable from amministrazione via the mined imputation hint (purity 0.99, coverage 0.98). The cross-column violations c8_v1..c8_v20 all stem from these placeholders. Replacing the placeholders with the mapped sector recovers the correct value deterministically.",
+      "affected_columns": [
+        "comparto"
+      ],
+      "estimated_rows_affected": 91,
+      "operations": [
+        "replace_values on comparto: 'ND' -> None, '--' -> None",
+        "impute_from_lookup on comparto"
+      ],
+      "equivalent_python": "df[\"comparto\"] = df[\"comparto\"].replace({'ND': None, '--': None})\nlookup = imputation_hints[\"comparto\"][\"mapping\"]\npredictor = imputation_hints[\"comparto\"][\"predictor_columns\"][0]\ndf[\"comparto\"] = df[\"comparto\"].fillna(df[predictor].astype(\"string\").map(lookup))",
+      "generated_sources": [],
+      "applied": true
+    }
+  ],
+  "applied_fix_ids": [
+    "schema_drop_note_operatore",
+    "strip_whitespace_sigla_sindacale",
+    "replace_values_comparto"
+  ],
+  "value_corrections": {
+    "sigla_sindacale": {
+      "Dirstat": "DIRSTAT",
+      "Cisl Fp": "CISL FP",
+      "cgs": "CGS",
+      "Flp": "FLP",
+      "CISL FP ": "CISL FP",
+      "flp": "FLP",
+      "Snals": "SNALS",
+      "intesa fp": "INTESA FP",
+      "Anief": "ANIEF",
+      "CSE ": "CSE",
+      "CGIL FP ": "CGIL FP",
+      "USB PI ": "USB PI",
+      "Intesa Fp": "INTESA FP",
+      "FLP ": "FLP",
+      "cse": "CSE",
+      "usb pi": "USB PI",
+      "ANIEF ": "ANIEF",
+      "snals": "SNALS",
+      "INTESA FP ": "INTESA FP",
+      "dirstat": "DIRSTAT"
+    }
+  },
+  "quality": {
+    "snapshots": {
+      "raw": {
+        "null_by_column": {
+          "id_record": 0,
+          "mese_competenza": 0,
+          "codice_amministrazione": 251,
+          "amministrazione": 174,
+          "sigla_sindacale": 0,
+          "descrizione_sindacale": 210,
+          "numero_deleghe": 0,
+          "importo_ritenuto": 0,
+          "importo_versato": 0,
+          "differenza": 0,
+          "comparto": 167,
+          "stato_flusso": 0,
+          "note_operatore": 11393,
+          "Codice Amministrazione": 0
+        },
+        "rows": 11745,
+        "columns": 14,
+        "cells": 164430,
+        "null_cells": 12195,
+        "duplicate_rows": 88,
+        "rows_in_key_conflict": 83,
+        "checked_cells": null,
+        "checked_cells_by_column": {},
+        "completeness": 0.9258,
+        "uniqueness": 0.9854,
+        "schema_conformity": 0.8571,
+        "structural_defects": {
+          "note_operatore": [
+            "sparse"
+          ],
+          "Codice Amministrazione": [
+            "naming"
+          ]
+        },
+        "columns_with_structural_defects": 2,
+        "columns_badly_named": 1,
+        "columns_sparse": 1,
+        "columns_redundant": 0,
+        "columns_untyped": 0
+      },
+      "detected": {
+        "null_by_column": {
+          "id_record": 0,
+          "mese_competenza": 0,
+          "codice_amministrazione": 391,
+          "amministrazione": 322,
+          "sigla_sindacale": 0,
+          "descrizione_sindacale": 363,
+          "numero_deleghe": 0,
+          "importo_ritenuto": 0,
+          "importo_versato": 0,
+          "differenza": 0,
+          "comparto": 167,
+          "stato_flusso": 0,
+          "note_operatore": 11393,
+          "Codice Amministrazione": 0
+        },
+        "rows": 11745,
+        "columns": 14,
+        "cells": 164430,
+        "null_cells": 12636,
+        "duplicate_rows": 88,
+        "rows_in_key_conflict": 0,
+        "checked_cells": null,
+        "checked_cells_by_column": {},
+        "completeness": 0.9232,
+        "uniqueness": 0.9925,
+        "schema_conformity": 0.8571,
+        "structural_defects": {
+          "note_operatore": [
+            "sparse"
+          ],
+          "Codice Amministrazione": [
+            "naming"
+          ]
+        },
+        "columns_with_structural_defects": 2,
+        "columns_badly_named": 1,
+        "columns_sparse": 1,
+        "columns_redundant": 0,
+        "columns_untyped": 0
+      },
+      "pre_remediation": {
+        "null_by_column": {
+          "id_record": 0,
+          "mese_competenza": 0,
+          "amministrazione": 322,
+          "sigla_sindacale": 0,
+          "descrizione_sindacale": 363,
+          "numero_deleghe": 0,
+          "importo_ritenuto": 0,
+          "importo_versato": 0,
+          "differenza": 0,
+          "comparto": 167,
+          "stato_flusso": 0,
+          "note_operatore": 11393,
+          "codice_amministrazione": 0
+        },
+        "rows": 11745,
+        "columns": 13,
+        "cells": 152685,
+        "null_cells": 12245,
+        "duplicate_rows": 88,
+        "rows_in_key_conflict": 83,
+        "checked_cells": 140440,
+        "checked_cells_by_column": {
+          "id_record": 11745,
+          "mese_competenza": 11745,
+          "amministrazione": 11423,
+          "sigla_sindacale": 11745,
+          "descrizione_sindacale": 11382,
+          "numero_deleghe": 11745,
+          "importo_ritenuto": 11745,
+          "importo_versato": 11745,
+          "differenza": 11745,
+          "comparto": 11578,
+          "stato_flusso": 11745,
+          "note_operatore": 352,
+          "codice_amministrazione": 11745
+        },
+        "completeness": 0.9198,
+        "uniqueness": 0.9854,
+        "schema_conformity": 0.7692,
+        "structural_defects": {
+          "mese_competenza": [
+            "untyped"
+          ],
+          "importo_versato": [
+            "untyped"
+          ],
+          "note_operatore": [
+            "sparse"
+          ]
+        },
+        "columns_with_structural_defects": 3,
+        "columns_badly_named": 0,
+        "columns_sparse": 1,
+        "columns_redundant": 0,
+        "columns_untyped": 2,
+        "violations_by_kind": {
+          "format": 984,
+          "completeness": 12245,
+          "schema": 3,
+          "consistency": 1897,
+          "uniqueness": 171
+        },
+        "format_violations": 984,
+        "format_violations_by_column": {
+          "importo_versato": 177,
+          "sigla_sindacale": 807
+        },
+        "inconsistent_rows": 1838,
+        "inconsistent_rows_by_column": {
+          "comparto": 91,
+          "sigla_sindacale": 779,
+          "differenza": 1027
+        },
+        "validity": 0.993,
+        "consistency": 0.8435,
+        "consistency_rules": {
+          "amministrazione determines comparto": 87,
+          "codice_amministrazione determines comparto": 4,
+          "descrizione_sindacale determines sigla_sindacale": 779,
+          "differenza = importo_ritenuto - importo_versato": 1027
+        },
+        "violations_by_column": {
+          "importo_versato": 177,
+          "amministrazione": 322,
+          "comparto": 11836,
+          "note_operatore": 22786,
+          "codice_amministrazione": 11354,
+          "sigla_sindacale": 1586,
+          "descrizione_sindacale": 363,
+          "differenza": 1027
+        }
+      },
+      "final": {
+        "null_by_column": {
+          "id_record": 0,
+          "mese_competenza": 0,
+          "amministrazione": 0,
+          "sigla_sindacale": 0,
+          "descrizione_sindacale": 0,
+          "numero_deleghe": 0,
+          "importo_ritenuto": 0,
+          "importo_versato": 0,
+          "differenza": 0,
+          "comparto": 0,
+          "stato_flusso": 0,
+          "codice_amministrazione": 0
+        },
+        "rows": 11657,
+        "columns": 12,
+        "cells": 139884,
+        "null_cells": 0,
+        "duplicate_rows": 0,
+        "rows_in_key_conflict": 82,
+        "checked_cells": 139884,
+        "checked_cells_by_column": {
+          "id_record": 11657,
+          "mese_competenza": 11657,
+          "amministrazione": 11657,
+          "sigla_sindacale": 11657,
+          "descrizione_sindacale": 11657,
+          "numero_deleghe": 11657,
+          "importo_ritenuto": 11657,
+          "importo_versato": 11657,
+          "differenza": 11657,
+          "comparto": 11657,
+          "stato_flusso": 11657,
+          "codice_amministrazione": 11657
+        },
+        "completeness": 1.0,
+        "uniqueness": 0.993,
+        "schema_conformity": 0.8333,
+        "structural_defects": {
+          "mese_competenza": [
+            "untyped"
+          ],
+          "importo_versato": [
+            "untyped"
+          ]
+        },
+        "columns_with_structural_defects": 2,
+        "columns_badly_named": 0,
+        "columns_sparse": 0,
+        "columns_redundant": 0,
+        "columns_untyped": 2,
+        "violations_by_kind": {
+          "format": 174,
+          "completeness": 0,
+          "schema": 0,
+          "consistency": 1020,
+          "uniqueness": 82
+        },
+        "format_violations": 174,
+        "format_violations_by_column": {
+          "importo_versato": 174
+        },
+        "inconsistent_rows": 1020,
+        "inconsistent_rows_by_column": {
+          "differenza": 1020
+        },
+        "validity": 0.9988,
+        "consistency": 0.9125
+      },
+      "pre_remediation_scoped": {
+        "null_by_column": {
+          "id_record": 0,
+          "mese_competenza": 0,
+          "amministrazione": 322,
+          "sigla_sindacale": 0,
+          "descrizione_sindacale": 363,
+          "numero_deleghe": 0,
+          "importo_ritenuto": 0,
+          "importo_versato": 0,
+          "differenza": 0,
+          "comparto": 167,
+          "stato_flusso": 0,
+          "note_operatore": 11393,
+          "codice_amministrazione": 0
+        },
+        "rows": 11745,
+        "columns": 12,
+        "cells": 152685,
+        "null_cells": 852,
+        "duplicate_rows": 88,
+        "rows_in_key_conflict": 83,
+        "checked_cells": 140088,
+        "checked_cells_by_column": {
+          "id_record": 11745,
+          "mese_competenza": 11745,
+          "amministrazione": 11423,
+          "sigla_sindacale": 11745,
+          "descrizione_sindacale": 11382,
+          "numero_deleghe": 11745,
+          "importo_ritenuto": 11745,
+          "importo_versato": 11745,
+          "differenza": 11745,
+          "comparto": 11578,
+          "stato_flusso": 11745,
+          "codice_amministrazione": 11745
+        },
+        "completeness": 0.994,
+        "uniqueness": 0.9854,
+        "schema_conformity": 0.8333,
+        "structural_defects": {
+          "mese_competenza": [
+            "untyped"
+          ],
+          "importo_versato": [
+            "untyped"
+          ]
+        },
+        "columns_with_structural_defects": 2,
+        "columns_badly_named": 0,
+        "columns_sparse": 0,
+        "columns_redundant": 0,
+        "columns_untyped": 2,
+        "violations_by_kind": {
+          "format": 984,
+          "completeness": 12245,
+          "schema": 3,
+          "consistency": 1897,
+          "uniqueness": 171
+        },
+        "format_violations": 984,
+        "format_violations_by_column": {
+          "importo_versato": 177,
+          "sigla_sindacale": 807
+        },
+        "inconsistent_rows": 1838,
+        "inconsistent_rows_by_column": {
+          "comparto": 91,
+          "sigla_sindacale": 779,
+          "differenza": 1027
+        },
+        "validity": 0.993,
+        "consistency": 0.8435,
+        "consistency_rules": {
+          "amministrazione determines comparto": 87,
+          "codice_amministrazione determines comparto": 4,
+          "descrizione_sindacale determines sigla_sindacale": 779,
+          "differenza = importo_ritenuto - importo_versato": 1027
+        },
+        "violations_by_column": {
+          "importo_versato": 177,
+          "amministrazione": 322,
+          "comparto": 11836,
+          "note_operatore": 22786,
+          "codice_amministrazione": 11354,
+          "sigla_sindacale": 1586,
+          "descrizione_sindacale": 363,
+          "differenza": 1027
+        },
+        "columns_compared": 12
+      },
+      "final_scoped": {
+        "null_by_column": {
+          "id_record": 0,
+          "mese_competenza": 0,
+          "amministrazione": 0,
+          "sigla_sindacale": 0,
+          "descrizione_sindacale": 0,
+          "numero_deleghe": 0,
+          "importo_ritenuto": 0,
+          "importo_versato": 0,
+          "differenza": 0,
+          "comparto": 0,
+          "stato_flusso": 0,
+          "codice_amministrazione": 0
+        },
+        "rows": 11657,
+        "columns": 12,
+        "cells": 139884,
+        "null_cells": 0,
+        "duplicate_rows": 0,
+        "rows_in_key_conflict": 82,
+        "checked_cells": 139884,
+        "checked_cells_by_column": {
+          "id_record": 11657,
+          "mese_competenza": 11657,
+          "amministrazione": 11657,
+          "sigla_sindacale": 11657,
+          "descrizione_sindacale": 11657,
+          "numero_deleghe": 11657,
+          "importo_ritenuto": 11657,
+          "importo_versato": 11657,
+          "differenza": 11657,
+          "comparto": 11657,
+          "stato_flusso": 11657,
+          "codice_amministrazione": 11657
+        },
+        "completeness": 1.0,
+        "uniqueness": 0.993,
+        "schema_conformity": 0.8333,
+        "structural_defects": {
+          "mese_competenza": [
+            "untyped"
+          ],
+          "importo_versato": [
+            "untyped"
+          ]
+        },
+        "columns_with_structural_defects": 2,
+        "columns_badly_named": 0,
+        "columns_sparse": 0,
+        "columns_redundant": 0,
+        "columns_untyped": 2,
+        "violations_by_kind": {
+          "format": 174,
+          "completeness": 0,
+          "schema": 0,
+          "consistency": 1020,
+          "uniqueness": 82
+        },
+        "format_violations": 174,
+        "format_violations_by_column": {
+          "importo_versato": 174
+        },
+        "inconsistent_rows": 1020,
+        "inconsistent_rows_by_column": {
+          "differenza": 1020
+        },
+        "validity": 0.9988,
+        "consistency": 0.9125
+      }
+    },
+    "headline_before": {
+      "null_by_column": {
+        "id_record": 0,
+        "mese_competenza": 0,
+        "codice_amministrazione": 251,
+        "amministrazione": 174,
+        "sigla_sindacale": 0,
+        "descrizione_sindacale": 210,
+        "numero_deleghe": 0,
+        "importo_ritenuto": 0,
+        "importo_versato": 0,
+        "differenza": 0,
+        "comparto": 167,
+        "stato_flusso": 0,
+        "note_operatore": 11393,
+        "Codice Amministrazione": 0
+      },
+      "rows": 11745,
+      "columns": 14,
+      "cells": 164430,
+      "null_cells": 12195,
+      "duplicate_rows": 88,
+      "rows_in_key_conflict": 83,
+      "checked_cells": null,
+      "checked_cells_by_column": {},
+      "completeness": 0.9258,
+      "uniqueness": 0.9854,
+      "schema_conformity": 0.8571,
+      "structural_defects": {
+        "note_operatore": [
+          "sparse"
+        ],
+        "Codice Amministrazione": [
+          "naming"
+        ]
+      },
+      "columns_with_structural_defects": 2,
+      "columns_badly_named": 1,
+      "columns_sparse": 1,
+      "columns_redundant": 0,
+      "columns_untyped": 0
+    },
+    "headline_after": {
+      "null_by_column": {
+        "id_record": 0,
+        "mese_competenza": 0,
+        "amministrazione": 0,
+        "sigla_sindacale": 0,
+        "descrizione_sindacale": 0,
+        "numero_deleghe": 0,
+        "importo_ritenuto": 0,
+        "importo_versato": 0,
+        "differenza": 0,
+        "comparto": 0,
+        "stato_flusso": 0,
+        "codice_amministrazione": 0
+      },
+      "rows": 11657,
+      "columns": 12,
+      "cells": 139884,
+      "null_cells": 0,
+      "duplicate_rows": 0,
+      "rows_in_key_conflict": 82,
+      "checked_cells": 139884,
+      "checked_cells_by_column": {
+        "id_record": 11657,
+        "mese_competenza": 11657,
+        "amministrazione": 11657,
+        "sigla_sindacale": 11657,
+        "descrizione_sindacale": 11657,
+        "numero_deleghe": 11657,
+        "importo_ritenuto": 11657,
+        "importo_versato": 11657,
+        "differenza": 11657,
+        "comparto": 11657,
+        "stato_flusso": 11657,
+        "codice_amministrazione": 11657
+      },
+      "completeness": 1.0,
+      "uniqueness": 0.993,
+      "schema_conformity": 0.8333,
+      "structural_defects": {
+        "mese_competenza": [
+          "untyped"
+        ],
+        "importo_versato": [
+          "untyped"
+        ]
+      },
+      "columns_with_structural_defects": 2,
+      "columns_badly_named": 0,
+      "columns_sparse": 0,
+      "columns_redundant": 0,
+      "columns_untyped": 2,
+      "violations_by_kind": {
+        "format": 174,
+        "completeness": 0,
+        "schema": 0,
+        "consistency": 1020,
+        "uniqueness": 83
+      },
+      "format_violations": 174,
+      "format_violations_by_column": {
+        "importo_versato": 174
+      },
+      "inconsistent_rows": 1020,
+      "inconsistent_rows_by_column": {
+        "differenza": 1020
+      },
+      "validity": 0.9988,
+      "consistency": 0.9125
+    },
+    "as_delivered": {
+      "dimensions": [
+        "completeness",
+        "uniqueness",
+        "schema_conformity"
+      ],
+      "before": {
+        "components": {
+          "completeness": 0.9258,
+          "uniqueness": 0.9854,
+          "schema_conformity": 0.8571
+        },
+        "weights": {
+          "completeness": 1.0,
+          "uniqueness": 1.0,
+          "schema_conformity": 1.0
+        },
+        "score": 0.9213
+      },
+      "after": {
+        "components": {
+          "completeness": 1.0,
+          "uniqueness": 0.993,
+          "schema_conformity": 0.8333
+        },
+        "weights": {
+          "completeness": 1.0,
+          "uniqueness": 1.0,
+          "schema_conformity": 1.0
+        },
+        "score": 0.9388
+      }
+    },
+    "like_for_like": {
+      "dimensions": [
+        "completeness",
+        "validity",
+        "consistency",
+        "uniqueness",
+        "schema_conformity"
+      ],
+      "before": {
+        "components": {
+          "completeness": 0.994,
+          "validity": 0.993,
+          "consistency": 0.8435,
+          "uniqueness": 0.9854,
+          "schema_conformity": 0.8333
+        },
+        "weights": {
+          "completeness": 1.0,
+          "validity": 1.0,
+          "consistency": 1.0,
+          "uniqueness": 1.0,
+          "schema_conformity": 1.0
+        },
+        "score": 0.9268
+      },
+      "after": {
+        "components": {
+          "completeness": 1.0,
+          "validity": 0.9988,
+          "consistency": 0.9125,
+          "uniqueness": 0.993,
+          "schema_conformity": 0.8333
+        },
+        "weights": {
+          "completeness": 1.0,
+          "validity": 1.0,
+          "consistency": 1.0,
+          "uniqueness": 1.0,
+          "schema_conformity": 1.0
+        },
+        "score": 0.9451
+      }
+    },
+    "dimensions_compared": [
+      "completeness",
+      "uniqueness",
+      "schema_conformity"
+    ],
+    "dimensions_excluded": [
+      "validity",
+      "consistency"
+    ],
+    "reliability_before": {
+      "components": {
+        "completeness": 0.9258,
+        "uniqueness": 0.9854,
+        "schema_conformity": 0.8571
+      },
+      "weights": {
+        "completeness": 1.0,
+        "uniqueness": 1.0,
+        "schema_conformity": 1.0
+      },
+      "score": 0.9213
+    },
+    "reliability_after": {
+      "components": {
+        "completeness": 1.0,
+        "uniqueness": 0.993,
+        "schema_conformity": 0.8333
+      },
+      "weights": {
+        "completeness": 1.0,
+        "uniqueness": 1.0,
+        "schema_conformity": 1.0
+      },
+      "score": 0.9388
+    },
+    "hidden_defects_unmasked": {
+      "disguised_nulls_unmasked": 441,
+      "apparent_completeness": 0.9258,
+      "true_completeness": 0.9232
+    }
+  },
+  "surviving_columns": [
+    "id_record",
+    "mese_competenza",
+    "amministrazione",
+    "sigla_sindacale",
+    "descrizione_sindacale",
+    "numero_deleghe",
+    "importo_ritenuto",
+    "importo_versato",
+    "differenza",
+    "comparto",
+    "stato_flusso",
+    "codice_amministrazione"
+  ],
+  "errors": [],
+  "narrative": {
+    "verdict": "This is a NoiPA union-deduction (ritenute sindacali) dataset that arrives structurally sound but with a handful of fixable defects: placeholder text masquerading as values, a duplicated administration-code column, casing drift in union acronyms, and a difference column that does not reconcile against its two source amounts. After remediation the file is clean and fully populated, with the remaining issues concentrated in a single unresolved question — the differenza column — so I would call it usable now with one significant item needing owner attention.",
+    "schema_comment": "The only structural faults were a duplicated administration-code column (kept under its conforming name) and a note_operatore column that was 97% empty and carried no usable signal, so it was dropped. Two columns remain untyped (mese_competenza and importo_versato) and are worth casting at the source. There were no naming violations against convention once the duplicate was resolved.",
+    "completeness_comment": "The raw file looked nearly complete, but 441 cells held placeholder text such as 'ND' and '--' that were actually gaps; the lower, post-unmasking figure is the accurate one and represents a gain in accuracy, not a regression. Those gaps sat in amministrazione, descrizione_sindacale and comparto, and all were filled deterministically from lookup mappings, leaving the final table fully populated. The only genuinely empty column was note_operatore, which was removed rather than imputed.",
+    "consistency_comment": "The main cross-column disagreement is that differenza does not equal importo_ritenuto minus importo_versato on over a thousand rows, and this was deliberately left alone because the discrepancy may reflect legitimate manual adjustments recorded in the operator notes rather than a formatting error. The duplicate administration-code column was resolved by keeping the conforming name, but this overwrote cells in the surviving column and lost values that existed only in the dropped one, so that merge should be reviewed rather than assumed lossless. Duplicate rows were removed cleanly with no conflicting data.",
+    "anomaly_comment": "The only flagged anomaly is the comparto column, where 'ND' and '--' appear as rare categories alongside legitimate sectors; these are placeholder encodings rather than genuine extreme values and were correctly mapped to null and refilled. No numeric outliers were detected in the monetary columns, so the amounts themselves show no implausible extremes.",
+    "remediation_comment": "The pipeline normalized the period column, stripped and uppercased union acronyms, and backfilled amministrazione, descrizione_sindacale and comparto from near-perfect lookup mappings, all without inventing data. The generated cleaning function for sigla_sindacale implements a strip-and-uppercase rule, so any future value arriving with stray whitespace or mixed casing will be canonicalized the same way. The differenza reconciliation and the operator-notes column were left untouched because both require human judgement rather than a deterministic rule.",
+    "recommendations": [
+      "Enforce a single canonical spelling for sigla_sindacale at data entry (uppercase, no leading/trailing whitespace) so union acronyms stop arriving as 'Dirstat', 'Cisl Fp' and similar variants.",
+      "Stop emitting placeholder text 'ND' and '--' in amministrazione, descrizione_sindacale and comparto; write true nulls instead so gaps are not mistaken for values.",
+      "Reconcile the differenza field at the source: either compute it as importo_ritenuto minus importo_versato or record the manual-adjustment reason in a structured field, since the current free-text note_operatore cannot be used to explain the discrepancy.",
+      "Remove the duplicate administration-code column from the source export so the two code columns cannot drift apart and force a lossy merge downstream."
+    ]
+  }
+}
