@@ -1,5 +1,8 @@
 # Agents for Data Quality — NoiPA
 
+[![CI](https://github.com/simonefilosofi/Reply_multi-agents_project_810431/actions/workflows/ci.yml/badge.svg)](https://github.com/simonefilosofi/Reply_multi-agents_project_810431/actions/workflows/ci.yml)
+[![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/)
+
 **A multi-agent pipeline that audits a raw public-administration CSV, repairs it under human approval, and scores what it delivered.**
 
 **Team members:** Allam Eliya, Cervelli Mattia, Filosofi Simone
