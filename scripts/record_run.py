@@ -86,9 +86,12 @@ def _timed(
     state: PipelineState,
     timings: dict[str, float],
 ) -> PipelineState:
-    started = time.time()
+    """Times one node. Monotonic rather than wall clock: the stages that call a model are long
+    enough for a laptop to suspend underneath them, and time.time() keeps counting through a
+    suspend — one overnight recording credited a stage with nine hours it spent asleep."""
+    started = time.monotonic()
     state = node(state)
-    timings[label] = round(time.time() - started, 2)
+    timings[label] = round(time.monotonic() - started, 2)
     print(f"[{label:20}] {timings[label]:7.2f}s", flush=True)
     return state
 

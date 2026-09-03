@@ -29,6 +29,11 @@ def _timings(name: str) -> dict:
     return json.loads((RUNS / name / "timings.json").read_text(encoding="utf-8"))
 
 
+def _second_pass() -> dict[str, dict]:
+    payload = json.loads((RUNS / "second_pass_timings.json").read_text(encoding="utf-8"))
+    return {name: stages for name, stages in payload.items() if not name.startswith("_")}
+
+
 def _detected(name: str) -> int:
     return sum(_run(name)["violations_by_kind_detected"].values())
 
@@ -64,6 +69,18 @@ def test_the_readme_quotes_the_recorded_change_counts() -> None:
 def test_the_readme_quotes_the_recorded_runtimes() -> None:
     for name in ("spesa", "attivazioniCessazioni", "ritenuteSindacali"):
         assert f"{sum(_timings(name).values()):.1f}s" in README, f"{name} runtime is stale"
+
+
+def test_the_readme_quotes_the_second_pass_runtimes() -> None:
+    """Section 4.6 reports a range, so the second recording is held to the README exactly as the
+    canonical one is: both its totals and the per-stage figures the section names must still match."""
+    for name, timings in _second_pass().items():
+        assert f"{sum(timings.values()):.1f}s" in README, f"{name} second-pass runtime is stale"
+
+    spesa = _second_pass()["spesa"]
+    cheap = ("baseline_builder", "nan_handler", "duplicate_row", "auto_remediation")
+    assert f"{sum(spesa[stage] for stage in cheap):.1f} seconds" in README.replace("**", "")
+    assert f"{spesa['unified'] / sum(spesa.values()) * 100:.0f}%" in README.replace("**", "")
 
 
 def test_the_readme_quotes_the_spesa_run_in_detail() -> None:

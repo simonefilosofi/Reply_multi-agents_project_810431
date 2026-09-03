@@ -628,6 +628,14 @@ The full run took **659.1 seconds**. `unified` alone accounts for **361.2s — 5
 
 The architectural point is at the other end of the chart. The stages that only measure are effectively free: `duplicate_row` **0.62s**, `nan_handler` **0.79s**, `baseline_builder` **1.01s** — and together with `auto_remediation` (36.8s, the one deterministic stage that also writes), in **39 seconds of the 659**, they changed **5,207 of the 5,659 cells (92.0%)**. The expensive stages are the ones that reason; the cheap stages are the ones that measure and act. That is the intended cost profile, and it is what makes the design affordable: pushing work down into deterministic tools is not only safer, it is where the throughput is.
 
+#### These totals are one measurement, not a property of the system
+
+All three runs were recorded a second time on a quiet machine, and all three came in **substantially faster**: `spesa` **659.1s → 431.3s**, `attivazioniCessazioni` **628.2s → 437.1s**, `ritenuteSindacali` **523.0s → 255.3s** — between 30% and 51% off. The code was identical, and so were the results: `ritenuteSindacali` changed the same 13,940 cells to the same 0.9451, `attivazioniCessazioni` 8,246 cells against 8,239. **What the pipeline does is reproducible; how long it takes is not.** The second recording is kept in `reports/runs/second_pass_timings.json`, and the timing figures quoted above stay tied to the single canonical run each report was written from, so that no number here is averaged across runs that disagree on anything else.
+
+**The two halves of the pipeline vary for different reasons, and only one of them is about the system.** The stages that call a model moved in *both* directions between the two recordings — `unified` fell from 361.2s to 308.3s on `spesa` but *rose* from 233.1s to 289.4s on `attivazioniCessazioni` and from 76.8s to 127.1s on `ritenuteSindacali`. That is provider latency, and no amount of care on this side of the wire makes it repeatable. The deterministic stages, by contrast, collapsed by an order of magnitude and did so **uniformly across all three files**: `apply_fixes` 42.5s → 3.1s, `auto_remediation` 36.8s → 2.5s, `duplicate_column` 9.8s → 0.8s, `baseline_builder` 1.01s → 0.08s. Nothing there touches the network; it is pandas on a machine that was, the first time, doing other things at once. The bulk of the 228-second gap on `spesa` is therefore **contention on the recording machine, not the pipeline**.
+
+That distinction sharpens the paragraph above rather than undermining it. On the second recording the four cheap stages that changed 92% of the cells cost **2.7 seconds out of 431**, not 39 out of 659 — the ratio between reasoning and measuring widens from roughly 17:1 to **160:1**, and `unified` grows from 55% to **71%** of the total. Measured twice, on machines of different load, the cost profile points the same way both times: the price of this design is the model calls, and every second spent in a deterministic tool is nearly free.
+
 ### 4.7 A caveat on this particular run
 
 **On this run the Unified agent wrote no code.** Six proposals reached the reviewer: four deterministic schema ones from `tools/schema_proposals.py`, and two value-level repairs — an `impute_from_lookup` on `descrizione` and a four-cell `replace_values` on `imposta` — both expressed as **typed catalogue operations** rather than a generated `clean_value`. The code-generation path of Sections 2.4.4 and 2.6 was therefore **not exercised on `spesa.csv`**.
@@ -666,7 +674,7 @@ The other two datasets did exercise the code-generation path, and Sections 4.9 a
 | Generated cleaning functions | 0 |
 | **Reliability, as delivered** | **0.7562 → 0.9933** |
 | **Reliability, like-for-like** | **0.9380 → 0.9960** |
-| Total runtime | 659.1s |
+| Total runtime | 659.1s (431.3s on a second recording — see §4.6) |
 
 ### 4.9 The second required dataset: `attivazioniCessazioni.csv`
 
@@ -720,10 +728,13 @@ The pipeline handled it without a single error: **15,300 violations detected, 1,
 | Cross-column rules mined | 5 | 2 | 4 |
 | Completeness | 0.8752 → **0.9801** | 0.8773 → **0.9758** | 0.9258 → **1.0000** |
 | **Reliability, like-for-like** | 0.9380 → **0.9960** | 0.8652 → **0.9798** | 0.9268 → **0.9451** |
-| Runtime | 659.1s | 628.2s | 523.0s |
+| Runtime, as recorded | 659.1s | 628.2s | 523.0s |
+| Runtime, second recording | 431.3s | 437.1s | 255.3s |
 | Errors | 0 | 0 | 0 |
 
 Read together, the three runs support a narrower claim than any one of them would alone. The system is **not fitted to the two files it was developed against**: on a held-out dataset from a domain its registry does not cover, it mined four cross-column rules unaided and closed completeness entirely. But the improvement there is visibly the smallest of the three, and schema conformity did not move at all — the further a file sits from the registry, the more of its defects the pipeline can only name. The residual column is equally part of the result: across all three files it left standing every defect for which it had no evidence-backed repair, and named the reason in the report rather than closing the gap by inventing a value.
+
+The two runtime rows are the one place where the table reports a range rather than a figure, and the contrast is the point. Recorded a second time, `ritenuteSindacali` reproduced *exactly* — 15,300 violations detected, 1,276 left, 13,940 cells changed, 0.9451 — while `attivazioniCessazioni` moved by seven residual violations and `spesa` by 105 cells, under two percent. The runtimes, over the same two recordings, fell by 30-51%, for reasons that belong to the recording machine and the model provider rather than to the pipeline (§4.6).
 
 ---
 

@@ -1,0 +1,45 @@
+{
+  "_note": "A second recording of the same three runs, taken on a quiet machine to measure run-to-run variance. Section 4.6 of the README reads these numbers against the per-run timings.json beside each report; the reports themselves are not replaced.",
+  "spesa": {
+    "baseline_builder": 0.08,
+    "profiler": 3.02,
+    "semantic": 57.4,
+    "nan_handler": 0.13,
+    "duplicate_column": 0.82,
+    "format_consistency": 32.57,
+    "auto_remediation": 2.46,
+    "anomaly_detector": 3.81,
+    "unified": 308.26,
+    "apply_fixes": 3.07,
+    "duplicate_row": 0.04,
+    "report_generator": 19.65
+  },
+  "attivazioniCessazioni": {
+    "baseline_builder": 0.22,
+    "profiler": 3.08,
+    "semantic": 52.83,
+    "nan_handler": 0.29,
+    "duplicate_column": 4.22,
+    "format_consistency": 51.97,
+    "auto_remediation": 1.67,
+    "anomaly_detector": 3.94,
+    "unified": 289.35,
+    "apply_fixes": 5.85,
+    "duplicate_row": 0.11,
+    "report_generator": 23.52
+  },
+  "ritenuteSindacali": {
+    "baseline_builder": 0.24,
+    "profiler": 2.65,
+    "semantic": 42.11,
+    "nan_handler": 0.16,
+    "duplicate_column": 0.68,
+    "format_consistency": 45.18,
+    "auto_remediation": 2.05,
+    "anomaly_detector": 3.02,
+    "unified": 127.1,
+    "apply_fixes": 8.93,
+    "duplicate_row": 0.21,
+    "report_generator": 22.94
+  }
+}
