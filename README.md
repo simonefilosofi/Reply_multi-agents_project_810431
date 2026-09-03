@@ -90,7 +90,7 @@ The model is not decoration on this design; it is what makes the design feasible
 
 ### 1.5 Repository Structure and Technology Stack
 
-The repository exposes **two execution surfaces over one pipeline**: `notebooks/main.ipynb`, the explanatory notebook that runs the graph stage by stage and shows every intermediate artefact; and `app.py`, the Streamlit application that is *also* the human approval gate. `graph.py` additionally exposes the same nodes as a compiled LangGraph object for programmatic use. There is no separate CLI and no `src/` package — the pipeline is the repository root.
+The pipeline lives in one importable package, `src/noipa_dq/`, installed with `pip install -e .`. The repository then exposes **two execution surfaces over it**: `notebooks/main.ipynb`, the explanatory notebook that runs the graph stage by stage and shows every intermediate artefact; and `app/streamlit_app.py`, the Streamlit application that is *also* the human approval gate. `noipa_dq.graph` additionally exposes the same nodes as a compiled LangGraph object for programmatic use. There is no separate CLI. Throughout this document a path written `agents/…`, `tools/…`, `prompts/…` or `utils/…` is relative to that package root, so `tools/fix_invariants.py` means `src/noipa_dq/tools/fix_invariants.py`.
 
 The stack combines `langgraph` and `langchain-core` for orchestration and typed state, [`langchain-deepseek`](https://python.langchain.com/docs/integrations/chat/deepseek/) for every chat call, `openai` for the embedding index behind canonical matching, `pydantic` for the artefact contracts, `pandas` and `numpy` for all deterministic measurement, [`e2b-code-interpreter`](https://e2b.dev/docs) for the first execution of generated cleaning code, and `streamlit` for the gate.
 
@@ -133,7 +133,7 @@ Reply_multi-agents_project_810431/
 |-- reports/
 |   |-- runs/                          # the recorded runs the notebook and the figures replay
 |   `-- figures/                       # the figures used by this README
-|-- tests/                             # 348 tests; no network and no API key required
+|-- tests/                             # 349 tests; no network and no API key required
 |   `-- acceptance/                    # regression net over the runs; no API key needed
 |       |-- verify.py                  # pins value-level invariants against invariants.json
 |       |-- acceptance.py              # the delivered artefacts are complete and consistent
@@ -429,7 +429,7 @@ The mechanics are deliberately narrow. `tools/generated_function.py` builds a sm
 
 Two lifecycle details matter in practice. One sandbox is **held open for a whole run** and reused across trials, because the repair loop re-checks a proposal at the top of every iteration and again when it settles — a fresh VM per check would cross the network dozens of times for the same source. That handle survives the call that created it, so `close_sandbox()` is called explicitly at the end of `agents/unified.py`: in a long-lived process such as the Streamlit gate an unclosed sandbox stays connected and billed for the whole session. Results are additionally **cached by `(source, values)`**, which is sound precisely because a cleaner is a pure scalar function.
 
-**The fallback is a real degradation, and is recorded as one.** `E2B_API_KEY` is optional: with no key, or when the sandbox call fails, execution falls back to a **local cage** — `load_callable` behind a whitelist of builtins and a restricted import hook, in this process. That keeps the pipeline running offline, in CI and in the 348 tests, but it is a weaker guarantee and the system does not pretend otherwise.
+**The fallback is a real degradation, and is recorded as one.** `E2B_API_KEY` is optional: with no key, or when the sandbox call fails, execution falls back to a **local cage** — `load_callable` behind a whitelist of builtins and a restricted import hook, in this process. That keeps the pipeline running offline, in CI and in the 349 tests, but it is a weaker guarantee and the system does not pretend otherwise.
 
 Every execution is appended to an **execution log** (`{executor, ok, detail}`), carried in the state as `generated_function_runs` and printed in the delivered report as *"generated functions validated in a sandbox: N of M"*. A reader can therefore see whether the isolation the architecture claims actually applied to *their* run. Across the three recorded runs, **eight of eight** first executions happened in E2B and none in the local cage.
 
